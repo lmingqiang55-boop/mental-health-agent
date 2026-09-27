@@ -30,9 +30,9 @@
 
 | 人 | 负责什么 | 主要修改目录 | 最终交付 |
 | --- | --- | --- | --- |
-| A 对话负责人 | 对话策略、RAG、LLM、风险提示 | `backend/core/dialogue_manager.py`、`risk_engine.py`、`backend/llm/`、`backend/rag/`、`backend/api/chat.py` | `DialogueResponse` |
-| B 多模态负责人 | 摄像头、表情、VA、参与度、语音、ASR、多模态融合 | `backend/vision/`、`backend/audio/`、`backend/core/multimodal_fusion.py`、`backend/api/vision.py`、`audio.py` | `VisionState`、`AudioState` |
-| C 系统负责人 | React 前端、Session、API 集成、以后数据库 | `frontend/`、`backend/core/session_manager.py`、`backend/api/session.py`、`backend/main.py` | 能实际使用的完整 Demo |
+| A 对话负责人 | 对话策略、RAG、LLM、风险提示、综合评估 | `backend/core/dialogue_manager.py`、`risk_engine.py`、`assessment_engine.py`、`backend/llm/`、`backend/rag/`、`backend/api/chat.py` | `DialogueResponsePayload`、`AssessmentResult` |
+| B 多模态负责人 | 摄像头、表情、VA、参与度、语音、ASR、多模态融合 | `backend/vision/`、`backend/audio/`、`backend/core/multimodal_fusion.py`、`backend/api/vision.py`、`audio.py` | `VisionState`、`AudioState`、会话级 Summary |
+| C 系统负责人 | React 双前端、Session、评估记忆库、双向沟通、API 集成、以后数据库 | `frontend/`、`backend/core/session_manager.py`、`memory_store.py`、`communication.py`、`backend/api/`、`backend/main.py` | 能实际使用的完整 Demo、`AssessmentRecord` |
 
 这三个职责**不要互相穿透**。
 
@@ -94,7 +94,8 @@ C 不能在 React 里自己写"如果出现'睡不着' → 下一步询问睡眠
 你们现在最重要的几个公共文件是：
 
 - `backend/models/states.py`
-- `backend/models/response.py`
+- `backend/models/responses.py`
+- `backend/models/assessment.py`
 - `backend/main.py`
 - `docs/api_spec.md`
 - `docs/architecture.md`
@@ -215,7 +216,7 @@ frontend/
 
 - A ← Mock VisionState
 - B ← Mock Session
-- C ← Mock DialogueResponse
+- C ← Mock DialogueResponsePayload
 
 三个人始终可以同时开发。
 

@@ -1,17 +1,38 @@
+"""FastAPI 应用入口。
+
+只负责中间件、异常处理和路由注册，不写业务逻辑。
+"""
+
+import os
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.api import audio, chat, session, vision
+from backend.api import (
+    assessment,
+    audio,
+    chat,
+    communication,
+    history,
+    session,
+    teacher,
+    vision,
+)
 
+app = FastAPI(title="多模态心理状态筛查 Demo", version="0.2.0")
 
-app = FastAPI(title="多模态心理状态筛查 Demo", version="0.1.0")
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+allowed_origins = [
+    o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -27,10 +48,10 @@ async def http_error_handler(request: Request, exc: HTTPException) -> JSONRespon
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_error_handler(request: Request,
+                                   exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"error": {
-        "code": "VALIDATION_ERROR", "message": "Invalid request data."
-    }})
+        "code": "VALIDATION_ERROR", "message": "Invalid request data."}})
 
 
 @app.get("/api/health")
@@ -42,3 +63,7 @@ app.include_router(session.router)
 app.include_router(chat.router)
 app.include_router(vision.router)
 app.include_router(audio.router)
+app.include_router(assessment.router)
+app.include_router(history.router)
+app.include_router(teacher.router)
+app.include_router(communication.router)

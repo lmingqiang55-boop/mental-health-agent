@@ -1,18 +1,21 @@
-# 多模态心理状态筛查与知识增强对话系统 v0.1
+# 多模态心理状态筛查与知识增强对话系统 v0.2
 
-本项目是比赛用的本地 Demo：文字聊天、内存 Session、六维度简单提问、Mock LLM、关键词知识检索和视觉/音频状态接口。无需 API Key。它只提供初步状态筛查演示和风险提示，不提供临床诊断。
+比赛用本地 Demo。当前版本已按目标效果图搭好**完整框架骨架与数据协议**：
+实时对话闭环、多模态综合评估、评估记忆库、学生端与心理老师端双入口。
+视觉/音频/LLM 等具体算法用 Mock 或规则占位，模块间通过统一数据结构连接。
 
-项目目标有两个前端：**学生端**负责对话、查看自身筛查结果与建议；**医生/心理老师端（专业端）**负责授权范围内的个体查看、风险人工跟进和群体概览。当前 v0.1 仅实现学生端的基础文字聊天页，专业端与长期用户数据仍是待开发模块。图中功能与代码现状对照见 [MVP 范围与双端规划](docs/mvp_scope.md)。
+系统只提供初步状态筛查演示和风险提示，不提供临床诊断。
 
 ## 三人分工
 
-| 成员 | 负责范围 | 主要交接接口 |
-| --- | --- | --- |
-| A：项目对话 | 状态机、下一问、知识检索、LLM 接口、初步风险提示 | `DialogueManager.process_turn()`、`POST /api/chat` |
-| B：多模态输入 | 视觉、音频状态与融合接口 | `VisionState`、`AudioState`、`fuse()`、`POST /api/vision`、`POST /api/audio` |
-| C：双前端与用户数据 | 学生端、专业端、Session/结果数据设计与管理 | `SessionState`、Session API、两个前端的 `/api` 调用 |
+| 成员 | 角色 | 负责模块 | 主要交接接口 |
+| --- | --- | --- | --- |
+| A 对话 | 写"大脑"：问什么 | `core/dialogue_manager`、`risk_engine`、`assessment_engine`、`llm/`、`rag/` | `DialogueResponsePayload`、`AssessmentResult` |
+| B 多模态 | 写"眼睛和耳朵"：用户状态 | `vision/`、`audio/`、`core/multimodal_fusion` | `VisionState`、`AudioState`、会话级 Summary |
+| C 系统 | 写"身体和界面"：怎么使用 | `frontend/`、`core/session_manager`、`memory_store`、`communication`、`api/` | `SessionState`、`AssessmentRecord` |
 
-修改共享模型或接口前，先看 [三人协作开发手册](docs/development_rules.md) 和 [API 契约](docs/api_spec.md)。
+协作规则见 [三人协作框架](docs/development_rules.md)，数据契约见
+[API 数据协议](docs/api_spec.md)，模块映射见 [架构说明](docs/architecture.md)。
 
 ## 环境要求
 
@@ -30,7 +33,8 @@ pip install -r requirements.txt
 uvicorn backend.main:app --reload
 ```
 
-macOS/Linux 激活命令：`source .venv/bin/activate`。后端地址：<http://127.0.0.1:8000>，API 文档：<http://127.0.0.1:8000/docs>。
+macOS/Linux：`source .venv/bin/activate`。后端地址：<http://127.0.0.1:8000>，
+API 文档：<http://127.0.0.1:8000/docs>。
 
 ## 前端启动
 
@@ -42,7 +46,19 @@ npm install
 npm run dev
 ```
 
-前端地址：<http://127.0.0.1:5173>。Vite 将 `/api` 请求代理到本机后端；先启动后端再打开网页。页面初次打开会自动创建 Session。
+前端地址：<http://127.0.0.1:5173>。顶部可切换「学生端 / 心理老师端」。
+先启动后端再打开网页，页面初次打开会自动创建会话。
+
+## 主链路验证
+
+```text
+创建会话 → 多轮文字对话（六维依次询问）
+        → 可选开启摄像头/麦克风（提交 Mock 状态）
+        → 对话结束自动生成评估结果（维度得分/风险/建议）
+        → 老师端查看记录、高风险名单、群体统计
+```
+
+无摄像头、麦克风或 LLM Key 均可跑完整流程。
 
 ## 测试与构建
 
@@ -54,14 +70,14 @@ npm run build
 
 ## 配置
 
-默认使用 `LLM_PROVIDER=mock`，不需要复制 `.env.example` 或设置密钥。若需明确设置，可在启动后端的终端设置环境变量；v0.1 尚未接入真实 LLM Provider，设置其他值会报错。`.env.example` 是后续对接的配置样例。
-
-Session 保存在单个 Python 进程中，后端重启后会清空。当前音视频接口只接收并保存结构化 Mock 状态，不处理摄像头画面或麦克风音频。详见 [架构](docs/architecture.md)、[API](docs/api_spec.md)、[协作手册](docs/development_rules.md) 和 [产品范围](docs/mvp_scope.md)。
+默认 `LLM_PROVIDER=mock`，无需密钥；设置未接入的 Provider 会自动降级为 Mock。
+Session 与记忆库保存在进程内存中，TTL 2 小时，重启清空。
+CORS 来源可用环境变量 `CORS_ORIGINS` 配置。
 
 ## 后续 TODO
 
-- 接入经审核的心理知识资料与真实检索策略。
-- 替换 Mock LLM，同时保留 DialogueManager 的策略决定权。
-- 接入真实视觉/音频模型并验证各状态量的意义。
-- 引入持久化 Session 与更可靠的风险评估流程。
-- 建立学生端结果/历史页与医生/心理老师端，并在真实数据接入前完成身份、授权和同意流程。
+- 接入真实 LLM Provider，保留 DialogueManager 的策略决定权。
+- 接入真实视觉（表情/眼动）与音频（ASR/副语言）模型。
+- 引入持久化数据库、身份认证与权限管理。
+- 审核后接入标准量表（PHQ-9 等）与心理健康知识。
+- 完善人工复核、双向沟通与长期跟踪闭环。
