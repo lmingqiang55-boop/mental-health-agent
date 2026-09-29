@@ -22,10 +22,16 @@ export default function StudentPage() {
   const [result, setResult] = useState(null)
   const [visionOn, setVisionOn] = useState(false)
   const [audioOn, setAudioOn] = useState(false)
+  const [cameraError, setCameraError] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const endRef = useRef(null)
   const pendingRef = useRef(false)
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
+  const streamRef = useRef(null)
+  const captureTimerRef = useRef(null)
+  const frameBusyRef = useRef(false)
 
   const createSession = useCallback(async () => {
     if (pendingRef.current) return
@@ -77,16 +83,58 @@ export default function StudentPage() {
     } finally { pendingRef.current = false; setBusy(false) }
   }
 
-  // 框架阶段：模拟设备开关，提交 Mock 多模态状态
+  async function captureVisionFrame() {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || !sessionId || video.readyState < 2 || frameBusyRef.current) return
+    const width = video.videoWidth || 640
+    const height = video.videoHeight || 480
+    canvas.width = width
+    canvas.height = height
+    canvas.getContext('2d').drawImage(video, 0, 0, width, height)
+    frameBusyRef.current = true
+    try {
+      await api.analyzeVisionFrame(sessionId, canvas.toDataURL('image/jpeg', 0.65))
+    } catch (e) {
+      if (e.status !== 404) setCameraError(e.message)
+    } finally {
+      frameBusyRef.current = false
+    }
+  }
+
+  function stopCamera() {
+    if (captureTimerRef.current) clearInterval(captureTimerRef.current)
+    captureTimerRef.current = null
+    streamRef.current?.getTracks().forEach(track => track.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    setVisionOn(false)
+  }
+
   async function toggleVision() {
-    const next = !visionOn
-    setVisionOn(next)
-    if (next && sessionId) {
-      await api.submitVision(sessionId, {
-        emotion: 'neutral', emotion_confidence: 0.78,
-        valence: -0.15, arousal: 0.35, engagement: 0.65,
-        attention_score: 0.6, face_detected: true,
+    if (visionOn) {
+      stopCamera()
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('当前浏览器不支持摄像头访问。')
+      return
+    }
+    setCameraError('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
       })
+      streamRef.current = stream
+      videoRef.current.srcObject = stream
+      await videoRef.current.play()
+      setVisionOn(true)
+      captureTimerRef.current = setInterval(captureVisionFrame, 1500)
+      captureVisionFrame()
+    } catch (e) {
+      setCameraError(e.name === 'NotAllowedError' ? '未获得摄像头权限。' : '无法打开摄像头。')
+      stopCamera()
     }
   }
   async function toggleAudio() {
@@ -99,6 +147,8 @@ export default function StudentPage() {
       })
     }
   }
+
+  useEffect(() => () => stopCamera(), [])
 
   const showCrisis = risk === 'high'
 
@@ -165,8 +215,16 @@ export default function StudentPage() {
               </dd>
             </dl>
           </section>
+          <section className="card camera-preview">
+            <h3>摄像头预览</h3>
+            <video ref={videoRef} muted playsInline aria-label="摄像头预览" />
+            <canvas ref={canvasRef} className="capture-canvas" />
+            {cameraError && <p className="error" role="alert">{cameraError}</p>}
+            <p className="device-hint">仅按间隔上传压缩帧用于即时分析，不保存原始画面。</p>
+          </section>
           <DimensionProgress assessmentState={assessmentState} />
-          <DeviceStatus visionEnabled={visionOn} audioEnabled={audioOn} />
+          <DeviceStatus visionEnabled={visionOn} audioEnabled={audioOn}
+            cameraError={cameraError} />
         </aside>
       </div>
 

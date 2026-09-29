@@ -17,6 +17,7 @@
 | PUT | `/api/session/{id}/consent` | 更新知情同意 |
 | POST | `/api/chat` | 提交一轮文字对话 |
 | POST | `/api/vision` | 提交句级视觉状态（merge） |
+| POST | `/api/vision/frame` | 提交一张摄像头帧并即时分析 |
 | POST | `/api/audio` | 提交句级音频状态（merge） |
 | POST | `/api/assessment` | 手动触发综合评估 |
 | GET | `/api/assessment/result/{result_id}` | 获取评估结果 |
@@ -256,6 +257,24 @@ finish_assessment / post_assessment
 同样为 merge 语义。当前不接收录音文件。
 
 Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
+
+### POST /api/vision/frame
+
+请求体：
+
+```json
+{
+  "session_id": "b4fc1bdd-...",
+  "image_base64": "data:image/jpeg;base64,..."
+}
+```
+
+服务端按 `VISION_PROVIDER` 选择 Mock 或 EmotiEffLib，返回与 `POST /api/vision`
+相同的 `VisionState`，并将原始帧丢弃。帧接口写入检测器返回的完整快照，
+不会把缺失字段与上一帧做 merge；没有检测到人脸时，情绪、VA 和参与度等字段
+会返回 `null`。图片解码后的像素数超过 `1920×1080` 时返回 `422 INVALID_FRAME`。
+默认 provider 为 `mock`；启用真实模型需安装
+`requirements-vision.txt` 并设置 `VISION_PROVIDER=emotiefflib`。
 
 ---
 

@@ -1,6 +1,6 @@
-// 摄像头/麦克风设备状态。框架阶段只显示状态，不真正采集。
+// 摄像头/麦克风设备状态与后端视觉分析可用性。
 
-export default function DeviceStatus({ visionEnabled, audioEnabled }) {
+export default function DeviceStatus({ visionEnabled, audioEnabled, cameraError }) {
   return (
     <section className="card device-status">
       <h3>设备状态</h3>
@@ -18,7 +18,9 @@ export default function DeviceStatus({ visionEnabled, audioEnabled }) {
           {audioEnabled ? '已开启' : '未开启'}
         </span>
       </div>
-      <p className="device-hint">框架阶段使用 Mock 数据，不采集真实画面/录音。</p>
+      <p className="device-hint">
+        {cameraError ? '摄像头分析暂不可用，仍可继续文字筛查。' : '摄像头按间隔上传压缩帧，后端可配置 Mock 或 EmotiEffLib。'}
+      </p>
     </section>
   )
 }

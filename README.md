@@ -74,6 +74,23 @@ npm run build
 Session 与记忆库保存在进程内存中，TTL 2 小时，重启清空。
 CORS 来源可用环境变量 `CORS_ORIGINS` 配置。
 
+### 摄像头情绪识别（EmotiEffLib）
+
+学生端开启摄像头后，会每 1.5 秒将一张压缩帧提交到
+`POST /api/vision/frame`。后端只保存结构化 `VisionState`，不保存原始图像。
+默认 `VISION_PROVIDER=mock`，不安装模型也能运行完整流程。
+
+要启用 EmotiEffLib 的 ONNX 情绪模型：
+
+```powershell
+pip install -r requirements-vision.txt
+$env:VISION_PROVIDER = "emotiefflib"
+```
+
+首次分析会自动下载模型到用户缓存目录。当前单帧接口输出情绪、置信度和
+VA（valence/arousal）；EmotiEffLib 要求 128 帧滑动窗口才能计算 engagement，
+眼动相关字段也尚未接入连续帧处理，因此这些字段返回 `null`，不会伪装成真实测量。
+
 ## 后续 TODO
 
 - 接入真实 LLM Provider，保留 DialogueManager 的策略决定权。
