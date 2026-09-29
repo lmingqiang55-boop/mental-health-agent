@@ -3,7 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.api import audio, chat, session, vision
+from backend.api import assessment, audio, chat, session, vision
 
 
 app = FastAPI(title="多模态心理状态筛查 Demo", version="0.1.0")
@@ -42,3 +42,4 @@ app.include_router(session.router)
 app.include_router(chat.router)
 app.include_router(vision.router)
 app.include_router(audio.router)
+app.include_router(assessment.router)

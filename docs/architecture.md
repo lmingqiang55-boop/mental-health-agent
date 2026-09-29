@@ -1,5 +1,7 @@
 # v0.1 架构
 
+> 下图描述原有 `/api/chat` Demo。新增的 `/api/assessment` 是独立的九项测评状态机：`规则 Mock 或 OpenAI 兼容模型抽取 → 原话和频率校验 → 证据状态与冲突检查 → 下一问策略 → 完整时程序计分`。该路径当前仍使用进程内 Session；模型适配器已有模拟响应测试，尚未用真实服务端到端验收，也未接学生前端。参见 [测评契约](assessment_contract.md) 与 [API](api_spec.md)。
+
 ```text
 学生端（当前：基础文字聊天页） ─┐
                             ├── HTTP /api ──> FastAPI routes

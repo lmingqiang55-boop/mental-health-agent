@@ -1,4 +1,4 @@
-# API v0.1
+# API：基础 Demo 与测评状态机原型
 
 基础地址：`http://127.0.0.1:8000`。交互文档：`/docs`。本文只列**当前已实现**的接口；专业端所需接口列在文末“待设计”，不得当作已存在。
 
@@ -11,6 +11,24 @@
 | POST | `/api/chat` | 提交 `{ "session_id": "...", "text": "..." }` |
 | POST | `/api/vision` | 提交 `session_id` 与 VisionState 字段 |
 | POST | `/api/audio` | 提交 `session_id` 与 AudioState 字段 |
+| POST | `/api/assessment` | 创建独立的九项测评会话，返回第一问 |
+| POST | `/api/assessment/{session_id}/turn` | 提交测评回答并获得下一问及当前报告 |
+| GET | `/api/assessment/{session_id}` | 查看测评状态与逐轮证据 |
+| GET | `/api/assessment/{session_id}/report` | 查看逐项结果；未完成时总分为 `null` |
+| DELETE | `/api/assessment/{session_id}` | 删除测评会话 |
+
+## 对话式 PHQ-A 条目映射原型
+
+这组新接口独立于旧的 `/api/chat` 六维 Demo。默认使用确定性规则 Mock，也可通过 `ASSESSMENT_EXTRACTOR=openai_compatible`、`ASSESSMENT_LLM_BASE_URL`、`ASSESSMENT_LLM_MODEL` 和可选的 `ASSESSMENT_LLM_API_KEY` 接入云端或本地模型。模型返回的结构化候选须经服务端证据校验；尚未用真实模型端到端验收，也未接前端。题目中文措辞是概念演示，不是已锁定的正式量表译文。规则依据见 [测评契约](assessment_contract.md)。
+
+调用顺序：
+
+1. `POST /api/assessment`（无请求体），取 `session_id` 与 `reply`（第一问）。
+2. 逐轮 `POST /api/assessment/{session_id}/turn`，请求体为 `{ "text": "有几天" }`。响应含 `status`、`current_item_id`、`reply`、`report`。
+3. `GET /api/assessment/{session_id}/report` 可随时查看已确认条目。九项齐全且状态为 `complete` 时 `mapped_total` 才是 0～27 的整数；否则为 `null`。
+4. `GET /api/assessment/{session_id}` 返回逐轮记录和每题证据历史；`DELETE` 删除本进程内的会话。
+
+状态允许 `in_progress`、`complete`、`stopped`、`safety_paused`。自伤相关信号使流程暂停，并返回支持信息；这不构成自动临床风险分级。已关闭会话再次提交回答返回 HTTP 409 和 `ASSESSMENT_CLOSED`。不存在的测评会话返回 HTTP 404 和 `ASSESSMENT_NOT_FOUND`。模型服务不可用或响应格式无效时返回 HTTP 503 和 `EXTRACTION_UNAVAILABLE`，本轮不写入会话，可以重试。测评会话目前也只保存在单个 Python 进程内。
 
 ## 会话与文字聊天
 

@@ -7,6 +7,7 @@
 | 能力 | 当前状态 | 本轮协作目标 |
 | --- | --- | --- |
 | 文字对话、六维度提问、Mock LLM | 已可运行 | 对话负责人改进提问逻辑，保留 Mock 模式 |
+| 对话式九项筛查 `/api/assessment` | 独立于旧 `/api/chat` 的原型已可运行：规则 Mock 或模型抽取证据、模型选择提问动作、程序只校验合法性、九项完整才计分；`pytest -q` 全绿 | A 接真实模型做端到端验收、锁定正式条目译文；C 之后接学生端结果页 |
 | VisionState、AudioState 接口 | 已可接收结构化 Mock 数据 | 多模态负责人在接口后接真实分析模块，先完成可替换的输出 |
 | 学生端基础聊天页面 | 已可运行 | 前端负责人维护体验和错误处理；结果、历史和建议页面待开发 |
 | 医生/心理老师端（专业端） | 尚无代码 | 前端负责人先用合成数据建立页面骨架；个体管理、预警、统计和互动须分阶段接入 |
@@ -109,3 +110,36 @@ npm run build
 ## 8. 留给后续版本的 TODO
 
 真实 LLM Provider、知识来源审核、视觉/音频模型、数据持久化、身份与权限、更可靠的风险评估、学生端结果/趋势/建议、专业端个体管理/预警/统计/互动。每项都先更新契约与验收标准，再实现。
+
+## 9. 进展记录
+
+按模块记录"谁做了什么、改到哪、怎么验证的"，供合并和答辩追溯。接口语义以 [测评契约](assessment_contract.md) 第 4 节为准。
+
+### 2026-09-29　对话式九项筛查：自适应提问第一步（A 对话）
+
+**目标**：让模型决定下一问问什么，而不是由程序按固定顺序挑题目。
+
+**本次交付**
+
+- **拆成两个接口**（`backend/assessment/question_generator.py`）
+  - `QuestionDecider.decide(context) -> QuestionAction{target_item_id, intent, anchor_quote, reason}`。`intent` 只有五类：开启主题 `open_topic`、澄清时间 `clarify_period`、澄清频率 `clarify_frequency`、处理矛盾 `resolve_conflict`、确认主动提及的主题 `confirm_mention`。决策器读取本轮学生原话、抽取出的证据、当前条目、九项的 `asked_once`/`confirmed` 状态和最近对话。
+  - `QuestionGenerator.generate(context, action) -> str` 只根据已选动作写一句自然问句；它拿不到主题列表，不能换主题或换意图。
+- **程序只校验合法性，不替模型挑主题**（`validate_question_action`）：条目存在；引用原话必须是本轮原话或该条目已记录证据里的逐字片段；已确认且已问过的条目不得无理由重复；`intent` 必须与已记录状态相符。非法动作返回 HTTP 503 `QUESTION_ACTION_REJECTED`，**该轮不提交、不补一个主题**，可重试。
+- **LangGraph 节点链**（`backend/assessment/engine.py`）：`guard → extract → apply → decide → phrase → record`，即安全/停止检查 → 提取证据 → 更新状态 → 模型选择动作 → 生成问句 → 记录。
+- **动作日志**：每轮选中的动作写入 `AssessmentSession.action_log`（轮次、条目、intent、引用原话、理由、决策器版本、最终问句），作为以后用真实对话数据训练或替换决策模型的状态—动作—问句记录。
+- **完成条件**：九项必须都被**明确提问**且已确认；只被学生主动提及（`asked_once=false`）不算问完，此时 `status` 不得为 `complete`、`mapped_total` 必须为 `null`。
+- **模型配置**：仍用 `ASSESSMENT_QUESTION_GENERATOR` + `ASSESSMENT_LLM_*`；另支持决策器与生成器分别配置 `ASSESSMENT_DECIDER_*` 与 `ASSESSMENT_GENERATOR_*`，未设置的字段回退到 `ASSESSMENT_LLM_*`。无 Key 时的 `mock` 只用于本地与测试。
+
+**改动文件**：`backend/assessment/{question_generator,engine,models,bank}.py`、`backend/api/assessment.py`、`tests/test_question_decision.py`、`docs/assessment_contract.md`；接口清单同步到 `docs/api_spec.md`。
+
+**验证**：`python -m pytest -q` → **47 passed**。含 21 个新用例：同一状态注入不同模型动作产生不同的合法下一问；非法条目、虚构引用、重复已完成主题、意图与状态不符均被拒绝且不提交；九项未明确问完不得结束；动作日志与模型配置沿用既有变量。
+
+**尚未做**：未接学生前端；未用真实模型服务做端到端验收（只在测试里用 MockTransport 验证请求/响应形状）；对话方式未做效度验证；正式中文条目译文未锁定。
+
+**五行汇报**
+
+- 今天完成：自适应提问第一步（决策/生成分离、合法性校验、LangGraph 节点链、动作日志、21 个测试）
+- 正在做：本步已收尾，无进行中改动
+- 改公共接口了吗：旧 `/api/chat` 与前端未动；`AssessmentSession` 新增只读字段 `action_log`（只增不减，旧响应仍可解析），`/api/assessment` 新增 503 错误码 `QUESTION_ACTION_REJECTED`
+- 需要别人配合：C 接学生端前先与 A 确认 `report` 与 `action_log` 的展示口径；B 无影响
+- 现在可以合 main 吗：可以（`pytest -q` 全绿）
