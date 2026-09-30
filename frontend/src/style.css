@@ -99,6 +99,12 @@ form { border-top: 1px solid #e4e8ec; padding: 14px 16px; }
 .device-state.on { color: var(--green); }
 .device-state.off { color: var(--muted); }
 .device-hint { font-size: .76rem; color: var(--muted); margin: 10px 0 0; }
+.camera-preview video {
+  display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+  background: #18232c; border-radius: 8px;
+}
+.capture-canvas { display: none; }
+.camera-preview .error { margin: 8px 0 0; font-size: .8rem; }
 
 /* 危机横幅 */
 .crisis-banner {

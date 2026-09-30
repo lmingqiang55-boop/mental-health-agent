@@ -1,6 +1,11 @@
 from fastapi.testclient import TestClient
+from io import BytesIO
+
+from PIL import Image
 
 from backend.main import app
+from backend.models.states import VisionState
+from backend.vision.detector import MockVisionDetector, VisionDetector, set_detector
 
 client = TestClient(app)
 
@@ -70,6 +75,96 @@ def test_vision_merge_does_not_reset_other_fields() -> None:
     assert state["emotion"] == "sad"
     assert state["valence"] == -0.4
     assert state["engagement"] == 0.7
+
+
+def test_vision_frame_endpoint_uses_detector_and_discards_raw_frame() -> None:
+    session_id = new_session()
+    image = BytesIO()
+    Image.new("RGB", (32, 32), color=(120, 140, 160)).save(image, format="JPEG")
+    import base64
+
+    frame = "data:image/jpeg;base64," + base64.b64encode(image.getvalue()).decode()
+    response = client.post("/api/vision/frame", json={
+        "session_id": session_id, "image_base64": frame,
+    })
+    assert response.status_code == 200
+    state = response.json()["vision_state"]
+    assert state["face_detected"] is True
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["latest_vision_state"]["face_detected"] is True
+    assert len(session["vision_state_log"]) == 1
+
+
+def test_vision_frame_endpoint_does_not_merge_a_no_face_snapshot() -> None:
+    class SequenceDetector(VisionDetector):
+        def __init__(self, states: list[VisionState]) -> None:
+            self._states = iter(states)
+
+        def analyze_frame(self, frame=None) -> VisionState:
+            return next(self._states)
+
+    session_id = new_session()
+    set_detector(SequenceDetector([
+        VisionState(
+            emotion="sad", emotion_confidence=0.8, valence=-0.4,
+            arousal=0.3, engagement=0.7, face_detected=True,
+        ),
+        VisionState(face_detected=False),
+    ]))
+    image = BytesIO()
+    Image.new("RGB", (32, 32), color=(120, 140, 160)).save(image, format="JPEG")
+    import base64
+
+    frame = base64.b64encode(image.getvalue()).decode()
+    try:
+        first = client.post("/api/vision/frame", json={
+            "session_id": session_id, "image_base64": frame,
+        })
+        second = client.post("/api/vision/frame", json={
+            "session_id": session_id, "image_base64": frame,
+        })
+    finally:
+        set_detector(MockVisionDetector())
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    state = second.json()["vision_state"]
+    assert state["face_detected"] is False
+    assert state["emotion"] is None
+    assert state["valence"] is None
+    assert state["engagement"] is None
+
+
+def test_vision_frame_endpoint_rejects_invalid_base64() -> None:
+    response = client.post("/api/vision/frame", json={
+        "session_id": new_session(), "image_base64": "!" * 40,
+    })
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_FRAME"
+
+
+def test_vision_frame_endpoint_rejects_non_image_bytes() -> None:
+    import base64
+
+    response = client.post("/api/vision/frame", json={
+        "session_id": new_session(),
+        "image_base64": base64.b64encode(b"not-an-image" * 8).decode(),
+    })
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_FRAME"
+
+
+def test_vision_frame_endpoint_rejects_oversized_decoded_image() -> None:
+    import base64
+
+    image = BytesIO()
+    Image.new("RGB", (1921, 1080), color=(120, 140, 160)).save(image, format="JPEG")
+    response = client.post("/api/vision/frame", json={
+        "session_id": new_session(),
+        "image_base64": base64.b64encode(image.getvalue()).decode(),
+    })
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_FRAME"
 
 
 def test_unknown_session_and_invalid_text() -> None:

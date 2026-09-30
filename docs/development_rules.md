@@ -31,12 +31,12 @@
 | 人 | 负责什么 | 主要修改目录 | 最终交付 |
 | --- | --- | --- | --- |
 | A 对话负责人 | 对话策略、RAG、LLM、风险提示、综合评估 | `backend/core/dialogue_manager.py`、`risk_engine.py`、`assessment_engine.py`、`backend/llm/`、`backend/rag/`、`backend/api/chat.py` | `DialogueResponsePayload`、`AssessmentResult` |
-| B 多模态负责人 | 摄像头、表情、VA、参与度、语音、ASR、多模态融合 | `backend/vision/`、`backend/audio/`、`backend/core/multimodal_fusion.py`、`backend/api/vision.py`、`audio.py` | `VisionState`、`AudioState`、会话级 Summary |
-| C 系统负责人 | React 双前端、Session、评估记忆库、双向沟通、API 集成、以后数据库 | `frontend/`、`backend/core/session_manager.py`、`memory_store.py`、`communication.py`、`backend/api/`、`backend/main.py` | 能实际使用的完整 Demo、`AssessmentRecord` |
+| B 多模态负责人 | 摄像头、表情、VA、参与度、语音、ASR、多模态融合及视觉采集联调 | `backend/vision/`、`backend/audio/`、`backend/core/multimodal_fusion.py`、`backend/api/vision.py`、`audio.py`、`frontend/src/api/client.js`（视觉 API）、`frontend/src/pages/StudentPage.jsx`（摄像头采集联调）、`frontend/src/components/DeviceStatus.jsx`、`frontend/src/style.css`（摄像头状态/预览） | `VisionState`、`AudioState`、会话级 Summary |
+| C 系统负责人 | React 双前端、Session、评估记忆库、双向沟通、API 集成、以后数据库 | `frontend/`（B 明确负责的视觉联调文件除外）、`backend/core/session_manager.py`、`memory_store.py`、`communication.py`、`backend/api/`（`vision.py` 除外）、`backend/main.py` | 能实际使用的完整 Demo、`AssessmentRecord` |
 
 这三个职责**不要互相穿透**。
 
-例如 B 为了方便视觉模型，不应该直接去修改 `dialogue_manager.py`；A 也不能因为想使用一个新视觉指标，就直接跑去改 `vision/detector.py`。正确方式是通过公共数据结构连接。
+例如 B 为了方便视觉模型，不应该直接去修改 `dialogue_manager.py`；A 也不能因为想使用一个新视觉指标，就直接跑去改 `vision/detector.py`。B 可以在上表列出的视觉 API 和摄像头联调文件中完成从浏览器采集到 `VisionState` 的链路，但不得因此改动其他页面、对话策略或公共状态字段。正确方式是通过公共数据结构连接。
 
 ## 3. 三个人的接口关系
 
@@ -164,13 +164,17 @@ B/C 换成自己的分支即可。
 允许修改：
 backend/vision/
 backend/api/vision.py
+frontend/src/api/client.js（视觉 API）
+frontend/src/pages/StudentPage.jsx（摄像头采集联调）
+frontend/src/components/DeviceStatus.jsx
+frontend/src/style.css（摄像头状态/预览）
 tests/
 
 禁止修改：
 backend/core/dialogue_manager.py
 backend/llm/
 backend/rag/
-frontend/
+frontend/ 中与视觉采集联调无关的页面、组件和样式
 公共接口字段
 
 完成标准：

@@ -19,6 +19,12 @@ class VisionUpsertRequest(BaseModel):
     state: VisionState
 
 
+class VisionFrameRequest(BaseModel):
+    """浏览器摄像头帧，服务端即时分析且不落盘。"""
+    session_id: str
+    image_base64: str = Field(min_length=32, max_length=3_000_000)
+
+
 class AudioUpsertRequest(BaseModel):
     """提交句级音频状态，服务端做 merge。"""
     session_id: str

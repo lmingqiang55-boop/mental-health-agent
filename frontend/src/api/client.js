@@ -39,6 +39,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ session_id: sessionId, state }),
     }),
+  analyzeVisionFrame: (sessionId, imageBase64) =>
+    request('/api/vision/frame', {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId, image_base64: imageBase64 }),
+    }),
   submitAudio: (sessionId, state) =>
     request('/api/audio', {
       method: 'POST',

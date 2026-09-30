@@ -27,7 +27,7 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 | 学生实时对话 | **已实现文字版** | `frontend/src/App.jsx`、`POST /api/chat`；语音交互待开发 | A + C |
 | 动态提问与对话规则 | **简化实现** | `DialogueManager` 六维度状态机、Mock LLM；改善逻辑时保留确定性决策 | A |
 | 心理健康知识与规则库 | **演示片段** | `backend/rag/knowledge/demo_knowledge.md`、关键词检索；量表/规范/资源需审核后引入 | A |
-| 摄像头、微表情、眼动 | **仅结构化接口** | `POST /api/vision` 保存 VisionState；尚不接收视频或运行模型 | B |
+| 摄像头、表情、VA | **可选真实模型** | 学生端低频上传压缩帧到 `POST /api/vision/frame`；默认 Mock，可切换 EmotiEffLib | B |
 | 麦克风、语音转写、语音反馈 | **仅结构化接口** | `POST /api/audio` 保存 AudioState；尚无录音、STT、TTS | B + C |
 | 多模态综合评估 | **融合占位** | `fuse()` 当前只汇总可用性；真实综合模型待开发 | B，A 确认风险使用方式 |
 | 心理状态分值与风险等级 | **仅规则式风险提示** | `RiskResult`、`risk_engine.py`；无标准量表计分或临床判定 | A |

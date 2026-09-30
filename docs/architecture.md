@@ -41,7 +41,7 @@ Mock 或规则占位。
 | 知识库与规则库 | `backend/rag/knowledge/`、`backend/rag/retriever.py`、`backend/llm/prompts.py` | 演示片段 + 关键词检索（带缓存） |
 | 标准心理量表 | — | 未接入，接入前需确认授权与计分规则 |
 | 对话 Agent | `backend/core/dialogue_manager.py` | 六维状态机 + 策略决策 |
-| 微表情/眼动检测 | `backend/vision/detector.py` | 抽象接口 + Mock |
+| 微表情/眼动检测 | `backend/vision/detector.py` | Mock + 可选 EmotiEffLib 情绪/VA |
 | 语音输入/ASR | `backend/audio/analyzer.py` | 抽象接口 + Mock |
 | 句级视觉状态（实时） | `VisionState` | 已定义，merge 写入 |
 | 多模态融合 | `backend/core/multimodal_fusion.py` | 句级融合 + 会话级汇总 |
@@ -63,7 +63,7 @@ Mock 或规则占位。
 学生文字 ──→ POST /api/chat
                  │ (SessionManager.modify_session 原子操作)
                  ↓
-        句级 VisionState/AudioState（POST /api/vision|audio 持续写入）
+        句级 VisionState/AudioState（POST /api/vision/frame、/api/vision、/api/audio）
                  ↓
         fuse_turn 多模态融合
                  ↓
@@ -131,7 +131,7 @@ frontend/              C：双端界面
 
 - Session / 记忆库 / 沟通消息均为单进程内存，TTL 2 小时，重启清空，
   不支持多 worker。
-- 视觉、音频、LLM、评估均为 Mock/规则，结果可能误报或漏报。
+- 默认视觉仍为 Mock；EmotiEffLib 真实模型需单独安装并设置 provider，结果可能误报或漏报。
 - 无身份认证与权限控制，老师端接口在接入认证前不得连接真实学生数据。
 - 所有输出统一标注「初步筛查提示」，不构成临床诊断。
 
