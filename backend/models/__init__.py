@@ -8,6 +8,15 @@ from backend.models.assessment import (
     DimensionScore,
     Recommendation,
 )
+from backend.models.dialogue import (
+    DialogueAgentRequest,
+    DialogueAgentResponse,
+    DialogueCurrentUserInput,
+    DialogueDecision,
+    DialogueHistoryMessage,
+    DialogueUserMemory,
+    DialogueVisual,
+)
 from backend.models.enums import (
     AssessmentDimension,
     ConsentStatus,
@@ -72,4 +81,8 @@ __all__ = [
     "ConsentResponse", "CreateSessionResponse", "DialogueResponsePayload",
     "ErrorDetail", "ErrorResponse", "HistoryListResponse",
     "SendCommunicationResponse", "StateUpsertResponse",
+    # dialogue agent schemas
+    "DialogueVisual", "DialogueHistoryMessage", "DialogueUserMemory",
+    "DialogueDecision", "DialogueCurrentUserInput",
+    "DialogueAgentRequest", "DialogueAgentResponse",
 ]
