@@ -5,11 +5,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import chat
+from backend.core.dialogue_manager import DialogueManager
 from backend.main import app
+from backend.models.states import SessionState
 from backend.policy.client import (
     DialogueAction,
     HttpPolicyClient,
     PolicyClientError,
+    get_policy_client,
     parse_policy_content,
 )
 
@@ -83,3 +86,35 @@ def test_policy_failure_does_not_append_partial_turn(monkeypatch) -> None:
     assert response.json()["error"]["code"] == "POLICY_UNAVAILABLE"
     assert session["turn_count"] == 0
     assert session["conversation_history"] == []
+
+
+def test_legacy_provider_env_var_no_longer_selects_a_fallback(monkeypatch) -> None:
+    """POLICY_PROVIDER=legacy 已删除：即使这样设置，也不回到六维规则提问。"""
+    monkeypatch.setenv("POLICY_PROVIDER", "legacy")
+    monkeypatch.setenv("POLICY_API_BASE_URL", "http://127.0.0.1:8001")
+    assert isinstance(get_policy_client(), HttpPolicyClient)
+
+    policy = HttpPolicyClient(client=httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(503)
+    )))
+    monkeypatch.setattr(chat.dialogue_manager, "_policy", policy)
+    client = TestClient(app)
+    session_id = client.post("/api/session").json()["session_id"]
+
+    response = client.post("/api/chat", json={"session_id": session_id, "text": "你好"})
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "POLICY_UNAVAILABLE"
+
+    # 没有兜底提问：本轮不落库，也不产生 explore_* 之类的规则策略
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["turn_count"] == 0
+    assert session["conversation_history"] == []
+
+
+def test_invalid_policy_config_fails_on_first_use_not_on_import(monkeypatch) -> None:
+    """配置无效时对话抛明确错误，而不是让整个应用在导入期崩溃。"""
+    monkeypatch.setenv("POLICY_API_BASE_URL", "https://policy.example")
+    manager = DialogueManager()
+
+    with pytest.raises(PolicyClientError):
+        manager.process_turn("你好", SessionState(session_id="s1"))

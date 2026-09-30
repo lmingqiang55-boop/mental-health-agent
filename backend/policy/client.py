@@ -105,11 +105,11 @@ class HttpPolicyClient:
         return parse_policy_content(content)
 
 
-def get_policy_client() -> HttpPolicyClient | None:
-    load_dotenv(DEFAULT_ENV_FILE, override=False)
-    provider = os.getenv("POLICY_PROVIDER", "legacy").strip().lower()
-    if provider == "legacy":
-        return None
-    if provider == "http":
-        return HttpPolicyClient()
-    raise ValueError(f"Unknown POLICY_PROVIDER: {provider!r}; expected 'legacy' or 'http'")
+def get_policy_client() -> HttpPolicyClient:
+    """返回本机决策模型客户端。
+
+    对话的下一步动作只有这一个来源：``POLICY_PROVIDER`` 开关和
+    ``legacy``（六维固定提问状态机）回退路径已删除。模型不可用时调用方
+    必须返回明确错误，不得改由规则提问。
+    """
+    return HttpPolicyClient()

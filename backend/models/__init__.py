@@ -20,7 +20,6 @@ from backend.models.dialogue import (
 from backend.models.enums import (
     AssessmentDimension,
     ConsentStatus,
-    DimensionStatus,
     FollowUpStatus,
     MessageRole,
     ModalityType,
@@ -62,7 +61,7 @@ from backend.models.states import (
 
 __all__ = [
     # enums
-    "AssessmentDimension", "ConsentStatus", "DimensionStatus",
+    "AssessmentDimension", "ConsentStatus",
     "FollowUpStatus", "MessageRole", "ModalityType",
     "RecommendationCategory", "RiskLevel", "SessionStage",
     # states

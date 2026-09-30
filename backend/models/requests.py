@@ -32,7 +32,7 @@ class AudioUpsertRequest(BaseModel):
 
 
 class TriggerAssessmentRequest(BaseModel):
-    """对话结束后触发多模态综合评估。"""
+    """显式触发多模态综合评估（对话没有自动结束信号）。"""
     session_id: str
 
 

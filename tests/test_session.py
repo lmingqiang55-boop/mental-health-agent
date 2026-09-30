@@ -17,7 +17,9 @@ def test_create_get_and_delete_session() -> None:
     body = fetched.json()
     assert body["turn_count"] == 0
     assert body["current_stage"] == "exploration"
-    assert all(value == "pending" for value in body["assessment_state"].values())
+    # 六维固定提问状态机删除后，公共状态里不再有这两个字段
+    assert "assessment_state" not in body
+    assert "clarify_count" not in body
 
     assert client.delete(f"/api/session/{session_id}").status_code == 200
     missing = client.get(f"/api/session/{session_id}")

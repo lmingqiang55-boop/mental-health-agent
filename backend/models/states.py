@@ -10,8 +10,6 @@ from pydantic import BaseModel, Field
 
 from backend.models.enums import (
     ConsentStatus,
-    DimensionStatus,
-    FollowUpStatus,
     MessageRole,
     RiskLevel,
     SessionStage,
@@ -132,11 +130,6 @@ class ConsentRecord(BaseModel):
     withdrawn_at: datetime | None = None
 
 
-def initial_assessment() -> dict[str, DimensionStatus]:
-    from backend.models.enums import AssessmentDimension
-    return {dim.value: DimensionStatus.PENDING for dim in AssessmentDimension}
-
-
 class SessionState(BaseModel):
     """一次完整筛查会话的权威状态，由 SessionManager 统一管理。"""
     session_id: str
@@ -146,10 +139,6 @@ class SessionState(BaseModel):
     turn_count: int = 0
     current_stage: SessionStage = SessionStage.EXPLORATION
 
-    # 六维评估覆盖状态
-    assessment_state: dict[str, DimensionStatus] = Field(
-        default_factory=initial_assessment)
-
     # 最新句级多模态状态
     latest_vision_state: VisionState | None = None
     latest_audio_state: AudioState | None = None
@@ -158,15 +147,13 @@ class SessionState(BaseModel):
     vision_state_log: list[VisionState] = Field(default_factory=list)
     audio_state_log: list[AudioState] = Field(default_factory=list)
 
-    # 会话级多模态汇总（对话结束后生成）
+    # 会话级多模态汇总（触发综合评估时生成）
     vision_summary: SessionVisionSummary | None = None
     audio_summary: SessionAudioSummary | None = None
 
     # 风险与危机模式
     latest_risk: RiskResult = Field(default_factory=RiskResult)
     crisis_mode: bool = False
-    clarify_count: int = Field(default=0,
-                               description="当前维度已澄清次数，防止无限循环")
 
     # 知情同意
     consent: ConsentRecord = Field(default_factory=ConsentRecord)
