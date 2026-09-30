@@ -6,14 +6,14 @@
 
 | 能力 | 当前状态 | 本轮协作目标 |
 | --- | --- | --- |
-| 文字对话、六维度提问、Mock LLM | 已可运行 | 对话负责人改进提问逻辑，保留 Mock 模式 |
+| 文字对话与动作决策 | 已可运行 | 策略模型（Policy Model）选择下一步动作，默认 Mock、可切 HTTP；回复生成仍用 `follow_up` 临时占位，保留 Mock 模式 |
 | 对话式九项筛查 `/api/assessment` | 独立于旧 `/api/chat` 的原型已可运行：规则 Mock 或模型抽取证据、模型选择提问动作、程序只校验合法性、九项完整才计分；`pytest -q` 全绿 | A 接真实模型做端到端验收、锁定正式条目译文；C 之后接学生端结果页 |
 | VisionState、AudioState 接口 | 已可接收结构化 Mock 数据 | 多模态负责人在接口后接真实分析模块，先完成可替换的输出 |
 | 学生端基础聊天页面 | 已可运行 | 前端负责人维护体验和错误处理；结果、历史和建议页面待开发 |
 | 医生/心理老师端（专业端） | 尚无代码 | 前端负责人先用合成数据建立页面骨架；个体管理、预警、统计和互动须分阶段接入 |
 | Session 数据 | 仅后端进程内存；重启丢失 | 前端与用户数据负责人定义数据字段、读取与删除流程；持久化作为后续任务 |
 
-**当前 v0.1 已有基线的验收**：本地从学生聊天页创建 Session，输入多轮文字，看到下一问和风险等级；Vision/Audio 状态可通过 API 写入同一 Session；无摄像头、麦克风或 LLM Key 仍能跑完整流程；测试通过。**三人协作的下一交付**：建立学生端与专业端两个清晰入口，并用合成数据打通结果展示；真实用户管理和专业端访问控制在方案确定前不得宣称完成。产品范围见 [MVP 范围与双端规划](mvp_scope.md)。
+**当前 v0.1 已有基线的验收**：本地从学生聊天页创建 Session，输入多轮文字，看到后端返回的下一步动作；Vision/Audio 状态可通过 API 写入同一 Session；无摄像头、麦克风或 LLM Key 仍能跑完整流程；测试通过。风险等级字段暂时保留为默认值，聊天链路不再做风险评分。**三人协作的下一交付**：建立学生端与专业端两个清晰入口，并用合成数据打通结果展示；真实用户管理和专业端访问控制在方案确定前不得宣称完成。产品范围见 [MVP 范围与双端规划](mvp_scope.md)。
 
 ## 2. 三个人的职责
 
@@ -21,7 +21,7 @@
 
 | 成员 | 主要负责的代码 | 交付与验收 | 不直接修改的边界 |
 | --- | --- | --- | --- |
-| A 对话 | `backend/core/dialogue_manager.py`、`risk_engine.py`、`backend/llm/`、`backend/rag/`、`backend/api/chat.py` | `process_turn()` 能稳定选下一问；无 LLM Key 仍可回复；风险只作提示；补对话测试 | 不直接改 Vision/Audio 输出字段、Session 存储结构或前端页面 |
+| A 对话 | `backend/core/dialogue_manager.py`、`backend/policy/`、`backend/models/enums.py`、`backend/llm/`、`backend/api/chat.py` | `PolicyClient` 决定动作、`TopicConstraint` 后处理；`process_turn()` 回复仍用 `follow_up` 临时 fallback；无 LLM Key 仍可回复；保留默认 `risk` 响应字段以兼容；补对话测试 | 不直接改 Vision/Audio 输出字段、Session 存储结构或前端页面 |
 | B 多模态 | `backend/vision/`、`backend/audio/`、`backend/core/multimodal_fusion.py`、`backend/api/vision.py`、`backend/api/audio.py`；`models/states.py` 中 VisionState/AudioState 字段 | 接收并校验状态；缺少任一模态时仍能聊天；给出字段含义和单位；补模态 API 测试 | 不把模型推理塞进对话状态机或前端；不直接改变聊天响应 |
 | C 双前端与用户数据 | `frontend/`、`backend/core/session_manager.py`、`backend/api/session.py`；`models/states.py` 中 SessionState/Message 字段 | 学生端能创建会话、聊天和查看自身状态；专业端建立独立入口与合成数据页面；定义结果、历史及反馈的数据契约；Session 创建、读取、删除有测试 | 不把提问策略写进前端；不直接修改多模态算法或对话决策 |
 

@@ -44,7 +44,6 @@ def chat(request: ChatRequest) -> ChatResponse:
             turn_count=session.turn_count,
             current_stage=session.current_stage,
             assessment_state=session.assessment_state,
-            latest_risk=session.latest_risk,
         )
         return ChatResponse(session_id=request.session_id, turn_count=session.turn_count,
                             **result.model_dump())

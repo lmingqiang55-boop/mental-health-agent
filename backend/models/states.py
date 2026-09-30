@@ -50,9 +50,12 @@ class SessionState(BaseModel):
     conversation_history: list[Message] = Field(default_factory=list)
     turn_count: int = 0
     current_stage: Stage = "exploration"
+    # legacy: old rule-based dialogue state machine
+    # retained temporarily for backward compatibility
     assessment_state: dict[str, DimensionStatus] = Field(default_factory=initial_assessment)
     latest_vision_state: VisionState | None = None
     latest_audio_state: AudioState | None = None
+    # legacy: retained temporarily for backward compatibility
     latest_risk: RiskResult = Field(default_factory=RiskResult)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

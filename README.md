@@ -1,6 +1,6 @@
 # 多模态心理状态筛查与知识增强对话系统
 
-本项目是比赛用的本地 Demo：文字聊天、内存 Session、六维度简单提问、Mock LLM、关键词知识检索和视觉/音频状态接口。另有一个独立的**对话式 PHQ-A 条目映射状态机原型**，提供逐题证据与完整时的程序计分。测评默认无需 API Key，也可接云端或本地的 OpenAI 兼容模型做结构化证据抽取。它只提供筛查流程演示，不提供临床诊断。
+本项目是比赛用的本地 Demo：文字聊天、内存 Session、策略模型决策下一步对话动作、Mock LLM 回复、以及视觉/音频状态接口。另有一个独立的**对话式 PHQ-A 条目映射状态机原型**，提供逐题证据与完整时的程序计分。测评默认无需 API Key，也可接云端或本地的 OpenAI 兼容模型做结构化证据抽取。它只提供筛查流程演示，不提供临床诊断。
 
 项目目标有两个前端：**学生端**负责对话、查看自身筛查结果与建议；**医生/心理老师端（专业端）**负责授权范围内的个体查看、风险人工跟进和群体概览。当前 v0.1 仅实现学生端的基础文字聊天页，专业端与长期用户数据仍是待开发模块。图中功能与代码现状对照见 [MVP 范围与双端规划](docs/mvp_scope.md)。
 
@@ -8,7 +8,7 @@
 
 | 成员 | 负责范围 | 主要交接接口 |
 | --- | --- | --- |
-| A：项目对话 | 状态机、下一问、知识检索、LLM 接口、初步风险提示 | `DialogueManager.process_turn()`、`POST /api/chat` |
+| A：项目对话 | 对话策略模型接入、动作决策、回复生成接口、知识检索 | `DialogueManager.process_turn()`、`PolicyClient`、`POST /api/chat` |
 | B：多模态输入 | 视觉、音频状态与融合接口 | `VisionState`、`AudioState`、`fuse()`、`POST /api/vision`、`POST /api/audio` |
 | C：双前端与用户数据 | 学生端、专业端、Session/结果数据设计与管理 | `SessionState`、Session API、两个前端的 `/api` 调用 |
 
@@ -60,7 +60,7 @@ npm run build
 
 ## 配置
 
-旧 `/api/chat` 仍使用 `LLM_PROVIDER=mock`。独立的 `/api/assessment` 默认 `ASSESSMENT_EXTRACTOR=mock`。要为测评接入一个支持 `/chat/completions` 和 JSON 对象响应的 OpenAI 兼容服务，在**启动后端的同一终端**设置：
+旧 `/api/chat` 的决策已改为策略模型：默认 `POLICY_PROVIDER=mock` 固定返回 `情绪`；与 Policy API 在同一台机器上时设为 `POLICY_PROVIDER=http`，并通过 `POLICY_API_BASE_URL`、`POLICY_API_MODEL`、`POLICY_API_TIMEOUT` 指定 OpenAI 兼容服务。回复生成仍是 `follow_up` 临时占位（`LLM_PROVIDER=mock`），不随动作变化。独立的 `/api/assessment` 默认 `ASSESSMENT_EXTRACTOR=mock`。要为测评接入一个支持 `/chat/completions` 和 JSON 对象响应的 OpenAI 兼容服务，在**启动后端的同一终端**设置：
 
 ```powershell
 $env:ASSESSMENT_EXTRACTOR = 'openai_compatible'
@@ -77,12 +77,12 @@ uvicorn backend.main:app --reload
 
 决策器和问句生成器可分别设置 `ASSESSMENT_DECIDER_BASE_URL/MODEL/API_KEY/THINKING` 与 `ASSESSMENT_GENERATOR_BASE_URL/MODEL/API_KEY/THINKING`；未设置的字段回退到 `ASSESSMENT_LLM_*`，后者也供证据抽取器使用。当前本地演示配置是 DeepSeek V4 Pro 负责选择主题和提问意图，DeepSeek Flash 负责问句措辞，Flash 还负责证据抽取。启动脚本 `run_deepseek.ps1` 会加载被 Git 忽略的本地 `.env`。模型服务若截断或返回无效 JSON，本轮会报 503 且不会改动测评状态。
 
-Session 保存在单个 Python 进程中，后端重启后会清空。当前音视频接口只接收并保存结构化 Mock 状态，不处理摄像头画面或麦克风音频。详见 [架构](docs/architecture.md)、[API](docs/api_spec.md)、[协作手册](docs/development_rules.md) 和 [产品范围](docs/mvp_scope.md)。
+Session 保存在单个 Python 进程中，后端重启后会清空。音频接口只接收并保存结构化 Mock 状态，不处理麦克风音频；摄像头单帧可通过 `POST /api/vision/frame` 提取表情与效价/唤醒度，默认 `VISION_PROVIDER=mock` 不推断面部状态，原始帧不写入 Session 或磁盘。详见 [架构](docs/architecture.md)、[API](docs/api_spec.md)、[协作手册](docs/development_rules.md) 和 [产品范围](docs/mvp_scope.md)。
 
 ## 后续 TODO
 
 - 接入经审核的心理知识资料与真实检索策略。
-- 替换 Mock LLM，同时保留 DialogueManager 的策略决定权。
+- 把回复生成器（Response Agent）接到策略模型已选出的动作上，替换 `follow_up` 临时占位；Mock LLM 之外保留 DialogueManager 的动作决定权。
 - 接入真实视觉/音频模型并验证各状态量的意义。
-- 引入持久化 Session 与更可靠的风险评估流程。
+- 引入持久化 Session，并把话题计数改为按会话保存；风险评估流程仍待重新设计。
 - 建立学生端结果/历史页与医生/心理老师端，并在真实数据接入前完成身份、授权和同意流程。

@@ -19,7 +19,6 @@ def test_chat_without_multimodal_or_api_key() -> None:
     body = first.json()
     assert body["reply"]
     assert body["next_strategy"]
-    assert body["risk"]["risk_level"] == "low"
     assert body["turn_count"] == 1
 
     second = client.post("/api/chat", json={
@@ -67,25 +66,14 @@ def test_unknown_session_and_invalid_text() -> None:
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_covered_dimensions_are_not_repeated() -> None:
+def test_ordinary_chat_exposes_policy_action_and_uses_follow_up_reply() -> None:
     session_id = new_session()
-    strategies = []
-    for answer in ("我还好", "还愿意做", "睡得还行", "精力正常", "能集中", "两个星期", "谢谢"):
-        response = client.post("/api/chat", json={"session_id": session_id, "text": answer})
-        assert response.status_code == 200
-        strategies.append(response.json()["next_strategy"])
-    assert strategies[:6] == [
-        "explore_mood", "explore_interest", "explore_sleep", "explore_energy",
-        "explore_concentration", "explore_duration",
-    ]
-    assert strategies[6] == "finish_assessment"
-
-
-def test_high_risk_message_gets_supportive_reply() -> None:
-    session_id = new_session()
-    response = client.post("/api/chat", json={
-        "session_id": session_id, "text": "我想自杀"
-    })
+    response = client.post("/api/chat", json={"session_id": session_id, "text": "最近有点累"})
     assert response.status_code == 200
-    assert response.json()["risk"]["requires_intervention"] is True
-    assert "急救" in response.json()["reply"]
+    assert response.json()["actions"] == ["情绪"]
+    assert response.json()["next_strategy"] == "情绪"
+    assert "谢谢你愿意分享" in response.json()["reply"]
+
+    session = client.get(f"/api/session/{session_id}").json()
+    assert all(value == "pending" for value in session["assessment_state"].values())
+    assert len(session["conversation_history"]) == 2

@@ -25,12 +25,12 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 | 图中模块 | 当前状态 | 对应代码 / 下一步 | 负责人 |
 | --- | --- | --- | --- |
 | 学生实时对话 | **已实现文字版** | `frontend/src/App.jsx`、`POST /api/chat`；语音交互待开发 | A + C |
-| 动态提问与对话规则 | **简化实现** | `DialogueManager` 六维度状态机、Mock LLM；改善逻辑时保留确定性决策 | A |
+| 动态提问与对话规则 | **策略模型接入中** | `DialogueManager` 调用 `PolicyClient` 选择下一步动作、`TopicConstraint` 约束话题重复；回复生成仍是 `follow_up` 临时占位；旧六维规则状态机已从实时链路移除，仅保留 `assessment_state` 兼容字段 | A |
 | 心理健康知识与规则库 | **演示片段** | `backend/rag/knowledge/demo_knowledge.md`、关键词检索；量表/规范/资源需审核后引入 | A |
 | 摄像头、微表情、眼动 | **仅结构化接口** | `POST /api/vision` 保存 VisionState；尚不接收视频或运行模型 | B |
 | 麦克风、语音转写、语音反馈 | **仅结构化接口** | `POST /api/audio` 保存 AudioState；尚无录音、STT、TTS | B + C |
 | 多模态综合评估 | **融合占位** | `fuse()` 当前只汇总可用性；真实综合模型待开发 | B，A 确认风险使用方式 |
-| 心理状态分值与风险等级 | **新增独立测评原型** | `/api/assessment` 可记录 PHQ-A 九项证据并在完整时计算对话映射分；旧 `/api/chat` 仍只有规则式风险提示，未完成正式效度验证或临床判定 | A |
+| 心理状态分值与风险等级 | **新增独立测评原型** | `/api/assessment` 可记录 PHQ-A 九项证据并在完整时计算对话映射分；`/api/chat` 的风险字段降级为默认值兼容，不再运行风险评分，未完成正式效度验证或临床判定 | A |
 | 个性化建议 | **固定演示文案** | Mock LLM 模板；建议规则和知识来源待设计 | A + C |
 | 学生本次结果/历史趋势 | **未实现** | 当前页面只显示回合数、阶段、风险；需结果数据契约和历史接口 | C |
 | 专业端个体管理/风险预警/群体统计 | **未实现** | 先用合成数据规划页面，再设计身份、授权、聚合与人工复核 | C，A 提供结果语义 |
@@ -66,7 +66,7 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 
 ## 4. 用户数据契约
 
-**当前真实存在的数据**是 `SessionState`：`session_id`、`conversation_history`、`turn_count`、`current_stage`、`assessment_state`、`latest_vision_state`、`latest_audio_state`、`latest_risk`、`created_at`、`updated_at`。仅存于后端单进程内存；重启消失。`session_id` 不能当学生身份或医生授权凭据。
+**当前真实存在的数据**是 `SessionState`：`session_id`、`conversation_history`、`turn_count`、`current_stage`、`assessment_state`、`latest_vision_state`、`latest_audio_state`、`latest_risk`（legacy 兼容字段，聊天不再更新）、`created_at`、`updated_at`。仅存于后端单进程内存；重启消失。`session_id` 不能当学生身份或医生授权凭据。
 
 下一阶段建议先在文档中设计以下记录，再选存储方式：
 
@@ -81,7 +81,7 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 
 ## 5. 下一交付的最小任务清单
 
-- **A 对话**：在现有状态机与 Mock 路径上明确每个策略的输入、输出和完成条件；给 C 一份结果字段草案，给 B 一份会用到的多模态字段清单。
+- **A 对话**：在现有策略模型与 Mock 路径上明确每个动作的输入、输出和话题约束条件；给 C 一份结果字段草案，给 B 一份会用到的多模态字段清单。
 - **B 多模态**：写清 VisionState/AudioState 每个字段的范围、来源和缺失值；使用 Mock 状态验证 Vision/Audio → Session → Chat 的链路，真实模型可后接。
 - **C 双端与数据**：保留当前学生聊天页；设计专业端路由和合成数据页面；起草学生身份、评估快照、权限及结果展示契约。未完成身份与授权前不接真实学生记录。
 - **三人联合联调**：用合成会话检查两个前端的字段一致性、无模态降级、错误 Session、风险提示显示和人工回复标识。
