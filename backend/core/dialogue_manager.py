@@ -21,6 +21,8 @@ from backend.models.enums import (
 )
 from backend.models.responses import DialogueResponsePayload
 from backend.models.states import SessionState
+from backend.policy.client import HttpPolicyClient, get_policy_client
+from backend.policy.reply import reply_for_decision
 from backend.rag.retriever import retrieve
 
 MAX_CLARIFY = 2  # 同一维度最多澄清次数，超过后强制推进
@@ -48,8 +50,9 @@ DIMENSION_LABELS = {dim.value: label for dim, label in zip(
 
 
 class DialogueManager:
-    def __init__(self) -> None:
+    def __init__(self, policy_client: HttpPolicyClient | None = None) -> None:
         self._llm = get_llm_client()
+        self._policy = policy_client if policy_client is not None else get_policy_client()
 
     def process_turn(self, user_text: str,
                      session: SessionState) -> DialogueResponsePayload:
@@ -68,6 +71,15 @@ class DialogueManager:
 
         if session.current_stage == SessionStage.COMPLETED:
             return self._reply(session, "post_assessment", risk)
+
+        if self._policy is not None:
+            decision = self._policy.predict(session.conversation_history)
+            return DialogueResponsePayload(
+                reply=reply_for_decision(decision),
+                next_strategy=decision.actions[-1].value,
+                current_stage=session.current_stage.value,
+                risk=risk,
+            )
 
         strategy = self._advance_state_machine(user_text, session)
         return self._reply(session, strategy, risk)

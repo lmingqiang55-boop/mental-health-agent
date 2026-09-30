@@ -6,7 +6,7 @@
    多模态综合评估 Agent、写入评估记忆库。
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.errors import session_not_found
 from backend.core.assessment_engine import assessment_engine
@@ -21,6 +21,7 @@ from backend.models.enums import MessageRole
 from backend.models.requests import ChatRequest
 from backend.models.responses import ChatResponse
 from backend.models.states import Message, SessionState
+from backend.policy.client import PolicyClientError
 
 router = APIRouter(prefix="/api", tags=["chat"])
 dialogue_manager = DialogueManager()
@@ -30,7 +31,6 @@ dialogue_manager = DialogueManager()
 def chat(request: ChatRequest) -> ChatResponse:
     text = request.text.strip()
     if not text:
-        from fastapi import HTTPException
         raise HTTPException(status_code=422, detail={
             "code": "VALIDATION_ERROR", "message": "Text cannot be blank."})
 
@@ -54,7 +54,13 @@ def chat(request: ChatRequest) -> ChatResponse:
             session.audio_summary = build_audio_summary(
                 session.audio_state_log)
 
-    updated = session_manager.modify_session(request.session_id, mutator)
+    try:
+        updated = session_manager.modify_session(request.session_id, mutator)
+    except PolicyClientError as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "POLICY_UNAVAILABLE",
+            "message": "决策模型暂时不可用，请稍后重试。",
+        }) from exc
     if updated is None:
         raise session_not_found()
 

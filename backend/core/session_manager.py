@@ -59,9 +59,12 @@ class SessionManager:
             if session is None or self._is_expired(session):
                 self._sessions.pop(session_id, None)
                 return None
-            mutator(session)
-            session.updated_at = datetime.now(timezone.utc)
-            return session.model_copy(deep=True)
+            # 模型调用失败时不能留下只有用户消息、没有助手回复的半轮对话。
+            working = session.model_copy(deep=True)
+            mutator(working)
+            working.updated_at = datetime.now(timezone.utc)
+            self._sessions[session_id] = working
+            return working.model_copy(deep=True)
 
     def delete_session(self, session_id: str) -> bool:
         with self._lock:

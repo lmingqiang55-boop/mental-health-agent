@@ -74,6 +74,25 @@ npm run build
 Session 与记忆库保存在进程内存中，TTL 2 小时，重启清空。
 CORS 来源可用环境变量 `CORS_ORIGINS` 配置。
 
+### 已训练决策模型
+
+默认 `POLICY_PROVIDER=legacy`，继续使用主线的六维状态机。要使用已训练的
+决策模型，在项目根目录的本地 `.env` 设置：
+
+```dotenv
+POLICY_PROVIDER=http
+POLICY_API_BASE_URL=http://127.0.0.1:8001
+POLICY_API_MODEL=你的模型名称
+```
+
+模型服务需在本机回环地址提供 OpenAI 兼容的
+`POST /v1/chat/completions`，输出如 `{"actions":["共情安慰","睡眠"]}`。
+本机服务如需密钥，可在 `.env` 设置 `POLICY_API_KEY`。每轮会将截至当前
+用户发言的对话历史发送给本机决策模型；危机消息优先走现有风险处理。
+模型选出的动作由本地基础话术执行，不会再次将对话发给回复生成服务。
+此模式由模型决定提问方向，不使用六维状态机的自动完成计数；最终评估
+仍需另行设计结束条件。
+
 ### 摄像头情绪识别（EmotiEffLib）
 
 学生端开启摄像头后，会每 1.5 秒将一张压缩帧提交到
