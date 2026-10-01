@@ -18,7 +18,7 @@
 | POST | `/api/chat` | 提交一轮文字对话 |
 | POST | `/api/vision` | 提交句级视觉状态（merge） |
 | POST | `/api/vision/frame` | 提交一张摄像头帧并即时分析 |
-| POST | `/api/audio` | 提交句级音频状态（merge） |
+| POST | `/api/audio` | 兼容现有实时音频状态；队员 B 的评估交接不需要调用 |
 | POST | `/api/assessment` | 触发综合评估（对话没有自动结束信号，这是唯一入口） |
 | GET | `/api/assessment/result/{result_id}` | 获取评估结果 |
 | GET | `/api/history/{student_ref}` | 学生查看历史记录 |
@@ -83,7 +83,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `face_detected` | bool | — | 是否检测到人脸 |
 | `timestamp` | datetime | — | 采样时间 |
 
-### AudioState（句级音频状态，B → A）
+### AudioState（现有可选状态，不属于评估输入）
 
 | 字段 | 类型 | 范围 | 说明 |
 | --- | --- | --- | --- |
@@ -121,7 +121,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `content` | string | 消息文本 |
 | `created_at` | datetime | 时间 |
 | `vision_snapshot` | VisionState \| null | 该消息对应的视觉快照 |
-| `audio_snapshot` | AudioState \| null | 该消息对应的音频快照 |
+| `audio_snapshot` | AudioState \| null | 现有可选字段；新评估 Agent 不读取 |
 
 ### SessionState
 
@@ -192,8 +192,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 {
   "session_id": "b4fc1bdd-...",
   "text": "最近总是觉得没什么精神",
-  "vision_snapshot": { "face_detected": true, "valence": -0.4 },
-  "audio_snapshot": { "audio_available": true, "speech_rate": 0.45 }
+  "vision_snapshot": { "face_detected": true, "valence": -0.4 }
 }
 ```
 
@@ -210,8 +209,8 @@ FollowUpStatus     none | pending | in_progress | resolved
 }
 ```
 
-`vision_snapshot` 和 `audio_snapshot` 均可选；语音/视觉模块完成该句话的对齐后
-才填写。省略时消息的对应快照保持为空，不自动取最近一帧。
+`vision_snapshot` 可选；语音模块提供转写文本，视觉模块完成该句话的对齐后
+填写视觉快照。省略时消息的视觉快照保持为空，不自动取最近一帧。
 `next_strategy` 是决策模型本轮输出的最后一个动作，取值即上面 11 个动作之一
 （危机时为 `crisis_support`），不再是按维度推进的规则策略名。
 

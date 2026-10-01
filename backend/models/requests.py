@@ -12,7 +12,6 @@ class ChatRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     # 未来上游提供与这句话精确对齐的快照；缺失时不借用最近一帧。
     vision_snapshot: VisionState | None = None
-    audio_snapshot: AudioState | None = None
 
 
 class VisionUpsertRequest(BaseModel):
@@ -31,7 +30,7 @@ class VisionFrameRequest(BaseModel):
 
 
 class AudioUpsertRequest(BaseModel):
-    """提交句级音频状态，服务端做 merge。"""
+    """兼容现有实时音频状态；评估交接不要求调用，服务端做 merge。"""
     session_id: str
     state: AudioState
 

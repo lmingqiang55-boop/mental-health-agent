@@ -37,7 +37,6 @@ def chat(request: ChatRequest) -> ChatResponse:
         session.conversation_history.append(Message(
             role=MessageRole.USER, content=text,
             vision_snapshot=request.vision_snapshot,
-            audio_snapshot=request.audio_snapshot,
         ))
         payload = dialogue_manager.process_turn(text, session)
         dialogue_payload["value"] = payload

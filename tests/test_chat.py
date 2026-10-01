@@ -101,18 +101,17 @@ def test_multimodal_state_is_saved_and_chat_still_works() -> None:
     assert session["conversation_history"][0]["audio_snapshot"] is None
 
 
-def test_chat_stores_only_exact_utterance_snapshots() -> None:
+def test_chat_stores_only_exact_utterance_vision() -> None:
     session_id = new_session()
     response = client.post("/api/chat", json={
         "session_id": session_id,
         "text": "最近心情不好",
         "vision_snapshot": {"face_detected": True, "valence": -0.4},
-        "audio_snapshot": {"audio_available": True, "speech_rate": 0.45},
     })
     assert response.status_code == 200
     message = client.get(f"/api/session/{session_id}").json()["conversation_history"][0]
     assert message["vision_snapshot"]["valence"] == -0.4
-    assert message["audio_snapshot"]["speech_rate"] == 0.45
+    assert message["audio_snapshot"] is None
 
 
 def test_vision_merge_does_not_reset_other_fields() -> None:

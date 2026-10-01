@@ -12,11 +12,10 @@
 | --- | --- | --- |
 | 用户说完一句话 | ASR 原文 `text`，必填且非空 | `POST /api/chat` 的 `text` |
 | 同一句话 | 该句期间聚合的视觉状态 `vision_snapshot`，有数据时提供 | 同一个 `/api/chat` 请求，后续也放在 `evaluation_input.dialogue_history` 的对应消息内 |
-| 同一句话 | 句级音频特征 `audio_snapshot`，可选 | 同一个 `/api/chat` 请求；当前评估 Agent 只读取转写文本，不读取声学特征 |
 | 整段对话结束 | 基于句级视觉状态计算的 `vision_summary` | `POST /api/assessment` 的 `evaluation_input.vision_summary` |
 | 触发最终评估 | 按时间顺序排列的完整 `dialogue_history` | `POST /api/assessment` 的 `evaluation_input.dialogue_history` |
 
-所有请求使用同一个 `session_id`。`dialogue_history` 的 `role` 可为 `user`、`assistant`、`counselor`、`system`；只有 `user` 的话是被评估者自述，其他角色仅作上下文。每条消息的 `vision_snapshot` 必须对应**这条消息**，不能用最近一帧代替。没有采集到视觉或音频时省略相应快照；缺测值用 `null`，不要填 `0`。
+所有请求使用同一个 `session_id`。`dialogue_history` 的 `role` 可为 `user`、`assistant`、`counselor`、`system`；只有 `user` 的话是被评估者自述，其他角色仅作上下文。每条消息的 `vision_snapshot` 必须对应**这条消息**，不能用最近一帧代替。没有采集到视觉时省略快照；缺测值用 `null`，不要填 `0`。语音模块只提供转写文本，不需要提交音频特征。
 
 ### 1. 每句话的语音与视觉输出
 
@@ -41,22 +40,13 @@ Content-Type: application/json
     "attention_score": 0.6,
     "gaze_focus": 0.55,
     "micro_expression_intensity": 0.3
-  },
-  "audio_snapshot": {
-    "text": "最近总是睡不好",
-    "audio_available": true,
-    "speech_rate": 0.45,
-    "pause_ratio": 0.2,
-    "energy": 0.4,
-    "pitch_mean": 0.5,
-    "pitch_variability": 0.3
   }
 }
 ```
 
-`text` 是参与对话决策和最终评估的转写文本；`audio_snapshot.text` 只是可选的音频状态字段，二者应一致。`vision_snapshot`、`audio_snapshot` 可以省略。`POST /api/vision`、`POST /api/vision/frame`、`POST /api/audio` 可供实时状态更新，但这些采样日志不会自动变成某句话的快照，也不会自动生成最终评估的视觉汇总。
+`text` 是参与对话决策和最终评估的转写文本。`vision_snapshot` 可省略。现有 `POST /api/vision` 和 `POST /api/vision/frame` 仍可供实时状态更新，但帧采样日志不会自动变成某句话的快照，也不会自动生成最终评估的视觉汇总。
 
-句级 `vision_snapshot` 使用 `VisionState`：`emotion` 为可选字符串；`emotion_confidence`、`arousal`、`engagement`、`attention_score`、`gaze_focus`、`micro_expression_intensity` 为可选的 0～1 数值；`valence` 为可选的 -1～1 数值；`face_detected` 为布尔值；`timestamp` 可选，使用 ISO 8601 时间。`audio_snapshot` 使用 `AudioState`：`pause_ratio`、`energy`、`pitch_mean` 为可选的 0～1 数值，`speech_rate`、`pitch_variability` 为可选的非负数值，另有 `text`、`audio_available` 和可选 `timestamp`。具体定义见 [`backend/models/states.py`](backend/models/states.py)。
+句级 `vision_snapshot` 使用 `VisionState`：`emotion` 为可选字符串；`emotion_confidence`、`arousal`、`engagement`、`attention_score`、`gaze_focus`、`micro_expression_intensity` 为可选的 0～1 数值；`valence` 为可选的 -1～1 数值；`face_detected` 为布尔值；`timestamp` 可选，使用 ISO 8601 时间。具体定义见 [`backend/models/states.py`](backend/models/states.py)。
 
 ### 2. 整段对话的视觉输出与评估交接
 
