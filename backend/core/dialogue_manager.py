@@ -20,7 +20,7 @@ from backend.core.risk_engine import assess_risk
 from backend.llm.client import get_llm_client
 from backend.models.enums import SessionStage
 from backend.models.responses import DialogueResponsePayload
-from backend.models.states import RiskResult, SessionState
+from backend.models.states import RiskResult, SessionState, VisionState
 from backend.policy.client import (
     HttpPolicyClient,
     PolicyClientError,
@@ -43,10 +43,13 @@ class DialogueManager:
         self._llm = get_llm_client()
         self._policy = policy_client
 
-    def process_turn(self, user_text: str,
-                     session: SessionState) -> DialogueResponsePayload:
+    def process_turn(self, user_text: str, session: SessionState,
+                     vision_snapshot: VisionState | None = None) -> DialogueResponsePayload:
         fused = fuse_turn(
-            user_text, session.latest_vision_state, session.latest_audio_state)
+            user_text,
+            vision_snapshot if vision_snapshot is not None else session.latest_vision_state,
+            session.latest_audio_state,
+        )
         risk = assess_risk(fused)
         session.latest_risk = risk
 
