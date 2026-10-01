@@ -7,16 +7,11 @@
 
 系统只提供初步状态筛查演示和风险提示，不提供临床诊断。
 
-## 三人分工
+## 三人协作与接口分工
 
-| 成员 | 角色 | 负责模块 | 主要交接接口 |
-| --- | --- | --- | --- |
-| A 对话 | 写"大脑"：问什么 | `core/dialogue_manager`、`risk_engine`、`assessment_engine`、`llm/`、`rag/` | `DialogueResponsePayload`、`AssessmentResult` |
-| B 多模态 | 写"眼睛和耳朵"：用户状态 | `vision/`、`audio/`、`core/multimodal_fusion` | `VisionState`、`AudioState`、会话级 Summary |
-| C 系统 | 写"身体和界面"：怎么使用 | `frontend/`、`core/session_manager`、`memory_store`、`communication`、`api/` | `SessionState`、`AssessmentRecord` |
+下一阶段按 [三人协作与接口分工 v3](docs/三人协作与接口分工_v3.md) 协作：B 独立完成语音起止判断、ASR 和同期摄像头统计，将完整的每轮结果直接交给 A；A 负责对话策略、回复和最终评估；C 负责测评界面与结果展示。该文档描述目标接口，现有 Mock 接口与前端仍需逐步接入。
 
-协作规则见 [三人协作框架](docs/development_rules.md)，数据契约见
-[API 数据协议](docs/api_spec.md)，模块映射见 [架构说明](docs/architecture.md)。
+当前已实现的数据协议见 [API 数据协议](docs/api_spec.md)，代码结构见 [架构说明](docs/architecture.md)。
 
 ## 环境要求
 
