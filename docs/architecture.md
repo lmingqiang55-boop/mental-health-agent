@@ -4,6 +4,9 @@
 代码一一对应。当前版本只搭建**框架骨架与数据协议**，具体识别/生成算法用
 Mock 或规则占位。
 
+下一阶段的职责和目标数据流见 [三人协作与接口分工 v3](三人协作与接口分工_v3.md)。
+本文件以下流程描述当前代码，不表示 B 的自动语音切分、逐轮视觉统计和 B → A 完整交接已经实现。
+
 ## 1. 总体分层
 
 ```text
@@ -15,18 +18,18 @@ Mock 或规则占位。
         ↓                                       ↓
 ┌──────────────────────────┐      ┌────────────────────────────┐
 │ ① 实时对话闭环           │      │ ② 多模态综合评估           │
-│   DialogueManager (A)    │ 完整 │   AssessmentEngine (A+B)   │
-│   Vision/Audio (B)       │ ───→ │   生成维度得分/风险/建议   │
+│   DialogueManager        │ 完整 │   AssessmentEngine         │
+│   Vision/Audio           │ ───→ │   生成维度得分/风险/建议   │
 │   边聊边感知·动态引导    │ 对话 │                            │
 └───────────┬──────────────┘      └──────────────┬─────────────┘
             │                                    ↓
             │                         ┌────────────────────┐
-            │   历史筛查结果（回流）   │  评估记忆库 (C)     │
+            │   历史筛查结果（回流）   │  评估记忆库 (当前) │
             └─────────────────────────│  MemoryStore       │
                                       └──────────┬─────────┘
                                                  ↓
 ┌────────────────────────────┐   ┌────────────────────────────┐
-│ 学生端展示（个人视角）(C)  │←→│ 心理老师端展示（专业视角）(C)│
+│ 学生端展示（个人视角）     │←→│ 心理老师端展示（专业视角）   │
 │ 结果 · 建议 · 求助         │沟通│ 个体管理·预警·群体统计     │
 └────────────────────────────┘   └────────────────────────────┘
 
@@ -94,33 +97,18 @@ MemoryStore.save_result → AssessmentRecord
 学生端结果页 / 老师端记录列表
 ```
 
-## 4. 模块隔离规则
+## 4. 代码模块与接口
 
-```text
-backend/models/        公共插头标准，三人共享，变更走评审流程
-backend/core/
-    dialogue_manager   A：问什么（大脑）
-    risk_engine        A：风险规则
-    assessment_engine  A+B：最终评估
-    multimodal_fusion  B：多模态融合
-    session_manager    C：会话生命周期
-    memory_store       C：评估记忆库
-    communication      C：双向沟通
-backend/llm/           A：怎么表达（可替换 Provider）
-backend/rag/           A：知识检索
-backend/vision/        B：眼睛（可替换模型）
-backend/audio/         B：耳朵（可替换模型）
-backend/api/           C：HTTP 编排，不含业务推理
-frontend/              C：双端界面
-```
+当前代码按 `backend/models/` 中的数据结构连接对话、视觉、音频与页面。
+`backend/core/` 包含对话、评估、融合和会话逻辑；`backend/vision/`、
+`backend/audio/` 是输入分析模块；`backend/api/` 提供 HTTP 路由；
+`frontend/` 提供界面。现有 `VisionState`、`AudioState` 和会话级 Summary
+仍是当前实现的数据结构。
 
-模块之间只通过 `backend/models/` 的数据结构连接：
-
-- B → A：`VisionState` / `AudioState` / 会话级 Summary
-- A → C：`DialogueResponsePayload` / `AssessmentResult`
-- C 负责编排和存储，不在前端写提问规则
-- 各模块通过抽象基类 + 工厂函数（`get_detector` / `get_llm_client` 等）
-  注入实现，替换算法不影响其他模块
+目标交接改为 B → A 的完整 `TurnResult` 与 `SessionVisionSummary`，
+再由 A → C 提供回复与最终评估。字段和调用时机以
+[三人协作与接口分工 v3](三人协作与接口分工_v3.md) 为准；
+在代码实现前，现有 API 结构仍以 [API 数据协议](api_spec.md) 为准。
 
 ## 5. 并发与一致性
 
