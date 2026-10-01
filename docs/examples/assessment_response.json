@@ -1,0 +1,28 @@
+{
+  "session_id": "7d63a2e1-9c44-4c96-a570-22efb1f42a18",
+  "status": "completed",
+  "result": {
+    "result_id": "asmt-20261001T102030-a1b2c3d4",
+    "session_id": "7d63a2e1-9c44-4c96-a570-22efb1f42a18",
+    "student_ref": null,
+    "psychological_profile": {
+      "emotion": 67,
+      "interest_motivation": 50,
+      "sleep_energy": 44,
+      "attention_thinking": 33,
+      "social_daily": 50
+    },
+    "concern_index": 54,
+    "overall_level": "moderate_concern",
+    "risk": {
+      "risk_level": "medium",
+      "risk_score": 0.5,
+      "risk_reasons": ["检测到值得进一步关注的表述"],
+      "risk_types": [],
+      "key_evidence": ["绝望"],
+      "requires_intervention": false
+    },
+    "assessment_method": "evaluation_agent",
+    "created_at": "2026-10-01T10:20:30Z"
+  }
+}

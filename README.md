@@ -126,4 +126,4 @@ npm ci
 npm run dev
 ```
 
-后端接口详情见 [API 数据协议](docs/api_spec.md)，当前模块关系见 [架构说明](docs/architecture.md)。
+后端接口详情见 [API 数据协议](docs/api_spec.md)，结果页字段与展示交接见 [评估结果页面交接文档](docs/assessment_output_page_handoff.md)，当前模块关系见 [架构说明](docs/architecture.md)。
