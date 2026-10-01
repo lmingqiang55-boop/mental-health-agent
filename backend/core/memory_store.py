@@ -21,6 +21,7 @@ from backend.models.enums import FollowUpStatus
 class MemoryStore:
     def __init__(self) -> None:
         self._records: dict[str, EvaluationRecord] = {}
+        self._by_result: dict[str, str] = {}
         self._by_student: dict[str, list[str]] = {}
         self._lock = RLock()
 
@@ -35,6 +36,7 @@ class MemoryStore:
         )
         with self._lock:
             self._records[record.record_id] = record
+            self._by_result[result.result_id] = record.record_id
             self._by_student.setdefault(record.student_ref, []).append(
                 record.record_id)
         return record
@@ -42,6 +44,12 @@ class MemoryStore:
     def get_record(self, record_id: str) -> EvaluationRecord | None:
         with self._lock:
             record = self._records.get(record_id)
+            return record.model_copy(deep=True) if record else None
+
+    def get_record_by_result_id(self, result_id: str) -> EvaluationRecord | None:
+        with self._lock:
+            record_id = self._by_result.get(result_id)
+            record = self._records.get(record_id) if record_id else None
             return record.model_copy(deep=True) if record else None
 
     def list_by_student(self, student_ref: str) -> list[EvaluationRecord]:

@@ -15,7 +15,6 @@ export default function StudentPage() {
   const [risk, setRisk] = useState('low')
   const [result, setResult] = useState(null)
   const [visionOn, setVisionOn] = useState(false)
-  const [audioOn, setAudioOn] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -30,6 +29,7 @@ export default function StudentPage() {
   const createSession = useCallback(async () => {
     if (pendingRef.current) return
     pendingRef.current = true
+    stopCamera()
     setBusy(true); setError('')
     try {
       const data = await api.createSession()
@@ -137,17 +137,6 @@ export default function StudentPage() {
       stopCamera()
     }
   }
-  async function toggleAudio() {
-    const next = !audioOn
-    setAudioOn(next)
-    if (next && sessionId) {
-      await api.submitAudio(sessionId, {
-        speech_rate: 0.7, pause_ratio: 0.3, energy: 0.45,
-        pitch_mean: 0.5, audio_available: true,
-      })
-    }
-  }
-
   useEffect(() => () => stopCamera(), [])
 
   const showCrisis = risk === 'high'
@@ -163,9 +152,7 @@ export default function StudentPage() {
           <button type="button" className="secondary" onClick={toggleVision}>
             {visionOn ? '关闭摄像头' : '开启摄像头'}
           </button>
-          <button type="button" className="secondary" onClick={toggleAudio}>
-            {audioOn ? '关闭麦克风' : '开启麦克风'}
-          </button>
+          <button type="button" className="secondary" disabled>语音功能待接入</button>
           <button type="button" onClick={finishAssessment}
             disabled={busy || !sessionId || turnCount === 0}>生成初步结果</button>
           <button type="button" className="secondary" onClick={createSession}
@@ -226,7 +213,7 @@ export default function StudentPage() {
             {cameraError && <p className="error" role="alert">{cameraError}</p>}
             <p className="device-hint">仅按间隔上传压缩帧用于即时分析，不保存原始画面。</p>
           </section>
-          <DeviceStatus visionEnabled={visionOn} audioEnabled={audioOn}
+          <DeviceStatus visionEnabled={visionOn} audioEnabled={false}
             cameraError={cameraError} />
         </aside>
       </div>
