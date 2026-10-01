@@ -19,7 +19,7 @@
 | POST | `/api/vision` | 提交句级视觉状态（merge） |
 | POST | `/api/vision/frame` | 提交一张摄像头帧并即时分析 |
 | POST | `/api/audio` | 提交句级音频状态（merge） |
-| POST | `/api/assessment` | 手动触发综合评估 |
+| POST | `/api/assessment` | 触发综合评估（对话没有自动结束信号，这是唯一入口） |
 | GET | `/api/assessment/result/{result_id}` | 获取评估结果 |
 | GET | `/api/history/{student_ref}` | 学生查看历史记录 |
 | GET | `/api/teacher/records` | 老师：所有记录 |
@@ -39,14 +39,26 @@
 
 ```text
 RiskLevel          low | medium | high
-DimensionStatus    pending | in_progress | covered
 SessionStage       exploration | crisis | assessment | completed
 MessageRole        user | assistant | counselor | system
 ConsentStatus      not_provided | granted | withdrawn
 FollowUpStatus     none | pending | in_progress | resolved
 ```
 
+### 对话动作（决策模型输出）
+
+对话的下一步提问由已训练的决策模型选择，动作集合固定为 11 个：
+
+```text
+其它 / 共情安慰 / 精神状态 / 睡眠 / 情绪 / 自杀倾向 /
+躯体症状 / 食欲 / 社会功能 / 兴趣 / 筛查
+```
+
+其中没有「结束评估」动作，因此聊天不产生自动结束信号。
+
 ### 评估维度（AssessmentDimension）
+
+最终评估输出使用的维度；对话提问不再按这些维度固定推进。
 
 | 标识 | 中文名 |
 | --- | --- |
@@ -87,7 +99,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 
 ### SessionVisionSummary / SessionAudioSummary（会话级汇总）
 
-对话结束时由全部句级状态聚合，字段见 `backend/models/states.py`，
+触发综合评估时由全部句级状态聚合，字段见 `backend/models/states.py`，
 包含均值、趋势序列、出现占比和采样数，供综合评估 Agent 使用。
 
 ### RiskResult
@@ -120,7 +132,6 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `conversation_history` | Message[] | 完整对话历史 |
 | `turn_count` | int | 已完成回合数 |
 | `current_stage` | SessionStage | 当前阶段 |
-| `assessment_state` | map | 六维度覆盖状态 |
 | `latest_vision_state` | VisionState \| null | 最新视觉状态 |
 | `latest_audio_state` | AudioState \| null | 最新音频状态 |
 | `vision_state_log` | VisionState[] | 视觉状态日志 |
@@ -129,7 +140,6 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `audio_summary` | Summary \| null | 会话级音频汇总 |
 | `latest_risk` | RiskResult | 最新风险结果 |
 | `crisis_mode` | bool | 危机模式标志 |
-| `clarify_count` | int | 当前维度澄清次数 |
 | `consent` | ConsentRecord | 知情同意记录 |
 | `assessment_result_id` | string \| null | 关联的评估结果 ID |
 | `created_at` / `updated_at` | datetime | 时间戳 |
@@ -148,8 +158,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 
 ### GET /api/session/{session_id}
 
-返回完整 `SessionState`。新建会话 `turn_count=0`、`current_stage="exploration"`、
-六维均为 `pending`。
+返回完整 `SessionState`。新建会话 `turn_count=0`、`current_stage="exploration"`。
 
 ### DELETE /api/session/{session_id}
 
@@ -188,31 +197,27 @@ FollowUpStatus     none | pending | in_progress | resolved
 ```json
 {
   "session_id": "b4fc1bdd-...",
-  "reply": "最近心情整体怎么样？有没有觉得情绪比平时低落？",
-  "next_strategy": "explore_mood",
+  "reply": "听起来这段时间对你并不容易。最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": { "risk_level": "low", "risk_score": 0.1, ... },
   "turn_count": 1
 }
 ```
 
-**策略集合**：
-
-```text
-explore_mood / explore_pressure / explore_interpersonal /
-explore_self_cognition / explore_study_life / explore_duration /
-clarify_answer / follow_up / crisis_support /
-finish_assessment / post_assessment
-```
+`next_strategy` 是决策模型本轮输出的最后一个动作，取值即上面 11 个动作之一
+（危机时为 `crisis_support`），不再是按维度推进的规则策略名。
 
 约定：
 
+- 每轮会把截至当前用户发言的对话历史发给本机决策模型，由模型决定下一步动作。
 - 每次成功请求保存一条 user + 一条 assistant 消息，`turn_count` +1。
 - 前端只显示 `reply`，不得根据关键词自行决定下一问。
-- 同一维度模糊回答最多澄清 2 次，之后强制推进。
-- 检测到高风险时进入 `crisis` 阶段，不再推进评估维度。
-- 最后一轮返回 `finish_assessment` 时，后端自动聚合会话级多模态汇总、
-  触发综合评估并写入记忆库。
+- 决策模型不可用（服务未启动、超时、输出不符合约定）时返回
+  `503 POLICY_UNAVAILABLE`，本轮不落库，不会退回规则提问。
+- 检测到高风险时进入 `crisis` 阶段并只给出现实支持话术。
+- 对话没有自动结束信号（模型的 11 个动作里没有「结束评估」），
+  最终评估由 `POST /api/assessment` 显式触发。
 
 ---
 
@@ -282,7 +287,9 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 
 ### POST /api/assessment
 
-手动触发评估（正常由 chat 自动触发）：
+显式触发综合评估。对话不再有自动结束信号，因此这是生成评估结果的唯一入口
+（学生端按钮「生成初步结果」调用它）。生成结果后仍可继续对话，需要刷新结果
+时再次调用本接口：
 
 ```json
 { "session_id": "..." }
@@ -330,7 +337,7 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 
 | 字段 | 说明 |
 | --- | --- |
-| `dimension_scores` | 六维度得分、置信度、证据、趋势 |
+| `dimension_scores` | 各维度得分、置信度、证据、趋势 |
 | `overall_score` | 综合困扰程度 0~1 |
 | `risk` | 最终风险结果 |
 | `recommendations` | 个性化建议（情绪调节/学习生活/求助资源） |
@@ -424,6 +431,7 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 | 404 | `RECORD_NOT_FOUND` | 记忆库记录不存在 |
 | 422 | `VALIDATION_ERROR` | 字段缺失/空白/越界 |
 | 400 | `HTTP_ERROR` | 其他请求错误 |
+| 503 | `POLICY_UNAVAILABLE` | 决策模型不可用或输出无效（对话不会退回规则提问） |
 
 不向前端返回 Python traceback。
 

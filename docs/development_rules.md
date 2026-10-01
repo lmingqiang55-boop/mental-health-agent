@@ -76,8 +76,8 @@ A 不负责页面。A 最终只给 C：
 
 ```json
 {
-  "reply": "这种状态大概持续多久了？",
-  "next_strategy": "explore_duration",
+  "reply": "最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": {
     "risk_level": "low"
@@ -207,8 +207,8 @@ frontend/ 中与视觉采集联调无关的页面、组件和样式
 
 ```json
 {
-  "reply": "最近这种状态大概持续多久了？",
-  "next_strategy": "explore_duration",
+  "reply": "最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": {
     "risk_level": "low"
@@ -241,24 +241,24 @@ frontend/ 中与视觉采集联调无关的页面、组件和样式
 A 第一阶段负责：
 
 ```text
-固定六维询问
+决策模型选择下一步动作
     ↓
-更合理的 Dialogue Strategy
-    ↓
-RAG
+本地基础话术 + RAG
     ↓
 LLM 自然表达
 ```
 
 重点先解决：
 
-- 是否会重复问
-- 什么时候追问
-- 什么时候切换维度
-- 什么时候结束
-- 历史回答怎么影响下一问
+- 模型动作与本地话术的对应关系
+- 危机消息优先于模型（不再向学生追问评估内容）
+- 模型不可用时如何明确报错（`503 POLICY_UNAVAILABLE`，不退回规则提问）
+- 历史回答怎么进入模型输入
 
 先不要折腾多 Agent。
+
+> 注：六维固定提问状态机（含「什么时候切换维度」「什么时候结束」的规则推进）
+> 已删除；这些问题现在由决策模型负责。
 
 ### B：先把 Vision 做真实
 
@@ -288,8 +288,8 @@ VisionState
 
 - 创建 Session
 - 聊天
-- 当前测评进度
-- 当前风险等级
+- 当前风险等级与阶段
+- 生成初步结果（显式触发 `/api/assessment`）
 - 摄像头状态
 - 麦克风状态
 - 重新开始测评

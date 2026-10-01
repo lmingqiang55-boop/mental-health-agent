@@ -40,7 +40,7 @@ Mock 或规则占位。
 | --- | --- | --- |
 | 知识库与规则库 | `backend/rag/knowledge/`、`backend/rag/retriever.py`、`backend/llm/prompts.py` | 演示片段 + 关键词检索（带缓存） |
 | 标准心理量表 | — | 未接入，接入前需确认授权与计分规则 |
-| 对话 Agent | `backend/core/dialogue_manager.py` | 六维状态机 + 策略决策 |
+| 对话 Agent | `backend/core/dialogue_manager.py` | 决策模型选动作 + 危机干预；无规则回退 |
 | 微表情/眼动检测 | `backend/vision/detector.py` | Mock + 可选 EmotiEffLib 情绪/VA |
 | 语音输入/ASR | `backend/audio/analyzer.py` | 抽象接口 + Mock |
 | 句级视觉状态（实时） | `VisionState` | 已定义，merge 写入 |
@@ -69,17 +69,19 @@ Mock 或规则占位。
                  ↓
         assess_risk 风险评估
                  ↓
-        六维状态机决定 next_strategy
+        决策模型（backend/policy/）选择下一步动作
                  ↓
-        RAG 检索 + LLM 生成 reply
+        本地基础话术生成 reply（危机时走 crisis_support）
                  ↓
         返回 { reply, next_strategy, current_stage, risk, turn_count }
+
+模型不可用 → 503 POLICY_UNAVAILABLE，本轮不落库，不退回规则提问
 ```
 
 ### 多模态综合评估（模块 ②）
 
 ```text
-最后一轮 strategy = finish_assessment
+POST /api/assessment（显式触发；对话没有自动结束信号）
         ↓
 build_vision_summary / build_audio_summary（聚合句级日志）
         ↓
@@ -129,6 +131,9 @@ frontend/              C：双端界面
 
 ## 6. 当前限制
 
+- 对话依赖本机决策模型服务（`backend/policy/`，OpenAI 兼容
+  `POST /v1/chat/completions`）：服务未启动或输出无效时 `/api/chat` 返回
+  `503 POLICY_UNAVAILABLE`，没有规则兜底路径。
 - Session / 记忆库 / 沟通消息均为单进程内存，TTL 2 小时，重启清空，
   不支持多 worker。
 - 默认视觉仍为 Mock；EmotiEffLib 真实模型需单独安装并设置 provider，结果可能误报或漏报。

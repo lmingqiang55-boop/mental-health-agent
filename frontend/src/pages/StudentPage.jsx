@@ -1,15 +1,10 @@
 // 学生端页面：实时对话闭环 + 结果展示。
+// 下一步提问由后端决策模型决定；学生显式触发综合评估后展示结果。
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
-import DimensionProgress from '../components/DimensionProgress'
 import DeviceStatus from '../components/DeviceStatus'
 import AssessmentResultView from '../components/AssessmentResultView'
-
-const DIMENSION_LABELS = {
-  mood: '情绪', pressure: '压力', interpersonal: '人际关系',
-  self_cognition: '自我认知', study_life: '学习生活', duration: '持续时间',
-}
 
 export default function StudentPage() {
   const [sessionId, setSessionId] = useState('')
@@ -18,7 +13,6 @@ export default function StudentPage() {
   const [turnCount, setTurnCount] = useState(0)
   const [stage, setStage] = useState('exploration')
   const [risk, setRisk] = useState('low')
-  const [assessmentState, setAssessmentState] = useState({})
   const [result, setResult] = useState(null)
   const [visionOn, setVisionOn] = useState(false)
   const [audioOn, setAudioOn] = useState(false)
@@ -42,7 +36,7 @@ export default function StudentPage() {
       setSessionId(data.session_id)
       setMessages([]); setInput(''); setTurnCount(0)
       setStage('exploration'); setRisk('low')
-      setAssessmentState({}); setResult(null)
+      setResult(null)
     } catch (e) { setError(e.message) }
     finally { pendingRef.current = false; setBusy(false) }
   }, [])
@@ -64,14 +58,6 @@ export default function StudentPage() {
       setTurnCount(data.turn_count)
       setStage(data.current_stage)
       setRisk(data.risk.risk_level)
-
-      const session = await api.getSession(sessionId)
-      setAssessmentState(session.assessment_state)
-
-      if (data.next_strategy === 'finish_assessment' && session.assessment_result_id) {
-        const resData = await api.getResult(session.assessment_result_id, sessionId)
-        setResult(resData.result)
-      }
     } catch (e) {
       setInput(text)
       if (e.status === 404) {
@@ -81,6 +67,20 @@ export default function StudentPage() {
         setError(e.message)
       }
     } finally { pendingRef.current = false; setBusy(false) }
+  }
+
+  // 对话由决策模型一直进行，没有自动结束信号，因此由学生显式触发评估。
+  async function finishAssessment() {
+    if (!sessionId || pendingRef.current) return
+    pendingRef.current = true
+    setBusy(true); setError('')
+    try {
+      const data = await api.triggerAssessment(sessionId)
+      setResult(data.result)
+      const session = await api.getSession(sessionId)
+      setStage(session.current_stage)
+    } catch (e) { setError(e.message) }
+    finally { pendingRef.current = false; setBusy(false) }
   }
 
   async function captureVisionFrame() {
@@ -166,7 +166,10 @@ export default function StudentPage() {
           <button type="button" className="secondary" onClick={toggleAudio}>
             {audioOn ? '关闭麦克风' : '开启麦克风'}
           </button>
-          <button type="button" onClick={createSession} disabled={busy}>重新开始</button>
+          <button type="button" onClick={finishAssessment}
+            disabled={busy || !sessionId || turnCount === 0}>生成初步结果</button>
+          <button type="button" className="secondary" onClick={createSession}
+            disabled={busy}>重新开始</button>
         </div>
       </header>
 
@@ -214,6 +217,7 @@ export default function StudentPage() {
                 {risk === 'low' ? '低' : risk === 'medium' ? '中' : '高'}
               </dd>
             </dl>
+            <p className="device-hint">对话没有自动结束条件，确认聊完后点「生成初步结果」。</p>
           </section>
           <section className="card camera-preview">
             <h3>摄像头预览</h3>
@@ -222,7 +226,6 @@ export default function StudentPage() {
             {cameraError && <p className="error" role="alert">{cameraError}</p>}
             <p className="device-hint">仅按间隔上传压缩帧用于即时分析，不保存原始画面。</p>
           </section>
-          <DimensionProgress assessmentState={assessmentState} />
           <DeviceStatus visionEnabled={visionOn} audioEnabled={audioOn}
             cameraError={cameraError} />
         </aside>

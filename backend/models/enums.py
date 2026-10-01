@@ -9,12 +9,6 @@ class RiskLevel(str, Enum):
     HIGH = "high"
 
 
-class DimensionStatus(str, Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COVERED = "covered"
-
-
 class SessionStage(str, Enum):
     EXPLORATION = "exploration"       # 实时对话闭环
     CRISIS = "crisis"                 # 危机干预模式
@@ -23,7 +17,11 @@ class SessionStage(str, Enum):
 
 
 class AssessmentDimension(str, Enum):
-    """心理评估维度，对应目标图「心理评估维度」。"""
+    """最终评估输出的维度，对应目标图「心理评估维度」。
+
+    仅用于多模态综合评估（``assessment_engine``）的结果分档；
+    对话提问不再按这些维度固定推进。
+    """
     MOOD = "mood"                     # 情绪
     PRESSURE = "pressure"             # 压力
     INTERPERSONAL = "interpersonal"   # 人际关系

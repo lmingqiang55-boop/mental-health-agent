@@ -25,7 +25,7 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 | 图中模块 | 当前状态 | 对应代码 / 下一步 | 负责人 |
 | --- | --- | --- | --- |
 | 学生实时对话 | **已实现文字版** | `frontend/src/App.jsx`、`POST /api/chat`；语音交互待开发 | A + C |
-| 动态提问与对话规则 | **简化实现** | `DialogueManager` 六维度状态机、Mock LLM；改善逻辑时保留确定性决策 | A |
+| 动态提问与对话规则 | **已接入决策模型** | `backend/policy/` 每轮选出 11 个动作之一，`DialogueManager` 只做危机干预与话术执行；无规则回退 | A |
 | 心理健康知识与规则库 | **演示片段** | `backend/rag/knowledge/demo_knowledge.md`、关键词检索；量表/规范/资源需审核后引入 | A |
 | 摄像头、表情、VA | **可选真实模型** | 学生端低频上传压缩帧到 `POST /api/vision/frame`；默认 Mock，可切换 EmotiEffLib | B |
 | 麦克风、语音转写、语音反馈 | **仅结构化接口** | `POST /api/audio` 保存 AudioState；尚无录音、STT、TTS | B + C |
@@ -66,7 +66,7 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 
 ## 4. 用户数据契约
 
-**当前真实存在的数据**是 `SessionState`：`session_id`、`conversation_history`、`turn_count`、`current_stage`、`assessment_state`、`latest_vision_state`、`latest_audio_state`、`latest_risk`、`created_at`、`updated_at`。仅存于后端单进程内存；重启消失。`session_id` 不能当学生身份或医生授权凭据。
+**当前真实存在的数据**是 `SessionState`：`session_id`、`conversation_history`、`turn_count`、`current_stage`、`latest_vision_state`、`latest_audio_state`、`latest_risk`、`created_at`、`updated_at`。仅存于后端单进程内存；重启消失。`session_id` 不能当学生身份或医生授权凭据。
 
 下一阶段建议先在文档中设计以下记录，再选存储方式：
 
@@ -81,7 +81,7 @@ A 负责下一轮提问、Mock/真实 LLM 接口、检索知识、初步风险�
 
 ## 5. 下一交付的最小任务清单
 
-- **A 对话**：在现有状态机与 Mock 路径上明确每个策略的输入、输出和完成条件；给 C 一份结果字段草案，给 B 一份会用到的多模态字段清单。
+- **A 对话**：维护决策模型的动作契约（11 个动作 → 本地话术）与危机优先级；给 C 一份结果字段草案，给 B 一份会用到的多模态字段清单。对话没有自动结束信号，最终评估由 `/api/assessment` 显式触发。
 - **B 多模态**：写清 VisionState/AudioState 每个字段的范围、来源和缺失值；使用 Mock 状态验证 Vision/Audio → Session → Chat 的链路，真实模型可后接。
 - **C 双端与数据**：保留当前学生聊天页；设计专业端路由和合成数据页面；起草学生身份、评估快照、权限及结果展示契约。未完成身份与授权前不接真实学生记录。
 - **三人联合联调**：用合成会话检查两个前端的字段一致性、无模态降级、错误 Session、风险提示显示和人工回复标识。

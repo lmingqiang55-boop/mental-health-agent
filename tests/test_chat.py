@@ -1,6 +1,9 @@
-from fastapi.testclient import TestClient
+import base64
+import json
 from io import BytesIO
 
+import pytest
+from fastapi.testclient import TestClient
 from PIL import Image
 
 from backend.main import app
@@ -8,6 +11,12 @@ from backend.models.states import VisionState
 from backend.vision.detector import MockVisionDetector, VisionDetector, set_detector
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _stub_decision_model(policy_stub):
+    """本文件的对话用例一律使用模拟的决策模型响应，不启动真实模型。"""
+    policy_stub()
 
 
 def new_session() -> str:
@@ -22,7 +31,7 @@ def test_chat_without_multimodal_or_api_key() -> None:
     assert first.status_code == 200
     body = first.json()
     assert body["reply"]
-    assert body["next_strategy"]
+    assert body["next_strategy"] == "情绪"
     assert body["risk"]["risk_level"] == "low"
     assert body["turn_count"] == 1
 
@@ -36,6 +45,37 @@ def test_chat_without_multimodal_or_api_key() -> None:
     assert len(session["conversation_history"]) == 4
     assert session["latest_vision_state"] is None
     assert session["latest_audio_state"] is None
+    # 六维固定提问状态机删除后，这两个公共字段不再存在
+    assert "assessment_state" not in session
+    assert "clarify_count" not in session
+
+
+def test_chat_uses_decision_model_actions(policy_stub) -> None:
+    """提问方向来自决策模型的动作，而不是按维度固定顺序推进。"""
+    policy_stub(("睡眠",))
+    session_id = new_session()
+    body = client.post("/api/chat", json={
+        "session_id": session_id, "text": "我最近总失眠"
+    }).json()
+    assert body["next_strategy"] == "睡眠"
+    assert "睡眠" in body["reply"]
+    # 不再出现六维状态机的策略名
+    assert not body["next_strategy"].startswith("explore_")
+
+
+def test_chat_sends_accumulated_history_to_decision_model(policy_stub) -> None:
+    requests = []
+    policy_stub(("共情安慰", "睡眠"), requests=requests)
+    session_id = new_session()
+    first = client.post("/api/chat", json={
+        "session_id": session_id, "text": "我最近睡不好"})
+    client.post("/api/chat", json={"session_id": session_id, "text": "经常凌晨醒"})
+
+    first_prompt = json.loads(requests[0].content)["messages"][1]["content"]
+    second_prompt = json.loads(requests[1].content)["messages"][1]["content"]
+    assert first_prompt.endswith("用户：我最近睡不好")
+    assert second_prompt.endswith(
+        f"用户：我最近睡不好\n助手：{first.json()['reply']}\n用户：经常凌晨醒")
 
 
 def test_multimodal_state_is_saved_and_chat_still_works() -> None:
@@ -81,7 +121,6 @@ def test_vision_frame_endpoint_uses_detector_and_discards_raw_frame() -> None:
     session_id = new_session()
     image = BytesIO()
     Image.new("RGB", (32, 32), color=(120, 140, 160)).save(image, format="JPEG")
-    import base64
 
     frame = "data:image/jpeg;base64," + base64.b64encode(image.getvalue()).decode()
     response = client.post("/api/vision/frame", json={
@@ -113,7 +152,6 @@ def test_vision_frame_endpoint_does_not_merge_a_no_face_snapshot() -> None:
     ]))
     image = BytesIO()
     Image.new("RGB", (32, 32), color=(120, 140, 160)).save(image, format="JPEG")
-    import base64
 
     frame = base64.b64encode(image.getvalue()).decode()
     try:
@@ -144,8 +182,6 @@ def test_vision_frame_endpoint_rejects_invalid_base64() -> None:
 
 
 def test_vision_frame_endpoint_rejects_non_image_bytes() -> None:
-    import base64
-
     response = client.post("/api/vision/frame", json={
         "session_id": new_session(),
         "image_base64": base64.b64encode(b"not-an-image" * 8).decode(),
@@ -155,8 +191,6 @@ def test_vision_frame_endpoint_rejects_non_image_bytes() -> None:
 
 
 def test_vision_frame_endpoint_rejects_oversized_decoded_image() -> None:
-    import base64
-
     image = BytesIO()
     Image.new("RGB", (1921, 1080), color=(120, 140, 160)).save(image, format="JPEG")
     response = client.post("/api/vision/frame", json={
@@ -181,46 +215,6 @@ def test_unknown_session_and_invalid_text() -> None:
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_covered_dimensions_are_not_repeated() -> None:
-    session_id = new_session()
-    answers = (
-        "我想说说最近的情况",
-        "这个问题我想一下",
-        "让我考虑一下怎么说",
-        "这个有点难回答但是我试试",
-        "我尽量描述一下",
-        "我回忆一下时间",
-        "好的我知道了",
-    )
-    strategies = []
-    for answer in answers:
-        response = client.post("/api/chat",
-                               json={"session_id": session_id, "text": answer})
-        assert response.status_code == 200
-        strategies.append(response.json()["next_strategy"])
-    assert strategies[:6] == [
-        "explore_mood", "explore_pressure", "explore_interpersonal",
-        "explore_self_cognition", "explore_study_life", "explore_duration",
-    ]
-    assert strategies[6] == "finish_assessment"
-
-
-def test_clarify_has_a_limit_and_then_advances() -> None:
-    session_id = new_session()
-    # 第一轮先进入 mood
-    client.post("/api/chat", json={
-        "session_id": session_id, "text": "我想做筛查"})
-    # 连续模糊回答：前两次 clarify，第三次强制推进到 pressure
-    strategies = []
-    for vague in ("嗯", "哦", "不知道"):
-        r = client.post("/api/chat", json={
-            "session_id": session_id, "text": vague})
-        strategies.append(r.json()["next_strategy"])
-    assert strategies[0] == "clarify_answer"
-    assert strategies[1] == "clarify_answer"
-    assert strategies[2] == "explore_pressure"
-
-
 def test_high_risk_message_enters_crisis_mode() -> None:
     session_id = new_session()
     response = client.post("/api/chat", json={
@@ -232,11 +226,12 @@ def test_high_risk_message_enters_crisis_mode() -> None:
     assert body["current_stage"] == "crisis"
     assert "急救" in body["reply"]
 
-    # 危机模式后继续发消息，不推进评估维度
+    # 危机模式后继续发消息，仍然只走危机支持话术
     follow = client.post("/api/chat", json={
         "session_id": session_id, "text": "我真的很难受"
     })
     assert follow.json()["current_stage"] == "crisis"
+    assert "急救" in follow.json()["reply"]
 
 
 def test_negation_does_not_trigger_high_risk() -> None:
@@ -247,25 +242,26 @@ def test_negation_does_not_trigger_high_risk() -> None:
     assert response.json()["risk"]["risk_level"] != "high"
 
 
-def test_finish_assessment_generates_stored_result() -> None:
+def test_chat_never_finishes_on_its_own_and_assessment_is_explicit() -> None:
+    """对话没有结束信号：聊天不生成评估结果，只由 /api/assessment 触发。"""
     session_id = new_session()
-    answers = (
-        "我想说说最近的情况",
-        "这个问题我想一下",
-        "让我考虑一下怎么说",
-        "这个有点难回答但是我试试",
-        "我尽量描述一下",
-        "我回忆一下时间",
-        "持续两个星期了",
-    )
-    last = None
-    for answer in answers:
-        last = client.post("/api/chat",
-                           json={"session_id": session_id, "text": answer})
-    assert last.json()["next_strategy"] == "finish_assessment"
+    for text in ("我想说说最近的情况", "晚上常常睡不着", "和室友关系也一般"):
+        assert client.post("/api/chat", json={
+            "session_id": session_id, "text": text}).status_code == 200
+
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["assessment_result_id"] is None
+    assert session["current_stage"] == "exploration"
+    assert session["vision_summary"] is None
+    assert session["audio_summary"] is None
+
+    triggered = client.post("/api/assessment", json={"session_id": session_id})
+    assert triggered.status_code == 200
+    assert triggered.json()["result"]["dimension_scores"]
 
     session = client.get(f"/api/session/{session_id}").json()
     assert session["assessment_result_id"]
+    assert session["current_stage"] == "completed"
     assert session["vision_summary"] is not None
     assert session["audio_summary"] is not None
 
