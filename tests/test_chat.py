@@ -114,6 +114,19 @@ def test_chat_stores_only_exact_utterance_vision() -> None:
     assert message["audio_snapshot"] is None
 
 
+def test_chat_uses_aligned_vision_for_current_turn() -> None:
+    session_id = new_session()
+    response = client.post("/api/chat", json={
+        "session_id": session_id,
+        "text": "我最近睡不好",
+        "vision_snapshot": {
+            "face_detected": True, "valence": -0.7, "engagement": 0.1,
+        },
+    })
+    assert response.status_code == 200, response.json()
+    assert response.json()["risk"]["risk_level"] == "medium"
+
+
 def test_vision_merge_does_not_reset_other_fields() -> None:
     session_id = new_session()
     client.post("/api/vision", json={

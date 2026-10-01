@@ -71,8 +71,8 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
 
 @router.get("/assessment/result/{result_id}", response_model=AssessmentResponse)
 def get_result(result_id: str, session_id: str) -> AssessmentResponse:
-    record = memory_store.get_record(result_id)
-    if record is None:
+    record = memory_store.get_record_by_result_id(result_id)
+    if record is None or record.result.session_id != session_id:
         raise HTTPException(status_code=404, detail={
             "code": "RESULT_NOT_FOUND", "message": "Assessment result does not exist."})
-    return AssessmentResponse(session_id=session_id, result=record.result)
+    return AssessmentResponse(session_id=record.result.session_id, result=record.result)

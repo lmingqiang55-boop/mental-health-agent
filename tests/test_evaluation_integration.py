@@ -135,3 +135,27 @@ def test_direct_input_preserves_independent_crisis_signal(evaluation_stub) -> No
     })
     assert response.status_code == 200
     assert response.json()["result"]["risk"]["risk_level"] == "high"
+
+
+def test_assessment_result_can_be_read_by_its_public_id(evaluation_stub) -> None:
+    session_id = new_session()
+    response = client.post("/api/assessment", json={
+        "session_id": session_id,
+        "evaluation_input": {
+            "dialogue_history": [{"role": "user", "content": "最近睡不好"}],
+        },
+    })
+    assert response.status_code == 200, response.json()
+    result_id = response.json()["result"]["result_id"]
+
+    retrieved = client.get(
+        f"/api/assessment/result/{result_id}", params={"session_id": session_id}
+    )
+    assert retrieved.status_code == 200, retrieved.json()
+    assert retrieved.json()["result"]["result_id"] == result_id
+
+    other_session = new_session()
+    mismatched = client.get(
+        f"/api/assessment/result/{result_id}", params={"session_id": other_session}
+    )
+    assert mismatched.status_code == 404

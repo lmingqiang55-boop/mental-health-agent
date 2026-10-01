@@ -10,7 +10,7 @@ from backend.models.states import AudioState, VisionState
 class ChatRequest(BaseModel):
     session_id: str
     text: str = Field(min_length=1, max_length=4000)
-    # 未来上游提供与这句话精确对齐的快照；缺失时不借用最近一帧。
+    # 上游提供与这句话精确对齐的快照，供当前轮决策和最终评估使用。
     vision_snapshot: VisionState | None = None
 
 
