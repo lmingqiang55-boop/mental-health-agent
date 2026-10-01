@@ -143,11 +143,11 @@ class SessionState(BaseModel):
     latest_vision_state: VisionState | None = None
     latest_audio_state: AudioState | None = None
 
-    # 句级状态日志（每次 vision/audio 提交都记录，用于会话级汇总）
+    # 实时状态日志；按固定间隔采样的帧不能直接当作逐句评估输入。
     vision_state_log: list[VisionState] = Field(default_factory=list)
     audio_state_log: list[AudioState] = Field(default_factory=list)
 
-    # 会话级多模态汇总（触发综合评估时生成）
+    # 会话级汇总由上游提供，评估时原样交给 Evaluation Agent。
     vision_summary: SessionVisionSummary | None = None
     audio_summary: SessionAudioSummary | None = None
 

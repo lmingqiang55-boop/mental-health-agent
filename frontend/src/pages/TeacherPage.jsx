@@ -5,6 +5,13 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 
 const RISK_LABELS = { low: '低', medium: '中', high: '高' }
+const DIMENSION_LABELS = {
+  emotion: '情绪状态',
+  interest_motivation: '兴趣与动力',
+  sleep_energy: '睡眠与精力',
+  attention_thinking: '专注与思考',
+  social_daily: '社交与日常功能',
+}
 
 function RecordsTab() {
   const [records, setRecords] = useState([])
@@ -28,23 +35,20 @@ function RecordsTab() {
         <button className="secondary" onClick={() => setSelected(null)}>← 返回列表</button>
         <h3>学生 {selected.student_ref} 的筛查详情</h3>
         <p><b>风险等级：</b>{RISK_LABELS[r.risk.risk_level]} ·
-          综合指数 {r.overall_score.toFixed(2)}</p>
+          关注指数 {r.concern_index} / 100</p>
         <h4>维度得分</h4>
         <table className="data-table">
-          <thead><tr><th>维度</th><th>得分</th><th>证据</th></tr></thead>
+          <thead><tr><th>维度</th><th>得分</th></tr></thead>
           <tbody>
-            {r.dimension_scores.map(ds => (
-              <tr key={ds.dimension}>
-                <td>{ds.dimension_label}</td>
-                <td>{ds.score.toFixed(2)}</td>
-                <td>{ds.evidence.join('；') || '—'}</td>
+            {Object.entries(r.psychological_profile).map(([dim, score]) => (
+              <tr key={dim}>
+                <td>{DIMENSION_LABELS[dim] || dim}</td>
+                <td>{score}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <h4>个性化建议</h4>
-        <ul>{r.recommendations.map((rec, i) => <li key={i}>{rec.content}</li>)}</ul>
-        <p className="disclaimer">{r.summary}</p>
+        <p className="disclaimer">当前仅展示已实现的五维分数与关注等级，报告文案和建议尚未接入。</p>
         <h4>跟进记录</h4>
         {selected.counselor_notes.length === 0 && <p className="muted">暂无跟进记录</p>}
         {selected.counselor_notes.map(n => (
@@ -64,13 +68,13 @@ function RecordsTab() {
       ) : (
         <table className="data-table">
           <thead>
-            <tr><th>学生标识</th><th>综合指数</th><th>风险</th><th>跟进状态</th><th>时间</th><th></th></tr>
+            <tr><th>学生标识</th><th>关注指数</th><th>风险</th><th>跟进状态</th><th>时间</th><th></th></tr>
           </thead>
           <tbody>
             {records.map(r => (
               <tr key={r.record_id}>
                 <td>{r.student_ref}</td>
-                <td>{r.overall_score.toFixed(2)}</td>
+                <td>{r.concern_index}</td>
                 <td className={`risk-text risk-${r.risk_level}`}>{RISK_LABELS[r.risk_level]}</td>
                 <td>{r.follow_up_status}</td>
                 <td>{new Date(r.created_at).toLocaleString()}</td>
@@ -144,7 +148,7 @@ function GroupStatsTab() {
             <thead><tr><th>维度</th><th>平均值</th></tr></thead>
             <tbody>
               {Object.entries(stats.dimension_averages).map(([dim, avg]) => (
-                <tr key={dim}><td>{dim}</td><td>{avg}</td></tr>
+                <tr key={dim}><td>{DIMENSION_LABELS[dim] || dim}</td><td>{avg}</td></tr>
               ))}
             </tbody>
           </table>

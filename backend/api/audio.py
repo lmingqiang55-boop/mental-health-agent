@@ -1,7 +1,7 @@
 """音频状态 API（C 接入，B 输出）。
 
 - 提交句级 AudioState，服务端做 merge（部分更新）。
-- 同时追加到 session 的 audio_state_log，供会话级汇总。
+- 同时追加到 session 的 audio_state_log，供实时状态查看；评估 Agent 当前只读取 ASR 文本。
 """
 
 from fastapi import APIRouter

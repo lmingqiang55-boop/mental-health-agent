@@ -3,10 +3,9 @@
 from pydantic import BaseModel, Field
 
 from backend.models.assessment import (
-    AssessmentRecord,
-    AssessmentResult,
     CommunicationMessage,
 )
+from backend.models.evaluation import EvaluationRecord, EvaluationResult
 from backend.models.states import (
     AudioState,
     ConsentRecord,
@@ -44,12 +43,12 @@ class StateUpsertResponse(BaseModel):
 class AssessmentResponse(BaseModel):
     session_id: str
     status: str = "completed"
-    result: AssessmentResult
+    result: EvaluationResult
 
 
 class HistoryListResponse(BaseModel):
     student_ref: str
-    records: list[AssessmentRecord]
+    records: list[EvaluationRecord]
     total: int
 
 

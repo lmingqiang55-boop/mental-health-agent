@@ -16,26 +16,6 @@ class SessionStage(str, Enum):
     COMPLETED = "completed"           # 评估完成
 
 
-class AssessmentDimension(str, Enum):
-    """最终评估输出的维度，对应目标图「心理评估维度」。
-
-    仅用于多模态综合评估（``assessment_engine``）的结果分档；
-    对话提问不再按这些维度固定推进。
-    """
-    MOOD = "mood"                     # 情绪
-    PRESSURE = "pressure"             # 压力
-    INTERPERSONAL = "interpersonal"   # 人际关系
-    SELF_COGNITION = "self_cognition" # 自我认知
-    STUDY_LIFE = "study_life"         # 学习生活
-    DURATION = "duration"             # 持续时间
-
-
-class RecommendationCategory(str, Enum):
-    EMOTION_REGULATION = "emotion_regulation"  # 情绪调节
-    STUDY_LIFE = "study_life"                  # 学习生活
-    HELP_RESOURCE = "help_resource"            # 求助资源/转介
-
-
 class ConsentStatus(str, Enum):
     NOT_PROVIDED = "not_provided"
     GRANTED = "granted"

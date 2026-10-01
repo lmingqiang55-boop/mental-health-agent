@@ -5,8 +5,8 @@
 2. 决策模型不可用时返回 503 POLICY_UNAVAILABLE，本轮不落库。
 
 对话没有自动结束信号：决策模型的 11 个动作里没有「结束评估」，因此聊天不再
-自动触发最终评估。会话级多模态汇总与综合评估由 ``POST /api/assessment``
-显式触发（见 ``backend/api/assessment.py``）。
+自动触发最终评估。综合评估由 ``POST /api/assessment`` 显式触发，
+该接口直接接收上游提供的会话级视觉汇总（见 ``backend/api/assessment.py``）。
 """
 
 from fastapi import APIRouter, HTTPException
@@ -36,8 +36,7 @@ def chat(request: ChatRequest) -> ChatResponse:
     def mutator(session: SessionState) -> None:
         session.conversation_history.append(Message(
             role=MessageRole.USER, content=text,
-            vision_snapshot=session.latest_vision_state,
-            audio_snapshot=session.latest_audio_state,
+            vision_snapshot=request.vision_snapshot,
         ))
         payload = dialogue_manager.process_turn(text, session)
         dialogue_payload["value"] = payload

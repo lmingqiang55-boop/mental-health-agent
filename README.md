@@ -1,1011 +1,115 @@
-对，这样更干净：**C 不参与语音/视觉的时间切分，B 自己完成采集、起止判断、统计和 ASR，最后直接把这一轮完整结果交给 A。**
+# 多模态心理状态筛查 Agent
 
-# 三人协作与接口分工 v3
+系统由对话决策、队员 B 的语音与视觉处理、心理状态评估和展示页面组成。对话下一步动作由已训练的决策模型选择；最终评估由 `evaluation_agent/` 处理，输出五维心理状态画像、关注指数和关注等级。危机风险识别独立运行。
 
-## 1. 总体流程
+当前前端支持文字输入和摄像头帧采样。队员 B 的自动语音切分与 ASR 尚未接入，以下接口已为它预留。原来的六维规则评估引擎已移除。[三人协作规划 v3](docs/三人协作与接口分工_v3.md)保留在 `docs/`；实际请求与响应以本文件及 [API 数据协议](docs/api_spec.md) 为准。
 
-整个系统最终形成这样一条完整链路：
+## 队员 B 需要交付什么
 
-```text
-用户进入测评界面
-      ↓
-摄像头开启 + 麦克风开启
-      ↓
-用户说话
-      ↓
-B：自动识别本轮语音开始/结束
-      ↓
-B：语音转文字
-+
-计算本句话期间摄像头平均结果
-      ↓
-B → A
-本轮文本 + 本轮视觉结果
-      ↓
-A：根据历史对话决定下一步对话动作
-      ↓
-A：根据动作生成自然语言回复
-      ↓
-C：在界面中展示回复
-      ↓
-进入下一轮对话
-      ↓
-……
-      ↓
-对话结束
-      ↓
-B：计算整段对话摄像头统计
-      ↓
-A：根据完整对话 + 多模态信息生成最终评估结果
-      ↓
-C：展示最终评估报告
+队员 B 在自己的模块内完成语音起止检测、ASR、摄像头采样，以及**每句话和视觉状态的时间对齐**。后端评估接口只接收已经对齐的结构，不用帧时间戳重新推断对应关系。
+
+| 时机 | 队员 B 的输出 | 提交位置 |
+| --- | --- | --- |
+| 用户说完一句话 | ASR 原文 `text`，必填且非空 | `POST /api/chat` 的 `text` |
+| 同一句话 | 该句期间聚合的视觉状态 `vision_snapshot`，有数据时提供 | 同一个 `/api/chat` 请求，后续也放在 `evaluation_input.dialogue_history` 的对应消息内 |
+| 整段对话结束 | 基于句级视觉状态计算的 `vision_summary` | `POST /api/assessment` 的 `evaluation_input.vision_summary` |
+| 触发最终评估 | 按时间顺序排列的完整 `dialogue_history` | `POST /api/assessment` 的 `evaluation_input.dialogue_history` |
+
+所有请求使用同一个 `session_id`。`dialogue_history` 的 `role` 可为 `user`、`assistant`、`counselor`、`system`；只有 `user` 的话是被评估者自述，其他角色仅作上下文。每条消息的 `vision_snapshot` 必须对应**这条消息**，不能用最近一帧代替。没有采集到视觉时省略快照；缺测值用 `null`，不要填 `0`。语音模块只提供转写文本，不需要提交音频特征。
+
+### 1. 每句话的语音与视觉输出
+
+语音模块至少给出 ASR 原文。视觉模块对这句话的起止区间进行采样和聚合，然后与文本一起提交：
+
+```http
+POST /api/chat
+Content-Type: application/json
 ```
-
-三个人分别负责一条完整能力，并通过明确接口连接。
-
----
-
-# 2. A：对话策略与最终评估
-
-A 负责系统中所有和对话内容与最终评估有关的核心逻辑。
-
-主要回答两个问题：
-
-```text
-下一句话应该问什么？
-
-整段测评结束以后，
-最终应该给出什么评估结果？
-```
-
-## 2.1 对话策略模型
-
-A 当前主要负责 D4 Policy Model。
-
-输入：
-
-```text
-历史对话
-```
-
-输出：
-
-```text
-下一步 Action
-```
-
-例如：
-
-```json
-["睡眠"]
-```
-
-或者：
-
-```json
-["睡眠", "情绪"]
-```
-
-流程：
-
-```text
-历史对话
-   ↓
-Policy Model
-   ↓
-下一步需要询问的内容
-```
-
----
-
-## 2.2 根据 Action 生成回复
-
-Policy Model 不直接负责生成最终医生回复。
-
-A 继续完成：
-
-```text
-Action
-+
-历史对话
-       ↓
-LLM
-       ↓
-自然语言回复
-```
-
-例如：
-
-```text
-Action：
-
-睡眠
-+
-情绪
-```
-
-生成：
-
-```text
-最近晚上睡得怎么样？
-会不会比较难入睡，或者半夜容易醒？
-最近情绪上有没有明显低落？
-```
-
-因此完整链路：
-
-```text
-历史对话
-   ↓
-Policy Model
-   ↓
-Action
-   ↓
-LLM
-   ↓
-回复文本
-```
-
----
-
-## 2.3 多轮对话管理
-
-A 负责：
-
-- 历史对话如何传入模型
-- 多个 Action 如何处理
-- 重复询问如何避免
-- Action 如何转成自然语言
-- 什么时候继续追问
-- 什么时候切换主题
-- 什么时候结束整个测评
-
-每一轮输出结构化结果，例如：
 
 ```json
 {
-  "turn_id": 3,
-  "actions": ["睡眠"],
-  "reply": "最近晚上睡得怎么样？入睡或者夜间醒来的情况多吗？",
-  "finish": false
+  "session_id": "会话 ID",
+  "text": "最近总是睡不好",
+  "vision_snapshot": {
+    "face_detected": true,
+    "emotion": "sad",
+    "emotion_confidence": 0.82,
+    "valence": -0.4,
+    "arousal": 0.35,
+    "engagement": 0.7,
+    "attention_score": 0.6,
+    "gaze_focus": 0.55,
+    "micro_expression_intensity": 0.3
+  }
 }
 ```
 
----
+`text` 是参与对话决策和最终评估的转写文本。`vision_snapshot` 可省略。现有 `POST /api/vision` 和 `POST /api/vision/frame` 仍可供实时状态更新，但帧采样日志不会自动变成某句话的快照，也不会自动生成最终评估的视觉汇总。
 
-## 2.4 最终评估
+句级 `vision_snapshot` 使用 `VisionState`：`emotion` 为可选字符串；`emotion_confidence`、`arousal`、`engagement`、`attention_score`、`gaze_focus`、`micro_expression_intensity` 为可选的 0～1 数值；`valence` 为可选的 -1～1 数值；`face_detected` 为布尔值；`timestamp` 可选，使用 ISO 8601 时间。具体定义见 [`backend/models/states.py`](backend/models/states.py)。
 
-整个对话结束以后，A 负责最终评估。
+### 2. 整段对话的视觉输出与评估交接
 
-输入主要包含：
+队员 B 把完整对话按顺序交给评估端。每条有视觉数据的消息都带自己的 `vision_snapshot`；整段统计单独放在顶层 `vision_summary`：
 
-```text
-完整历史对话
-+
-B 提供的逐句摄像头统计
-+
-B 提供的整段摄像头统计
+```http
+POST /api/assessment
+Content-Type: application/json
 ```
-
-例如：
 
 ```json
 {
-  "conversation": [],
-  "turn_vision": [],
-  "session_vision": {}
-}
-```
-
-最终输出结构化评估结果，例如：
-
-```json
-{
-  "dimensions": [
-    {
-      "name": "情绪状态",
-      "score": 0.72,
-      "description": "..."
-    },
-    {
-      "name": "睡眠状态",
-      "score": 0.61,
-      "description": "..."
+  "session_id": "会话 ID",
+  "evaluation_input": {
+    "dialogue_history": [
+      {
+        "role": "user",
+        "content": "最近总是睡不好",
+        "vision_snapshot": {
+          "face_detected": true,
+          "emotion": "sad",
+          "valence": -0.4
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "最近是入睡困难，还是容易醒？"
+      }
+    ],
+    "vision_summary": {
+      "dominant_emotion": "sad",
+      "mean_valence": -0.4,
+      "mean_arousal": 0.35,
+      "mean_engagement": 0.7,
+      "mean_attention": 0.6,
+      "valence_trend": [-0.4],
+      "face_present_ratio": 1.0,
+      "sample_count": 1
     }
-  ],
-  "overall_score": 0.67,
-  "summary": "...",
-  "key_findings": []
-}
-```
-
-具体维度和评分方式后续根据评估模型确定。
-
----
-
-# 3. B：摄像头分析与语音转文字
-
-B 负责所有原始多模态信息的获取、时间对齐和结构化。
-
-主要负责两件事情：
-
-```text
-摄像头分析
-
-语音转文字
-```
-
-并且由 B 自己完成：
-
-```text
-用户开始说话判断
-↓
-用户结束说话判断
-↓
-这一句话对应的视频时间段划分
-↓
-摄像头统计
-↓
-ASR
-↓
-直接输出给 A
-```
-
-C 不参与这一过程。
-
----
-
-# 4. B 的摄像头输出
-
-摄像头需要提供两层统计：
-
-```text
-每一句用户发言期间的摄像头平均结果
-
-整段对话期间的摄像头平均结果
-```
-
----
-
-## 4.1 每句话的摄像头统计
-
-每一轮用户发言，B 自己完成：
-
-```text
-检测用户开始说话
-      ↓
-记录开始时间
-      ↓
-摄像头持续分析
-      ↓
-检测用户停止说话
-      ↓
-记录结束时间
-      ↓
-选取该时间段内所有有效摄像头结果
-      ↓
-计算这一句话期间的平均状态
-```
-
-例如：
-
-```json
-{
-  "turn_id": 3,
-  "start_time": 1760000000.21,
-  "end_time": 1760000006.82,
-  "emotion": "sad",
-  "emotion_confidence": 0.81,
-  "valence_avg": -0.42,
-  "arousal_avg": 0.36,
-  "valid_frame_count": 38
-}
-```
-
-核心输出是：
-
-```text
-这一句话说话期间的摄像头平均表现
-```
-
-而不是某一张图片的结果。
-
----
-
-## 4.2 语音和摄像头由 B 内部完成时间对齐
-
-B 的语音模块本身可以知道：
-
-```text
-speech_start
-
-speech_end
-```
-
-因此直接利用同一时间段统计摄像头结果。
-
-完整过程：
-
-```text
-用户开始说话
-      ↓
-B 检测 speech_start
-      ↓
-录音 + 摄像头持续分析
-      ↓
-用户停止说话
-      ↓
-B 检测 speech_end
-      ↓
-ASR
-+
-统计 speech_start 到 speech_end
-期间的摄像头结果
-      ↓
-形成一个完整 TurnResult
-```
-
-这样不需要 C 额外告诉 B 用户什么时候开始或结束说话。
-
----
-
-# 5. 整段对话摄像头统计
-
-除了逐句话数据之外，B 还需要维护整个 Session 的摄像头统计。
-
-流程：
-
-```text
-所有有效摄像头帧
-      ↓
-单帧分析
-      ↓
-逐句话平均
-      ↓
-整段对话汇总
-```
-
-例如：
-
-```json
-{
-  "session_id": "abc123",
-  "dominant_emotion": "sad",
-  "valence_avg": -0.31,
-  "arousal_avg": 0.41,
-  "emotion_distribution": {
-    "neutral": 0.31,
-    "sad": 0.46,
-    "happy": 0.08,
-    "other": 0.15
-  },
-  "valid_frame_count": 423
-}
-```
-
----
-
-# 6. B：语音转文字
-
-B 同时负责用户语音输入。
-
-基本链路：
-
-```text
-用户开始说话
-      ↓
-自动检测语音开始
-      ↓
-录音
-      ↓
-自动检测语音结束
-      ↓
-ASR
-      ↓
-文字
-```
-
-最终至少输出：
-
-```json
-{
-  "turn_id": 3,
-  "text": "最近晚上经常睡不着"
-}
-```
-
-但实际交给 A 时，不单独发送文字，而是和这一轮摄像头结果组合。
-
-例如：
-
-```json
-{
-  "turn_id": 3,
-  "text": "最近晚上经常睡不着",
-  "vision": {
-    "emotion": "sad",
-    "emotion_confidence": 0.81,
-    "valence_avg": -0.42,
-    "arousal_avg": 0.36,
-    "valid_frame_count": 38
   }
 }
 ```
 
-这个完整结果直接交给 A。
+`dialogue_history` 至少一条消息，每条 `content` 必须非空。`vision_summary` 的均值和 `face_present_ratio` 范围分别为 -1～1 或 0～1；`valence_trend` 按**句级样本**的时间顺序排列；`sample_count` 是参与汇总的句级样本数，不是摄像头帧数。没有视觉能力时省略 `vision_snapshot` 和 `vision_summary`，不要构造全零汇总。`evaluation_input.user_memory` 可选，用于长期背景信息。
 
----
+语音模块尚未接通时，现有文字界面仍可只提交 `{ "session_id": "会话 ID" }`。后端会使用会话内已保存的文本和准确附着在消息上的快照；缺失的视觉数据保持缺失。评估服务把对话原文和结构化视觉状态发送到配置的 DeepSeek 接口，不发送原始音频或图像。返回的当前结果是五维画像、0～100 关注指数、关注等级和独立风险结果；报告文案、趋势说明与个性化建议尚未实现。
 
-# 7. C：整个流程的界面展示
+## 本地运行
 
-C 负责把 A 和 B 的能力完整呈现在一个可使用的系统中。
-
-核心目标：
-
-```text
-让用户可以从进入系统开始，
-
-完成完整测评，
-
-最后看到完整结果。
+```powershell
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+python -m uvicorn backend.main:app --reload
 ```
 
----
+在本地 `.env` 填写真实 `DEEPSEEK_API_KEY`，用于综合评估；不要提交 `.env`。对话动作还需要启动已训练的决策模型服务，并在 `.env` 设置 `POLICY_API_BASE_URL` 等参数。评估 Agent 的 `DEEPSEEK_API_STYLE`、`DEEPSEEK_MAX_OUTPUT_TOKENS`、`DEEPSEEK_TIMEOUT_SECONDS` 等配置见 `.env.example`。缺少密钥或模型服务不可用时，评估接口返回 `503 EVALUATION_UNAVAILABLE`，不会回退到旧六维规则。
 
-## 7.1 测评开始界面
+前端运行：
 
-需要展示：
-
-```text
-开始测评
-
-摄像头状态
-
-麦克风状态
-
-设备权限状态
+```powershell
+Set-Location frontend
+npm ci
+npm run dev
 ```
 
-用户点击开始之后进入正式测评。
-
----
-
-## 7.2 对话界面
-
-核心区域包括：
-
-```text
-AI 回复
-
-用户回复
-
-摄像头画面
-
-麦克风状态
-
-当前测评过程
-```
-
-用户体验：
-
-```text
-AI 提问
-   ↓
-用户开始说话
-   ↓
-B 自动处理语音和摄像头
-   ↓
-B 完成语音转文字
-   ↓
-页面显示识别文本
-   ↓
-A 返回下一句话
-   ↓
-页面展示 AI 回复
-```
-
-C 不负责判断语音开始结束，也不负责计算视觉数据。
-
-这些都由 B 完成。
-
----
-
-## 7.3 摄像头信息展示
-
-C 根据比赛展示效果选择是否显示：
-
-```text
-当前情绪
-
-Valence
-
-Arousal
-```
-
-也可以只显示：
-
-```text
-摄像头分析中
-```
-
-底层计算由 B 负责。
-
----
-
-## 7.4 测评结束界面
-
-A 输出最终评估结果以后，C 负责形成完整结果页。
-
-例如展示：
-
-```text
-总体状态
-
-多维评估结果
-
-各维度得分
-
-主要关注内容
-
-文字总结
-
-整段摄像头统计
-
-对话过程中的视觉变化
-```
-
-可以使用：
-
-```text
-雷达图
-
-柱状图
-
-趋势图
-
-文字卡片
-```
-
----
-
-# 8. 三个人之间的接口
-
-项目以后以接口为核心协作。
-
-重点不是：
-
-```text
-这个文件属于谁。
-```
-
-而是：
-
-```text
-这个模块向下一个模块提供什么。
-```
-
----
-
-## 8.1 B → A：每轮用户输入
-
-这是最重要的实时接口。
-
-B 自己完成：
-
-```text
-语音开始判断
-+
-语音结束判断
-+
-ASR
-+
-本句话摄像头统计
-```
-
-然后直接给 A：
-
-```json
-{
-  "session_id": "abc123",
-  "turn_id": 3,
-  "text": "最近晚上经常睡不着",
-  "start_time": 1760000000.21,
-  "end_time": 1760000006.82,
-  "vision": {
-    "emotion": "sad",
-    "emotion_confidence": 0.81,
-    "valence_avg": -0.42,
-    "arousal_avg": 0.36,
-    "valid_frame_count": 38
-  }
-}
-```
-
-A 接到这个结果后直接进行：
-
-```text
-加入历史对话
-      ↓
-Policy Model
-      ↓
-Action
-      ↓
-LLM
-      ↓
-下一轮回复
-```
-
----
-
-## 8.2 B → A：测评结束结果
-
-整个对话结束后，B 再向 A 提供整段摄像头统计：
-
-```json
-{
-  "session_id": "abc123",
-  "session_vision": {
-    "dominant_emotion": "sad",
-    "valence_avg": -0.31,
-    "arousal_avg": 0.41,
-    "emotion_distribution": {
-      "neutral": 0.31,
-      "sad": 0.46,
-      "happy": 0.08,
-      "other": 0.15
-    },
-    "valid_frame_count": 423
-  }
-}
-```
-
-A 将它和完整历史对话、逐轮视觉结果一起送入最终评估模型。
-
----
-
-## 8.3 A → C：实时回复
-
-A 每完成一轮处理后向 C 返回：
-
-```json
-{
-  "session_id": "abc123",
-  "turn_id": 3,
-  "actions": ["睡眠"],
-  "reply": "最近晚上睡得怎么样？会不会经常难以入睡？",
-  "finish": false
-}
-```
-
-C 负责把 `reply` 展示在界面上。
-
----
-
-## 8.4 A → C：最终评估
-
-测评结束后：
-
-```json
-{
-  "finish": true,
-  "assessment": {
-    "dimensions": [],
-    "overall_score": 0.67,
-    "summary": "...",
-    "key_findings": []
-  }
-}
-```
-
-C 根据这个结果制作最终测评报告页面。
-
----
-
-## 8.5 B → C：界面展示信息
-
-如果 C 需要实时展示摄像头或语音状态，B 可以额外提供展示接口，例如：
-
-```json
-{
-  "camera_active": true,
-  "microphone_active": true,
-  "speaking": true,
-  "emotion": "neutral",
-  "valence": -0.12,
-  "arousal": 0.43
-}
-```
-
-这些数据只是用于页面展示。
-
-真正进入对话模型的数据仍然由 B 计算完成后直接交给 A。
-
----
-
-# 9. 公共标识
-
-三个人统一使用：
-
-```text
-session_id
-
-turn_id
-```
-
-### session_id
-
-代表一次完整心理测评。
-
-### turn_id
-
-代表一次用户完整发言。
-
-例如：
-
-```text
-session_id = abc123
-
-turn_id = 1
-turn_id = 2
-turn_id = 3
-...
-```
-
-B 每完成一次用户语音输入，就生成对应的这一轮结果。
-
-A 和 C 都按照同一个 `turn_id` 使用数据。
-
----
-
-# 10. 当前三个人下一阶段任务
-
-## A
-
-优先完成：
-
-```text
-D4 Policy Model 推理
-↓
-多轮历史输入
-↓
-Action 输出
-↓
-多 Action 解析
-↓
-接 LLM 生成自然语言
-↓
-形成稳定多轮对话
-```
-
-之后：
-
-```text
-完整对话
-+
-逐句话视觉统计
-+
-整段视觉统计
-↓
-最终多维评估模型
-```
-
----
-
-## B
-
-优先完成：
-
-```text
-摄像头连续采样
-↓
-单帧 Emotion / VA
-↓
-自动识别用户语音开始
-↓
-自动识别用户语音结束
-↓
-计算该句话期间摄像头平均
-↓
-ASR 输出文本
-↓
-组合成 TurnResult
-↓
-直接发送给 A
-```
-
-整段测评结束后：
-
-```text
-所有摄像头数据
-↓
-计算整段对话平均
-↓
-生成 SessionVisionSummary
-↓
-交给 A
-```
-
----
-
-## C
-
-优先完成：
-
-```text
-完整测评界面
-↓
-开始测评
-↓
-摄像头和麦克风状态展示
-↓
-AI 提问
-↓
-用户语音回答
-↓
-显示 B 返回的转写文本
-↓
-显示 A 返回的下一轮回复
-↓
-持续多轮
-↓
-测评结束
-↓
-展示最终报告
-```
-
----
-
-# 11. 每个模块开发前先明确接口
-
-任何新功能开始之前，都说明：
-
-```text
-输入是什么？
-
-输出是什么？
-
-什么时候调用？
-
-失败时返回什么？
-```
-
-例如 B 的单轮处理：
-
-```text
-输入：
-摄像头流 + 麦克风流
-
-处理：
-自动检测 speech_start / speech_end
-ASR
-摄像头区间统计
-
-输出：
-TurnResult
-
-交给：
-A
-```
-
-例如 A 的 Policy：
-
-```text
-输入：
-历史对话
-+
-当前 TurnResult
-
-输出：
-actions[]
-+
-reply
-
-交给：
-C
-```
-
-例如 C：
-
-```text
-输入：
-A 的回复
-+
-B 的展示状态
-
-输出：
-完整用户交互界面
-```
-
----
-
-# 12. 最终完整链路
-
-```text
-C
-用户开始测评
-      ↓
-摄像头 + 麦克风开启
-      ↓
-A
-生成第一句话
-      ↓
-C
-展示问题
-      ↓
-用户开始说话
-      ↓
-B
-自动检测 speech_start
-      ↓
-录音
-+
-摄像头持续分析
-      ↓
-用户停止说话
-      ↓
-B
-自动检测 speech_end
-      ↓
-ASR
-+
-计算这一句话期间摄像头平均
-      ↓
-B → A
-text
-+
-turn vision
-      ↓
-A
-历史对话
-↓
-Policy Model
-↓
-Action
-↓
-LLM
-↓
-下一句话
-      ↓
-A → C
-reply
-      ↓
-C
-展示回复
-      ↓
-重复多轮
-      ↓
-对话结束
-      ↓
-B
-计算整段摄像头平均
-      ↓
-B → A
-SessionVisionSummary
-      ↓
-A
-完整对话
-+
-逐句视觉
-+
-整段视觉
-↓
-最终评估
-      ↓
-A → C
-AssessmentResult
-      ↓
-C
-最终测评报告界面
-```
-
-核心关系最终就是：
-
-```text
-B：把用户每一轮的语音 + 摄像头处理完，直接给 A
-
-A：根据 B 的结果完成对话决策和最终评估，再给 C
-
-C：负责把整个过程完整展示出来
-```
-
-这样职责就顺了：**B 是完整的输入处理模块，不需要 C 帮它做时间切分。**
+后端接口详情见 [API 数据协议](docs/api_spec.md)，当前模块关系见 [架构说明](docs/architecture.md)。

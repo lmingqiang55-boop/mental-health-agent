@@ -97,6 +97,21 @@ def test_multimodal_state_is_saved_and_chat_still_works() -> None:
     session = client.get(f"/api/session/{session_id}").json()
     assert session["latest_vision_state"]["emotion"] == "sad"
     assert session["latest_audio_state"]["energy"] == 0.4
+    assert session["conversation_history"][0]["vision_snapshot"] is None
+    assert session["conversation_history"][0]["audio_snapshot"] is None
+
+
+def test_chat_stores_only_exact_utterance_vision() -> None:
+    session_id = new_session()
+    response = client.post("/api/chat", json={
+        "session_id": session_id,
+        "text": "最近心情不好",
+        "vision_snapshot": {"face_detected": True, "valence": -0.4},
+    })
+    assert response.status_code == 200
+    message = client.get(f"/api/session/{session_id}").json()["conversation_history"][0]
+    assert message["vision_snapshot"]["valence"] == -0.4
+    assert message["audio_snapshot"] is None
 
 
 def test_vision_merge_does_not_reset_other_fields() -> None:
@@ -242,7 +257,9 @@ def test_negation_does_not_trigger_high_risk() -> None:
     assert response.json()["risk"]["risk_level"] != "high"
 
 
-def test_chat_never_finishes_on_its_own_and_assessment_is_explicit() -> None:
+def test_chat_never_finishes_on_its_own_and_assessment_is_explicit(
+    evaluation_stub,
+) -> None:
     """对话没有结束信号：聊天不生成评估结果，只由 /api/assessment 触发。"""
     session_id = new_session()
     for text in ("我想说说最近的情况", "晚上常常睡不着", "和室友关系也一般"):
@@ -257,13 +274,18 @@ def test_chat_never_finishes_on_its_own_and_assessment_is_explicit() -> None:
 
     triggered = client.post("/api/assessment", json={"session_id": session_id})
     assert triggered.status_code == 200
-    assert triggered.json()["result"]["dimension_scores"]
+    assert set(triggered.json()["result"]["psychological_profile"]) == {
+        "emotion", "interest_motivation", "sleep_energy",
+        "attention_thinking", "social_daily",
+    }
+    assert triggered.json()["result"]["concern_index"] == 0
+    assert evaluation_stub.inputs[0].vision_summary is None
 
     session = client.get(f"/api/session/{session_id}").json()
     assert session["assessment_result_id"]
     assert session["current_stage"] == "completed"
-    assert session["vision_summary"] is not None
-    assert session["audio_summary"] is not None
+    assert session["vision_summary"] is None
+    assert session["audio_summary"] is None
 
     # 记忆库可查到记录
     history = client.get(f"/api/history/{session_id}").json()
