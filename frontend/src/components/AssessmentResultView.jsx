@@ -1,4 +1,4 @@
-// 评估结果展示：维度得分、风险等级、重要关注点、个性化建议。
+// 展示新评估 Agent 已实际生成的五维画像与关注指数。
 
 function RiskBadge({ level }) {
   const labels = { low: '低风险', medium: '中风险', high: '高风险' }
@@ -7,6 +7,19 @@ function RiskBadge({ level }) {
 
 export default function AssessmentResultView({ result }) {
   if (!result) return null
+  const labels = {
+    emotion: '情绪状态',
+    interest_motivation: '兴趣与动力',
+    sleep_energy: '睡眠与精力',
+    attention_thinking: '专注与思考',
+    social_daily: '社交与日常功能',
+  }
+  const levelLabels = {
+    low_concern: '低关注',
+    mild_concern: '轻度关注',
+    moderate_concern: '中度关注',
+    high_concern: '高度关注',
+  }
 
   return (
     <section className="card assessment-result">
@@ -15,45 +28,23 @@ export default function AssessmentResultView({ result }) {
       <div className="result-header">
         <RiskBadge level={result.risk.risk_level} />
         <span className="overall-score">
-          综合指数 {result.overall_score.toFixed(2)}
+          关注指数 {result.concern_index} / 100
         </span>
       </div>
 
       <div className="dimension-scores">
-        {result.dimension_scores.map((ds) => (
-          <div key={ds.dimension} className="score-row">
-            <span className="score-label">{ds.dimension_label}</span>
+        {Object.entries(result.psychological_profile).map(([dimension, score]) => (
+          <div key={dimension} className="score-row">
+            <span className="score-label">{labels[dimension] || dimension}</span>
             <div className="score-bar">
-              <div className="score-fill" style={{ width: `${ds.score * 100}%` }} />
+              <div className="score-fill" style={{ width: `${score}%` }} />
             </div>
-            <span className="score-value">{ds.score.toFixed(2)}</span>
+            <span className="score-value">{score}</span>
           </div>
         ))}
       </div>
-
-      {result.key_concerns?.length > 0 && (
-        <div className="concerns">
-          <h4>重要关注点</h4>
-          <ul>{result.key_concerns.map((c, i) => <li key={i}>{c}</li>)}</ul>
-        </div>
-      )}
-
-      <div className="recommendations">
-        <h4>个性化建议</h4>
-        {result.recommendations.map((rec, i) => (
-          <div key={i} className={`rec-item priority-${rec.priority}`}>
-            <span className="rec-tag">
-              {rec.category === 'emotion_regulation' ? '情绪调节'
-                : rec.category === 'study_life' ? '学习生活' : '求助资源'}
-            </span>
-            <p>{rec.content}</p>
-          </div>
-        ))}
-      </div>
-
-      <p className="result-summary">{result.summary}</p>
-      <p className="disclaimer">结果由 AI 初步生成（{result.assessment_method}），
-        未经人工复核，不构成临床诊断。</p>
+      <p className="disclaimer">关注等级：{levelLabels[result.overall_level] || result.overall_level}。本结果仅供初步了解，
+        不构成临床诊断；报告文案、趋势与建议尚未接入。</p>
     </section>
   )
 }

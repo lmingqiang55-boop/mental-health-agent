@@ -2,12 +2,17 @@
 
 from pydantic import BaseModel, Field
 
+from evaluation_agent.inputs import EvaluationInput
+
 from backend.models.states import AudioState, VisionState
 
 
 class ChatRequest(BaseModel):
     session_id: str
     text: str = Field(min_length=1, max_length=4000)
+    # 未来上游提供与这句话精确对齐的快照；缺失时不借用最近一帧。
+    vision_snapshot: VisionState | None = None
+    audio_snapshot: AudioState | None = None
 
 
 class VisionUpsertRequest(BaseModel):
@@ -32,8 +37,9 @@ class AudioUpsertRequest(BaseModel):
 
 
 class TriggerAssessmentRequest(BaseModel):
-    """显式触发多模态综合评估（对话没有自动结束信号）。"""
+    """显式触发评估；上游可直接提交完整的双层视觉输入。"""
     session_id: str
+    evaluation_input: EvaluationInput | None = None
 
 
 class ConsentRequest(BaseModel):

@@ -56,18 +56,17 @@ FollowUpStatus     none | pending | in_progress | resolved
 
 其中没有「结束评估」动作，因此聊天不产生自动结束信号。
 
-### 评估维度（AssessmentDimension）
+### 评估维度（PsychologicalProfile）
 
-最终评估输出使用的维度；对话提问不再按这些维度固定推进。
+新评估 Agent 的五维结果使用 0～100 整数，数值越高表示本次对话中该方面值得关注的信号越突出。对话提问由决策模型选择，不按这些维度固定推进。
 
 | 标识 | 中文名 |
 | --- | --- |
-| `mood` | 情绪 |
-| `pressure` | 压力 |
-| `interpersonal` | 人际关系 |
-| `self_cognition` | 自我认知 |
-| `study_life` | 学习生活 |
-| `duration` | 持续时间 |
+| `emotion` | 情绪状态 |
+| `interest_motivation` | 兴趣与动力 |
+| `sleep_energy` | 睡眠与精力 |
+| `attention_thinking` | 专注与思考 |
+| `social_daily` | 社交与日常功能 |
 
 ### VisionState（句级视觉状态，B → A）
 
@@ -89,18 +88,19 @@ FollowUpStatus     none | pending | in_progress | resolved
 | 字段 | 类型 | 范围 | 说明 |
 | --- | --- | --- | --- |
 | `text` | string \| null | — | ASR 转写文本 |
-| `speech_rate` | float \| null | 0~1（标准化） | 语速 |
+| `speech_rate` | float \| null | ≥0 | 语速 |
 | `pause_ratio` | float \| null | 0~1 | 停顿占比 |
 | `energy` | float \| null | 0~1 | 音量能量 |
 | `pitch_mean` | float \| null | 0~1（标准化） | 平均音高 |
-| `pitch_variability` | float \| null | 0~1 | 音高变化率 |
+| `pitch_variability` | float \| null | ≥0 | 音高变化率 |
 | `audio_available` | bool | — | 是否有有效音频 |
 | `timestamp` | datetime | — | 采样时间 |
 
 ### SessionVisionSummary / SessionAudioSummary（会话级汇总）
 
-触发综合评估时由全部句级状态聚合，字段见 `backend/models/states.py`，
-包含均值、趋势序列、出现占比和采样数，供综合评估 Agent 使用。
+视觉汇总由上游基于逐句状态生成，评估接口直接接收。字段见
+`backend/models/states.py`，包含均值、趋势序列、出现占比和采样数。
+当前摄像头帧日志不自动生成评估用 `vision_summary`。
 
 ### RiskResult
 
@@ -189,7 +189,12 @@ FollowUpStatus     none | pending | in_progress | resolved
 请求：
 
 ```json
-{ "session_id": "b4fc1bdd-...", "text": "最近总是觉得没什么精神" }
+{
+  "session_id": "b4fc1bdd-...",
+  "text": "最近总是觉得没什么精神",
+  "vision_snapshot": { "face_detected": true, "valence": -0.4 },
+  "audio_snapshot": { "audio_available": true, "speech_rate": 0.45 }
+}
 ```
 
 成功响应：
@@ -205,6 +210,8 @@ FollowUpStatus     none | pending | in_progress | resolved
 }
 ```
 
+`vision_snapshot` 和 `audio_snapshot` 均可选；语音/视觉模块完成该句话的对齐后
+才填写。省略时消息的对应快照保持为空，不自动取最近一帧。
 `next_strategy` 是决策模型本轮输出的最后一个动作，取值即上面 11 个动作之一
 （危机时为 `crisis_support`），不再是按维度推进的规则策略名。
 
@@ -287,12 +294,35 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 
 ### POST /api/assessment
 
-显式触发综合评估。对话不再有自动结束信号，因此这是生成评估结果的唯一入口
-（学生端按钮「生成初步结果」调用它）。生成结果后仍可继续对话，需要刷新结果
-时再次调用本接口：
+显式触发综合评估。上游语音/视觉模块完成逐句对齐后，直接提供
+`evaluation_input`：每句话的 `vision_snapshot` 放在对应消息内，整段对话的
+`vision_summary` 放在顶层。评估服务直接接收这些结构，不用摄像头帧的时间戳
+重新猜测逐句对应关系。语音模块尚未接通时，现有文字对话可只传 `session_id`，
+服务端从已保存的消息构造输入；没有对应快照的消息保持为空。
 
 ```json
-{ "session_id": "..." }
+{
+  "session_id": "...",
+  "evaluation_input": {
+    "dialogue_history": [
+      {
+        "role": "user",
+        "content": "最近总睡不好",
+        "vision_snapshot": {
+          "face_detected": true,
+          "emotion": "sad",
+          "valence": -0.4
+        }
+      }
+    ],
+    "vision_summary": {
+      "dominant_emotion": "sad",
+      "mean_valence": -0.4,
+      "valence_trend": [-0.4],
+      "sample_count": 1
+    }
+  }
+}
 ```
 
 响应：
@@ -303,27 +333,17 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
   "result": {
     "result_id": "...",
     "session_id": "...",
-    "dimension_scores": [
-      {
-        "dimension": "mood", "dimension_label": "情绪",
-        "score": 0.55, "confidence": 0.6,
-        "evidence": ["会话平均效价：-0.42"], "trend": null
-      }
-    ],
-    "overall_score": 0.55,
+    "psychological_profile": {
+      "emotion": 42,
+      "interest_motivation": 34,
+      "sleep_energy": 67,
+      "attention_thinking": 0,
+      "social_daily": 25
+    },
+    "concern_index": 44,
+    "overall_level": "mild_concern",
     "risk": { ... },
-    "recommendations": [
-      {
-        "category": "emotion_regulation",
-        "content": "可以尝试规律的深呼吸放松……",
-        "priority": 2, "source": "rule"
-      }
-    ],
-    "summary": "本次初步筛查中……",
-    "key_concerns": ["情绪：0.55"],
-    "assessment_method": "rule",
-    "is_ai_generated": true,
-    "counselor_reviewed": false,
+    "assessment_method": "evaluation_agent",
     "created_at": "..."
   }
 }
@@ -333,18 +353,20 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 
 返回同一结构。
 
-### AssessmentResult 字段说明
+### EvaluationResult 字段说明
 
 | 字段 | 说明 |
 | --- | --- |
-| `dimension_scores` | 各维度得分、置信度、证据、趋势 |
-| `overall_score` | 综合困扰程度 0~1 |
-| `risk` | 最终风险结果 |
-| `recommendations` | 个性化建议（情绪调节/学习生活/求助资源） |
-| `summary` | 文字摘要 |
-| `key_concerns` | 重要关注点 |
-| `assessment_method` | mock/rule/model |
-| `counselor_reviewed` | 是否经人工复核 |
+| `psychological_profile` | 评估 Agent 的五维画像，各维 0~100 |
+| `concern_index` | 五维派生的关注指数，0~100 |
+| `overall_level` | 关注等级 |
+| `risk` | 独立风险识别结果 |
+| `assessment_method` | 固定为 `evaluation_agent` |
+
+当前评估 Agent 只产生五维画像、关注指数和等级；文字报告、趋势分析和建议尚未实现。
+未配置 `DEEPSEEK_API_KEY` 或评估服务不可用时，接口返回
+`503 EVALUATION_UNAVAILABLE`，不会生成规则式六维结果。评估调用会向配置的
+DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音频和图像。
 
 ---
 
@@ -370,7 +392,7 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 
 ### GET /api/teacher/records/{record_id}
 
-返回单条完整 `AssessmentRecord`（含结果与跟进记录）。
+返回单条完整 `EvaluationRecord`（含结果与跟进记录）。
 
 ### GET /api/teacher/student/{student_ref}
 

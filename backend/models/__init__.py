@@ -1,12 +1,8 @@
 """数据模型层统一导出。所有模块通过 ``backend.models`` 引用公共数据结构。"""
 
 from backend.models.assessment import (
-    AssessmentRecord,
-    AssessmentResult,
     CommunicationMessage,
     CounselorNote,
-    DimensionScore,
-    Recommendation,
 )
 from backend.models.dialogue import (
     DialogueAgentRequest,
@@ -17,13 +13,12 @@ from backend.models.dialogue import (
     DialogueUserMemory,
     DialogueVisual,
 )
+from backend.models.evaluation import EvaluationRecord, EvaluationResult
 from backend.models.enums import (
-    AssessmentDimension,
     ConsentStatus,
     FollowUpStatus,
     MessageRole,
     ModalityType,
-    RecommendationCategory,
     RiskLevel,
     SessionStage,
 )
@@ -61,16 +56,16 @@ from backend.models.states import (
 
 __all__ = [
     # enums
-    "AssessmentDimension", "ConsentStatus",
+    "ConsentStatus",
     "FollowUpStatus", "MessageRole", "ModalityType",
-    "RecommendationCategory", "RiskLevel", "SessionStage",
+    "RiskLevel", "SessionStage",
     # states
     "AudioState", "ConsentRecord", "Message", "RiskResult",
     "SessionAudioSummary", "SessionState", "SessionVisionSummary",
     "VisionState",
     # assessment
-    "AssessmentRecord", "AssessmentResult", "CommunicationMessage",
-    "CounselorNote", "DimensionScore", "Recommendation",
+    "CommunicationMessage", "CounselorNote",
+    "EvaluationRecord", "EvaluationResult",
     # requests
     "AudioUpsertRequest", "ChatRequest", "ConsentRequest",
     "SendCommunicationRequest", "TriggerAssessmentRequest",

@@ -31,7 +31,8 @@ def list_all_records() -> dict:
         {
             "record_id": r.record_id,
             "student_ref": r.student_ref,
-            "overall_score": r.result.overall_score,
+            "concern_index": r.result.concern_index,
+            "overall_level": r.result.overall_level.value,
             "risk_level": r.result.risk.risk_level.value,
             "created_at": r.created_at,
             "follow_up_status": r.follow_up_status.value,
@@ -106,8 +107,8 @@ def group_stats() -> dict:
     dim_acc: dict[str, list[float]] = {}
     for r in records:
         distribution[r.result.risk.risk_level.value] += 1
-        for ds in r.result.dimension_scores:
-            dim_acc.setdefault(ds.dimension, []).append(ds.score)
+        for dimension, score in r.result.psychological_profile.model_dump().items():
+            dim_acc.setdefault(dimension, []).append(score)
 
     dimension_averages = {
         dim: round(sum(vals) / len(vals), 3)

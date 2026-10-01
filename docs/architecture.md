@@ -1,8 +1,7 @@
 # 架构说明 v0.2
 
 本文档把目标效果图（`docs/assets/target_architecture.png`）与仓库中的真实
-代码一一对应。当前版本只搭建**框架骨架与数据协议**，具体识别/生成算法用
-Mock 或规则占位。
+代码一一对应。对话决策使用已训练的策略模型；综合评估接收新评估 Agent 的输入契约。
 
 下一阶段的职责和目标数据流见 [三人协作与接口分工 v3](三人协作与接口分工_v3.md)。
 本文件以下流程描述当前代码，不表示 B 的自动语音切分、逐轮视觉统计和 B → A 完整交接已经实现。
@@ -19,7 +18,7 @@ Mock 或规则占位。
 ┌──────────────────────────┐      ┌────────────────────────────┐
 │ ① 实时对话闭环           │      │ ② 多模态综合评估           │
 │   DialogueManager        │ 完整 │   AssessmentEngine         │
-│   Vision/Audio           │ ───→ │   生成维度得分/风险/建议   │
+│   Vision/Audio           │ ───→ │   五维画像/关注指数/等级   │
 │   边聊边感知·动态引导    │ 对话 │                            │
 └───────────┬──────────────┘      └──────────────┬─────────────┘
             │                                    ↓
@@ -30,7 +29,7 @@ Mock 或规则占位。
                                                  ↓
 ┌────────────────────────────┐   ┌────────────────────────────┐
 │ 学生端展示（个人视角）     │←→│ 心理老师端展示（专业视角）   │
-│ 结果 · 建议 · 求助         │沟通│ 个体管理·预警·群体统计     │
+│ 五维结果 · 关注等级       │沟通│ 个体管理·预警·群体统计     │
 └────────────────────────────┘   └────────────────────────────┘
 
         隐私与安全保障（贯穿全流程）：知情同意 · 身份权限 ·
@@ -49,8 +48,8 @@ Mock 或规则占位。
 | 句级视觉状态（实时） | `VisionState` | 已定义，merge 写入 |
 | 多模态融合 | `backend/core/multimodal_fusion.py` | 句级融合 + 会话级汇总 |
 | 风险识别规则 | `backend/core/risk_engine.py` | 规则式，含否定词处理 + 多模态调整 |
-| 多模态心理评估 Agent | `backend/core/assessment_engine.py` | 规则式打分 + 建议生成 |
-| 评估结果输出 | `backend/models/assessment.py` | 已定义 |
+| 多模态心理评估 Agent | `evaluation_agent/`、`backend/core/evaluation_engine.py` | 双层视觉输入；配置 DeepSeek 密钥后可调用模型 |
+| 评估结果输出 | `backend/models/evaluation.py` | 五维画像、关注指数和等级 |
 | 评估记忆库 | `backend/core/memory_store.py` | 进程内存储 |
 | 历史结果回流 | `MemoryStore.latest_for_student` | 接口已预留 |
 | 学生端 | `frontend/src/pages/StudentPage.jsx` | 对话 + 进度 + 设备 + 结果 |
@@ -84,15 +83,15 @@ Mock 或规则占位。
 ### 多模态综合评估（模块 ②）
 
 ```text
-POST /api/assessment（显式触发；对话没有自动结束信号）
+POST /api/assessment（显式触发，可直接携带 EvaluationInput）
         ↓
-build_vision_summary / build_audio_summary（聚合句级日志）
+dialogue_history[].vision_snapshot + vision_summary（由上游对齐、汇总）
         ↓
-AssessmentEngine.assess(session)
+EvaluationEngine.assess(session, input_data)
         ↓
-DimensionScore[] + RiskResult + Recommendation[]
+PsychologicalProfile（五维）+ concern_index + overall_level + RiskResult
         ↓
-MemoryStore.save_result → AssessmentRecord
+MemoryStore.save_result → EvaluationRecord
         ↓
 学生端结果页 / 老师端记录列表
 ```
@@ -105,10 +104,9 @@ MemoryStore.save_result → AssessmentRecord
 `frontend/` 提供界面。现有 `VisionState`、`AudioState` 和会话级 Summary
 仍是当前实现的数据结构。
 
-目标交接改为 B → A 的完整 `TurnResult` 与 `SessionVisionSummary`，
-再由 A → C 提供回复与最终评估。字段和调用时机以
-[三人协作与接口分工 v3](三人协作与接口分工_v3.md) 为准；
-在代码实现前，现有 API 结构仍以 [API 数据协议](api_spec.md) 为准。
+语音模块完成后，由上游在每条消息内提供对应的 `vision_snapshot`，
+并提供整段对话的 `vision_summary`。评估端直接接收，不根据摄像头帧日志重新对齐。
+当前语音模块尚未接通，接口字段和请求样例见 [API 数据协议](api_spec.md)。
 
 ## 5. 并发与一致性
 

@@ -2,7 +2,7 @@
 
 - 提交句级 VisionState，服务端做 merge（只更新传入的非 None 字段），
   不再全量替换。
-- 同时追加到 session 的 vision_state_log，供会话级汇总。
+- 同时追加到 session 的 vision_state_log，供实时状态查看；评估用逐句快照和汇总由上游提供。
 """
 
 import base64
