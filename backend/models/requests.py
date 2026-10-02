@@ -1,10 +1,10 @@
 """API 请求体模型。路由层只做校验和转发，不在这里写业务逻辑。"""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from evaluation_agent.inputs import EvaluationInput
 
-from backend.models.states import AudioState, VisionState
+from backend.models.states import AudioState, SpeechMetadata, VisionState
 
 
 class ChatRequest(BaseModel):
@@ -12,6 +12,14 @@ class ChatRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     # 上游提供与这句话精确对齐的快照，供当前轮决策和最终评估使用。
     vision_snapshot: VisionState | None = None
+    utterance_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"\S")
+    speech: SpeechMetadata | None = None
+
+    @model_validator(mode="after")
+    def speech_has_id(self) -> "ChatRequest":
+        if self.speech is not None and self.utterance_id is None:
+            raise ValueError("Speech metadata requires an utterance_id")
+        return self
 
 
 class VisionUpsertRequest(BaseModel):

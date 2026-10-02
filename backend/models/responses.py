@@ -11,6 +11,7 @@ from backend.models.states import (
     ConsentRecord,
     RiskResult,
     SessionState,
+    SpeechMetadata,
     VisionState,
 )
 
@@ -31,6 +32,13 @@ class DialogueResponsePayload(BaseModel):
 class ChatResponse(DialogueResponsePayload):
     session_id: str
     turn_count: int
+
+
+class TranscriptionResponse(BaseModel):
+    session_id: str
+    utterance_id: str
+    text: str
+    speech: SpeechMetadata
 
 
 class StateUpsertResponse(BaseModel):

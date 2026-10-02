@@ -4,7 +4,7 @@
 代码一一对应。对话决策使用已训练的策略模型；综合评估接收新评估 Agent 的输入契约。
 
 下一阶段的职责和目标数据流见 [三人协作与接口分工 v3](三人协作与接口分工_v3.md)。
-本文件以下流程描述当前代码，不表示 B 的自动语音切分、逐轮视觉统计和 B → A 完整交接已经实现。
+后端完整录音转写已实现，见 [语音接入说明](speech_recognition.md)；前端按钮录音、逐轮视觉统计和 B → A 网页交接尚待联调。本期不使用自动语音切分。
 
 ## 1. 总体分层
 
@@ -44,7 +44,7 @@
 | 标准心理量表 | — | 未接入，接入前需确认授权与计分规则 |
 | 对话 Agent | `backend/core/dialogue_manager.py` | 决策模型选动作 + 危机干预；无规则回退 |
 | 微表情/眼动检测 | `backend/vision/detector.py` | Mock + 可选 EmotiEffLib 情绪/VA |
-| 语音输入/ASR | `backend/audio/analyzer.py` | 抽象接口 + Mock |
+| 语音输入/ASR | `backend/audio/transcriber.py`、`decoder.py`、`upload.py` | 完整录音转写、真实重采样、限流与时间交接；analyzer 中旧特征接口独立保留 |
 | 句级视觉状态（实时） | `VisionState` | 已定义，merge 写入 |
 | 多模态融合 | `backend/core/multimodal_fusion.py` | 句级融合 + 会话级汇总 |
 | 风险识别规则 | `backend/core/risk_engine.py` | 规则式，含否定词处理 + 多模态调整 |
@@ -104,9 +104,9 @@ MemoryStore.save_result → EvaluationRecord
 `frontend/` 提供界面。现有 `VisionState`、`AudioState` 和会话级 Summary
 仍是当前实现的数据结构。
 
-语音模块完成后，由上游在每条消息内提供对应的 `vision_snapshot`，
+语音转写后，由上游在每条消息内提供对应的 `vision_snapshot`，
 并提供整段对话的 `vision_summary`。评估端直接接收，不根据摄像头帧日志重新对齐。
-当前语音模块尚未接通，接口字段和请求样例见 [API 数据协议](api_spec.md)。
+后端语音转写已接通，前端录音页面待实现；接口字段和请求样例见 [API 数据协议](api_spec.md)。
 
 ## 5. 并发与一致性
 
@@ -128,6 +128,6 @@ MemoryStore.save_result → EvaluationRecord
 
 ## 7. 后续替换点
 
-按依赖顺序：真实 LLM Provider → 真实视觉模型 → 真实音频/ASR →
-持久化数据库 → 身份与权限 → 标准量表 → 人工复核闭环。
+接下来完成前端录音接入、视觉采集时间与区间聚合、整条对话链路联调，
+再按需要推进持久化数据库、身份与权限、标准量表和人工复核闭环。
 每项替换前先更新 `api_spec.md` 与本文档。

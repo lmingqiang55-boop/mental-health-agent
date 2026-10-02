@@ -6,7 +6,7 @@
 
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.models.enums import (
     ConsentStatus,
@@ -112,6 +112,27 @@ class RiskResult(BaseModel):
 # 消息与会话
 # ---------------------------------------------------------------------------
 
+class SpeechMetadata(BaseModel):
+    """Actual recording boundaries on a shared client monotonic time axis."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    capture_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
+    recording_start_ms: float = Field(ge=0)
+    recording_end_ms: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def ordered_interval(self) -> "SpeechMetadata":
+        if self.recording_end_ms <= self.recording_start_ms:
+            raise ValueError("Recording end must follow recording start")
+        return self
+
+
+class ChatReceipt(BaseModel):
+    """Internal successful-request cache, with the same lifetime as its session."""
+    fingerprint: str
+    response: dict
+
+
 class Message(BaseModel):
     role: MessageRole
     content: str
@@ -119,6 +140,8 @@ class Message(BaseModel):
     # 该消息对应的句级多模态快照（可选），不存原始音视频
     vision_snapshot: VisionState | None = None
     audio_snapshot: AudioState | None = None
+    utterance_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"\S")
+    speech: SpeechMetadata | None = None
 
 
 class ConsentRecord(BaseModel):
@@ -137,6 +160,8 @@ class SessionState(BaseModel):
                                     description="匿名/假名学生标识，非实名")
     conversation_history: list[Message] = Field(default_factory=list)
     turn_count: int = 0
+    # Excluded from the session API; no raw audio or upload data is cached.
+    chat_receipts: dict[str, ChatReceipt] = Field(default_factory=dict, exclude=True, repr=False)
     current_stage: SessionStage = SessionStage.EXPLORATION
 
     # 最新句级多模态状态

@@ -1,4 +1,4 @@
-# API 数据协议 v0.2
+# API 数据协议 v0.3
 
 基础地址：`http://127.0.0.1:8000`，交互文档：`/docs`。
 
@@ -19,6 +19,8 @@
 | POST | `/api/vision` | 提交句级视觉状态（merge） |
 | POST | `/api/vision/frame` | 提交一张摄像头帧并即时分析 |
 | POST | `/api/audio` | 兼容现有实时音频状态；队员 B 的评估交接不需要调用 |
+| POST | `/api/audio/transcribe` | 上传完整录音，返回原文与采集时间；不创建聊天回合 |
+| GET | `/api/audio/status` | 查看 ASR 就绪状态和录音限制 |
 | POST | `/api/assessment` | 触发综合评估（对话没有自动结束信号，这是唯一入口） |
 | GET | `/api/assessment/result/{result_id}` | 获取评估结果 |
 | GET | `/api/history/{student_ref}` | 学生查看历史记录 |
@@ -122,6 +124,12 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `created_at` | datetime | 时间 |
 | `vision_snapshot` | VisionState \| null | 该消息对应的视觉快照 |
 | `audio_snapshot` | AudioState \| null | 现有可选字段；新评估 Agent 不读取 |
+| `utterance_id` | string \| null | 客户端发言唯一标识，重试复用 |
+| `speech` | SpeechMetadata \| null | 客户端单调时间轴上的实际录音区间 |
+
+`SpeechMetadata` 包含非空 `capture_id` 和有限非负毫秒数
+`recording_start_ms`、`recording_end_ms`，结束必须大于开始。它表示录音区间，
+不是 VAD 开口/停止时间；不能与服务端 UTC 时间直接比较。
 
 ### SessionState
 
@@ -228,6 +236,41 @@ FollowUpStatus     none | pending | in_progress | resolved
 ---
 
 ## 3. Vision / Audio 接口
+
+### POST /api/audio/transcribe
+
+使用 `multipart/form-data`，必填字段为 `file`、`session_id`、`utterance_id`、
+`capture_id`、`recording_start_ms`、`recording_end_ms`。浏览器发送完整录音，
+FormData 的 Content-Type 和 boundary 由浏览器设置，不继承 JSON 请求头。
+
+```json
+{
+  "session_id": "session-uuid",
+  "utterance_id": "utterance-uuid",
+  "text": "最近晚上经常睡不着",
+  "speech": {
+    "capture_id": "capture-uuid",
+    "recording_start_ms": 12000,
+    "recording_end_ms": 16800
+  }
+}
+```
+
+该接口只转写，不修改回合数、不保存原始音频。成功后由前端与本句视觉结果
+汇合，自动调用一次 `/api/chat`，沿用响应中的 `utterance_id`、`speech`。
+缺少本句视觉时省略 `vision_snapshot`，语音路径不回退到最新视觉/音频状态。
+旧文字请求仍可只发送 `session_id` 和 `text`。
+
+聊天新增可选 `utterance_id` 和 `speech`；提供 `speech` 时必须提供
+`utterance_id`。同一会话与发言标识的相同文本、录音元数据和视觉内容重试，
+返回首次成功响应，回合数不增加；任一内容改变返回 `409 UTTERANCE_CONFLICT`。
+视觉快照的服务端默认 `timestamp` 不参与去重；重试应复用原快照。
+策略失败不保存半轮消息或成功缓存。
+
+支持格式、限制、环境设置和联调步骤见 [语音接入说明](speech_recognition.md)。
+默认录音上限为 60 秒、文件限额为 10 MiB；允许配置更低时长上限，最高 60 秒。
+上传时同时校验采集区间与实际解码时长，超限返回 `422 AUDIO_TOO_LONG`。
+`GET /api/audio/status` 单独报告 ASR 状态；通用 `/api/health` 不代表模型已就绪。
 
 ### POST /api/vision
 
@@ -468,6 +511,14 @@ DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音�
 | 404 | `RESULT_NOT_FOUND` | 评估结果不存在 |
 | 404 | `RECORD_NOT_FOUND` | 记忆库记录不存在 |
 | 422 | `VALIDATION_ERROR` | 字段缺失/空白/越界 |
+| 409 | `UTTERANCE_CONFLICT` | 同一发言 ID 的聊天输入变化，或标识已存在于导入历史 |
+| 409 | `HISTORY_CONFLICT` | 完整评估输入改动已标识的消息或评估期间发生新的聊天 |
+| 415 | `UNSUPPORTED_AUDIO_FORMAT` | 不支持的 MIME 或实际容器不匹配 |
+| 413 | `AUDIO_TOO_LARGE` | 文件或 multipart 总上传字节超限 |
+| 422 | `INVALID_AUDIO` / `AUDIO_TOO_LONG` / `AUDIO_TIME_MISMATCH` | 解码、实际时长或时间轴校验失败 |
+| 422 | `NO_SPEECH` / `TRANSCRIPT_TOO_LONG` | 无有效语音或转写超过聊天文本限制 |
+| 503 | `ASR_UNAVAILABLE` / `ASR_BUSY` | 模型未就绪、推理失败或队列已满 |
+| 504 | `ASR_TIMEOUT` | 识别等待超时，客户端可保留原录音重试 |
 | 400 | `HTTP_ERROR` | 其他请求错误 |
 | 503 | `POLICY_UNAVAILABLE` | 决策模型不可用或输出无效（对话不会退回规则提问） |
 

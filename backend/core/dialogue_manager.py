@@ -44,11 +44,13 @@ class DialogueManager:
         self._policy = policy_client
 
     def process_turn(self, user_text: str, session: SessionState,
-                     vision_snapshot: VisionState | None = None) -> DialogueResponsePayload:
+                     vision_snapshot: VisionState | None = None,
+                     *, use_latest_states: bool = True) -> DialogueResponsePayload:
         fused = fuse_turn(
             user_text,
-            vision_snapshot if vision_snapshot is not None else session.latest_vision_state,
-            session.latest_audio_state,
+            vision_snapshot if vision_snapshot is not None else (
+                session.latest_vision_state if use_latest_states else None),
+            session.latest_audio_state if use_latest_states else None,
         )
         risk = assess_risk(fused)
         session.latest_risk = risk

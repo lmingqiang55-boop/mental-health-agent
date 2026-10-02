@@ -9,6 +9,9 @@
 该接口直接接收上游提供的会话级视觉汇总（见 ``backend/api/assessment.py``）。
 """
 
+import hashlib
+import json
+
 from fastapi import APIRouter, HTTPException
 
 from backend.api.errors import session_not_found
@@ -17,7 +20,7 @@ from backend.core.session_manager import session_manager
 from backend.models.enums import MessageRole
 from backend.models.requests import ChatRequest
 from backend.models.responses import ChatResponse
-from backend.models.states import Message, SessionState
+from backend.models.states import ChatReceipt, Message, SessionState
 from backend.policy.client import PolicyClientError
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -31,19 +34,46 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=422, detail={
             "code": "VALIDATION_ERROR", "message": "Text cannot be blank."})
 
-    dialogue_payload = {"value": None}
+    response_holder = {"value": None}
+    fingerprint = _fingerprint(request, text)
 
     def mutator(session: SessionState) -> None:
+        if request.utterance_id is not None:
+            receipt = session.chat_receipts.get(request.utterance_id)
+            if receipt is not None:
+                if receipt.fingerprint != fingerprint:
+                    raise HTTPException(status_code=409, detail={
+                        "code": "UTTERANCE_CONFLICT",
+                        "message": "该发言标识已用于不同内容，请复用原请求或为新发言生成新标识。",
+                    })
+                response_holder["value"] = ChatResponse.model_validate(receipt.response)
+                return
+            if any(item.utterance_id == request.utterance_id
+                   for item in session.conversation_history):
+                raise HTTPException(status_code=409, detail={
+                    "code": "UTTERANCE_CONFLICT",
+                    "message": "该标识已存在于导入历史中，无法作为新聊天重复提交。",
+                })
         session.conversation_history.append(Message(
             role=MessageRole.USER, content=text,
             vision_snapshot=request.vision_snapshot,
+            utterance_id=request.utterance_id, speech=request.speech,
         ))
-        payload = dialogue_manager.process_turn(
-            text, session, vision_snapshot=request.vision_snapshot)
-        dialogue_payload["value"] = payload
+        kwargs = {"vision_snapshot": request.vision_snapshot}
+        if request.speech is not None:
+            kwargs["use_latest_states"] = False
+        payload = dialogue_manager.process_turn(text, session, **kwargs)
         session.conversation_history.append(Message(
             role=MessageRole.ASSISTANT, content=payload.reply))
         session.turn_count += 1
+        response = ChatResponse(
+            session_id=request.session_id, turn_count=session.turn_count,
+            **payload.model_dump(),
+        )
+        response_holder["value"] = response
+        if request.utterance_id is not None:
+            session.chat_receipts[request.utterance_id] = ChatReceipt(
+                fingerprint=fingerprint, response=response.model_dump(mode="json"))
 
     try:
         updated = session_manager.modify_session(request.session_id, mutator)
@@ -55,13 +85,16 @@ def chat(request: ChatRequest) -> ChatResponse:
     if updated is None:
         raise session_not_found()
 
-    payload = dialogue_payload["value"]
+    return response_holder["value"]
 
-    return ChatResponse(
-        session_id=request.session_id,
-        turn_count=updated.turn_count,
-        reply=payload.reply,
-        next_strategy=payload.next_strategy,
-        current_stage=payload.current_stage,
-        risk=payload.risk,
-    )
+
+def _fingerprint(request: ChatRequest, text: str) -> str:
+    """Hash effective input; generated vision timestamps do not change retries."""
+    value = {
+        "text": text,
+        "speech": request.speech.model_dump(mode="json") if request.speech else None,
+        "vision_snapshot": request.vision_snapshot.model_dump(
+            mode="json", exclude={"timestamp"}) if request.vision_snapshot else None,
+    }
+    encoded = json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
