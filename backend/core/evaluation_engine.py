@@ -7,11 +7,12 @@ from evaluation_agent.llm_client import EvaluationLLMClient, LLMConfig
 from evaluation_agent.service import EvaluationService, ScoredAssessment
 
 from backend.core.multimodal_fusion import fuse_turn
+from backend.core.report_builder import build_report
 from backend.core.risk_engine import assess_risk
 from backend.llm.config import DEFAULT_ENV_FILE
 from backend.models.enums import RiskLevel
 from backend.models.evaluation import EvaluationResult
-from backend.models.states import RiskResult, SessionState, VisionState
+from backend.models.states import RiskResult, SessionState, VisionState, _now
 
 RISK_ORDER = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2}
 
@@ -77,6 +78,8 @@ class EvaluationEngine:
             config = LLMConfig.from_env(env_file=DEFAULT_ENV_FILE)
             service = EvaluationService(client=EvaluationLLMClient(config=config))
         scored = service.evaluate(data)
+        risk = risk_from_input(data, session.latest_risk)
+        created_at = _now()
         return EvaluationResult(
             result_id=scored.assessment_id,
             session_id=session.session_id,
@@ -84,7 +87,18 @@ class EvaluationEngine:
             psychological_profile=scored.psychological_profile,
             concern_index=scored.concern_index,
             overall_level=scored.overall_level,
-            risk=risk_from_input(data, session.latest_risk),
+            risk=risk,
+            report=build_report(
+                assessment_id=scored.assessment_id,
+                profile=scored.psychological_profile,
+                concern_index=scored.concern_index,
+                overall_level=scored.overall_level,
+                input_data=data,
+                risk=risk,
+                generated_at=created_at,
+                item_scores=getattr(scored, "item_scores", None),
+            ),
+            created_at=created_at,
         )
 
 

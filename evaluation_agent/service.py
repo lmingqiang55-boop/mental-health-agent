@@ -29,8 +29,8 @@
 - **代码 = 数值计算层**：五维分数、``concern_index``、关注等级全部由纯函数算出，
   模型无权决定。
 
-本模块**不生成**最终用户报告（``summary`` / ``key_findings`` /
-``multimodal_observation`` / ``trend_and_suggestions``），那些属于下一阶段。
+本模块只负责评分与数值计算；面向页面的报告由
+``backend.core.report_builder`` 基于本模块结果生成。
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ class ScoredAssessment(StrictSchemaBase):
 
     这是后端内部数据，**不是**用户最终报告协议
     （用户可见报告是 :class:`evaluation_agent.schemas.EvaluationOutput`，
-    由下一阶段生成）。
+    由后端报告构造器生成）。
 
     保留全部中间结果的目的：出问题时可以回答"这个 53 分是怎么来的"——
     从模型原始判断、归一化分数、后台明细，一路到五维与指数。

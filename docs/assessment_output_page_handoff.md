@@ -9,12 +9,13 @@
 建议按以下顺序展示：
 
 1. 标题“本次心理状态初步筛查结果”、生成时间 `result.created_at`。
-2. `result.concern_index`（0～100）及 `result.overall_level` 对应的中文关注等级。
+2. `result.report.overall_status.summary` 总体说明，以及 `result.concern_index`（0～100）和关注等级。
 3. `result.psychological_profile` 的五项分数，逐项标明名称和数值。**分数越高表示该方面越值得关注**，不是健康分。
-4. 单独展示 `result.risk.risk_level` 风险提示。它与关注等级是两套结果，不能互相替代；`risk_score` 不是患病概率。
-5. 如需给老师看，可展示非空的 `risk_reasons`、`risk_types`、`key_evidence` 和 `requires_intervention`；`key_evidence` 可能包含对话原文。
+4. `result.report.primary_concern`、`key_findings`、`trend_and_suggestions` 展示重点方面、关键发现、趋势说明和建议。
+5. 单独展示 `result.risk.risk_level` 风险提示。它与关注等级是两套结果，不能互相替代；`risk_score` 不是患病概率。
+6. 如需给老师看，可展示非空的 `risk_reasons`、`risk_types`、`key_evidence` 和 `requires_intervention`；`key_evidence` 可能包含对话原文。
 
-当前没有自动生成的总体说明、关键发现、趋势解读或个性化建议。仓库中的 `EvaluationOutput` 是预留的完整报告 Schema，**不是当前 `/api/assessment` 的响应**。页面不要从五维分数自行编造这些内容，也不要把“关注等级”写成抑郁症诊断等级。
+`report` 是当前实际返回的 `EvaluationOutput`，由已算出的分数、视觉数据可用性和独立风险结果生成模板文案。没有可靠前后对比时，`trend` 为 `unclear`；没有可靠一致性计算时，`consistency_level` 为 `unknown`、`consistency_score` 为 `null`。页面应如实展示这些状态，不要把“关注等级”写成抑郁症诊断等级。
 
 ## 2. 字段与展示文案
 
@@ -30,6 +31,12 @@
 | `result.psychological_profile.social_daily` | 0～100 整数 | 社交与日常功能 | 同上。 |
 | `result.concern_index` | 0～100 整数 | 关注指数 | 由五维分数计算，不是患病概率。 |
 | `result.overall_level` | 下表四个枚举之一 | 本次关注等级 | 由关注指数分档。 |
+| `result.report.overall_status.summary` | 字符串 | 总体说明 | `report.overall_status.level/concern_index` 与顶层字段相同。 |
+| `result.report.primary_concern` | `{dimension, description}` | 最值得关注的方面 | `dimension` 为五维字段名之一。 |
+| `result.report.key_findings` | 2～4 个 `{title, description}` | 关键发现 | 当前按突出维度生成；不是临床诊断结论。 |
+| `result.report.multimodal_observation` | `{consistency_score, consistency_level, summary}` | 多模态观察 | `unknown` 时分数为 `null`，不要展示为 0 分。 |
+| `result.report.trend_and_suggestions` | `{trend, trend_summary, suggestions}` | 趋势解读与建议 | `suggestions` 为 2～4 条；缺少纵向依据时趋势是 `unclear`。 |
+| `result.report.metadata` | 版本、评估 ID、生成时间 | 不必展示 | 供后端追踪；与顶层结果保持一致。 |
 | `result.risk.risk_level` | `low` / `medium` / `high` | 风险提示：低 / 中 / 高 | 独立的规则式风险识别。 |
 | `result.risk.risk_score` | 0～1 数值 | 可不展示 | 不是临床概率，也不要直接显示成“患病概率 50%”。 |
 | `result.risk.risk_reasons` | 字符串数组 | 风险原因 | 空数组时不显示该区块。 |
@@ -73,9 +80,12 @@
 ## 5. 交接验收
 
 - 用 [示例 JSON](examples/assessment_response.json) 能显示五维、关注指数、两套等级和生成时间；`student_ref: null`、空数组不显示成“null”或空白标签。
+- 能显示 `report` 的总体说明、重点方面、2 条以上关键发现、趋势解读和 2 条以上建议；`unknown` / `unclear` 如实展示，不虚构趋势或视觉一致性。
 - 页面能区分对话接口的本轮 `risk` 与评估接口的最终 `result.risk`。
 - 只传 `session_id` 即可触发有历史消息的文字评估；成功后可用 `result_id` 加 `session_id` 再次读取。
 - `503`、`404`、`422` 时展示明确错误，不显示上一份结果为本次结果。
 - 页面文案称“初步筛查”“关注提示”，不称“确诊”或“抑郁症严重程度”。演示数据只使用虚构对话。
 
 接口详情见 [API 数据协议](api_spec.md)，字段源代码见 `backend/models/evaluation.py`、`backend/models/responses.py`、`backend/models/states.py`。
+
+建议文案的方向参考 [NICE 儿童青少年抑郁指南](https://www.nice.org.uk/guidance/ng134/chapter/Recommendations) 与 [NIMH 青少年抑郁说明](https://www.nimh.nih.gov/health/publications/teen-depression)；本项目模板及评分阈值尚未经过临床效度验证。
