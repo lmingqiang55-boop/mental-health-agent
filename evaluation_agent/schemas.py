@@ -516,11 +516,11 @@ class MultimodalObservation(_SchemaBase):
     它**不代表诊断置信度**，也不表示用户"是否诚实"。
     """
 
-    consistency_score: Score0To100 = Field(
+    consistency_score: Score0To100 | None = Field(
         ...,
         description=(
-            "0-100 的整数一致性分数。分数越高，代表对话语言信息与视觉观察"
-            "的一致程度越高。注意方向与关注指数相反：这里分数高表示更一致。"
+            "0-100 的整数一致性分数；未计算或视觉数据不足时为 null。"
+            "分数越高表示语言与视觉观察越一致，不是诊断置信度。"
         ),
     )
     consistency_level: ConsistencyLevel = Field(

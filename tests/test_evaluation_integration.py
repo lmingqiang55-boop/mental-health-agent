@@ -135,6 +135,9 @@ def test_direct_input_preserves_independent_crisis_signal(evaluation_stub) -> No
     })
     assert response.status_code == 200
     assert response.json()["result"]["risk"]["risk_level"] == "high"
+    assert response.json()["result"]["report"]["key_findings"][0]["title"] == "安全提示"
+    assert "安全风险" in response.json()["result"]["report"]["overall_status"]["summary"]
+    assert "可信任的成年人" in response.json()["result"]["report"]["trend_and_suggestions"]["suggestions"][0]
 
 
 def test_assessment_result_can_be_read_by_its_public_id(evaluation_stub) -> None:

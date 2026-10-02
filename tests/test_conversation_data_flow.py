@@ -92,6 +92,18 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
     assert result["risk"]["risk_level"] == "medium"
     assert result["concern_index"] > 0
     assert result["assessment_method"] == "evaluation_agent"
+    report = result["report"]
+    assert report["overall_status"]["concern_index"] == result["concern_index"]
+    assert report["overall_status"]["level"] == result["overall_level"]
+    assert report["psychological_profile"] == result["psychological_profile"]
+    assert report["metadata"]["assessment_id"] == result["result_id"]
+    assert report["overall_status"]["summary"]
+    assert len(report["key_findings"]) >= 2
+    assert report["key_findings"][0]["title"] == "睡眠异常"
+    assert report["trend_and_suggestions"]["trend"] == "unclear"
+    assert len(report["trend_and_suggestions"]["suggestions"]) >= 2
+    assert report["multimodal_observation"]["consistency_level"] == "unknown"
+    assert report["multimodal_observation"]["consistency_score"] is None
     assert len(model_transport.requests) == 1
     model_prompt = model_transport.requests[0].json_body["input"]
     assert "用户：最近睡不好\n    〔视觉：效价=-0.70，参与度=0.10，有人脸〕" in model_prompt
@@ -114,6 +126,7 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
     history = client.get(f"/api/history/{session_id}").json()
     assert history["total"] == 1
     assert history["records"][0]["result"]["result_id"] == result["result_id"]
+    assert history["records"][0]["result"]["report"] == report
 
 
 def test_upstream_two_level_vision_reaches_actual_evaluation_client(monkeypatch) -> None:
@@ -148,6 +161,7 @@ def test_upstream_two_level_vision_reaches_actual_evaluation_client(monkeypatch)
     })
     assert response.status_code == 200, response.json()
     assert response.json()["result"]["concern_index"] > 0
+    assert "视觉" in response.json()["result"]["report"]["multimodal_observation"]["summary"]
 
     prompt = model_transport.requests[0].json_body["input"]
     assert "用户：最近睡不好\n    〔视觉：情绪=sad，效价=-0.40，有人脸〕" in prompt

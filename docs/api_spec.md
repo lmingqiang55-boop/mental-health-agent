@@ -342,6 +342,22 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
     "concern_index": 44,
     "overall_level": "mild_concern",
     "risk": { ... },
+    "report": {
+      "overall_status": { "level": "mild_concern", "concern_index": 44, "summary": "..." },
+      "psychological_profile": { ... },
+      "primary_concern": { "dimension": "sleep_energy", "description": "..." },
+      "key_findings": [
+        { "title": "...", "description": "..." },
+        { "title": "...", "description": "..." }
+      ],
+      "multimodal_observation": {
+        "consistency_score": null, "consistency_level": "unknown", "summary": "..."
+      },
+      "trend_and_suggestions": {
+        "trend": "unclear", "trend_summary": "...", "suggestions": ["...", "..."]
+      },
+      "metadata": { "schema_version": "1.0", "assessment_id": "...", "generated_at": "..." }
+    },
     "assessment_method": "evaluation_agent",
     "created_at": "..."
   }
@@ -360,9 +376,10 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 | `concern_index` | 五维派生的关注指数，0~100 |
 | `overall_level` | 关注等级 |
 | `risk` | 独立风险识别结果 |
+| `report` | 六个报告区块及技术元信息；完整结构见 [评估结果页面交接文档](assessment_output_page_handoff.md) |
 | `assessment_method` | 固定为 `evaluation_agent` |
 
-当前评估 Agent 只产生五维画像、关注指数和等级；文字报告、趋势分析和建议尚未实现。
+报告文案由后端按已计算分数生成。缺少前后对比时趋势为 `unclear`；没有可靠的视觉一致性计算时 `consistency_level` 为 `unknown`、`consistency_score` 为 `null`。以上响应片段省略了部分字段与数组项；可直接用于页面模拟的完整响应见 [示例 JSON](examples/assessment_response.json)。
 未配置 `DEEPSEEK_API_KEY` 或评估服务不可用时，接口返回
 `503 EVALUATION_UNAVAILABLE`，不会生成规则式六维结果。评估调用会向配置的
 DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音频和图像。

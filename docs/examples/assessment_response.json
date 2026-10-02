@@ -1,0 +1,74 @@
+{
+  "session_id": "7d63a2e1-9c44-4c96-a570-22efb1f42a18",
+  "status": "completed",
+  "result": {
+    "result_id": "asmt-20261001T102030-a1b2c3d4",
+    "session_id": "7d63a2e1-9c44-4c96-a570-22efb1f42a18",
+    "student_ref": null,
+    "psychological_profile": {
+      "emotion": 67,
+      "interest_motivation": 50,
+      "sleep_energy": 44,
+      "attention_thinking": 33,
+      "social_daily": 50
+    },
+    "concern_index": 54,
+    "overall_level": "moderate_concern",
+    "risk": {
+      "risk_level": "medium",
+      "risk_score": 0.5,
+      "risk_reasons": ["检测到值得进一步关注的表述"],
+      "risk_types": [],
+      "key_evidence": ["绝望"],
+      "requires_intervention": false
+    },
+    "report": {
+      "overall_status": {
+        "level": "moderate_concern",
+        "concern_index": 54,
+        "summary": "本次初步筛查显示“建议关注”。情绪状态方面的线索相对更突出，可进一步了解具体情况。"
+      },
+      "psychological_profile": {
+        "emotion": 67,
+        "interest_motivation": 50,
+        "sleep_energy": 44,
+        "attention_thinking": 33,
+        "social_daily": 50
+      },
+      "primary_concern": {
+        "dimension": "emotion",
+        "description": "情绪状态在五个维度中的关注分数最高（67/100），适合作为后续沟通时优先了解的方面。"
+      },
+      "key_findings": [
+        {
+          "title": "情绪状态",
+          "description": "本次对话在情绪状态方面有值得继续了解的线索；这个分数只反映当前对话，不代表诊断。"
+        },
+        {
+          "title": "兴趣与动力",
+          "description": "本次对话在兴趣与动力方面有值得继续了解的线索；这个分数只反映当前对话，不代表诊断。"
+        }
+      ],
+      "multimodal_observation": {
+        "consistency_score": null,
+        "consistency_level": "unknown",
+        "summary": "本次没有可用的视觉信息，仅依据对话文字作初步整理；无法判断语言与视觉信息的一致性。"
+      },
+      "trend_and_suggestions": {
+        "trend": "unclear",
+        "trend_summary": "一次对话缺少可靠的前后对比，暂无法判断状态变化方向。",
+        "suggestions": [
+          "可以把最近的情绪变化告诉一位信任的成年人或学校心理老师。",
+          "如果这些困扰持续存在或影响学习、生活，可以请家长或学校心理老师协助联系专业人员进一步评估。"
+        ]
+      },
+      "metadata": {
+        "schema_version": "1.0",
+        "assessment_id": "asmt-20261001T102030-a1b2c3d4",
+        "generated_at": "2026-10-01T10:20:30Z"
+      }
+    },
+    "assessment_method": "evaluation_agent",
+    "created_at": "2026-10-01T10:20:30Z"
+  }
+}
