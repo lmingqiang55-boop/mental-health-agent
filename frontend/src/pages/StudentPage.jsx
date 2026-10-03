@@ -5,6 +5,8 @@ import { CaptureController } from '../media/capture'
 import DeviceStatus from '../components/DeviceStatus'
 import AssessmentResultView from '../components/AssessmentResultView'
 
+const STUDENT_REF_KEY = 'mental-health-agent:student-ref:v1'
+
 export default function StudentPage() {
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState([])
@@ -32,6 +34,7 @@ export default function StudentPage() {
   const typingStartRef = useRef(null)
   const gestureRef = useRef(null)
   const stopSpeechRef = useRef(null)
+  const studentRefRef = useRef(null)
   if (!mediaRef.current) {
     mediaRef.current = new CaptureController(api, {
       camera: setCameraState, cameraError: setCameraError, recording: setRecordState,
@@ -55,8 +58,13 @@ export default function StudentPage() {
     setMessages([]); setInput(''); setTurnCount(0); setResult(null)
     setStage('exploration'); setRisk('low')
     try {
-      const data = await api.createSession()
+      if (!studentRefRef.current) {
+        try { studentRefRef.current = localStorage.getItem(STUDENT_REF_KEY) } catch { /* storage may be unavailable */ }
+      }
+      const data = await api.createSession(studentRefRef.current)
       if (flow !== flowRef.current) return
+      studentRefRef.current = data.student_ref
+      try { localStorage.setItem(STUDENT_REF_KEY, data.student_ref) } catch { /* keep it for this page only */ }
       mediaRef.current.resetSession(data.session_id)
       setSessionId(data.session_id)
     } catch (e) { if (flow === flowRef.current) setError(e.message) }

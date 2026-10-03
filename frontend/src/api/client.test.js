@@ -2,6 +2,20 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { api } from './client.js'
 
+test('session creation reuses the anonymous student reference', async () => {
+  const previous = globalThis.fetch
+  let body
+  globalThis.fetch = async (_, options) => {
+    body = JSON.parse(options.body)
+    return { ok: true, json: async () => ({ session_id: 'new-session', student_ref: body.student_ref }) }
+  }
+  try {
+    const response = await api.createSession('anon-123')
+    assert.equal(body.student_ref, 'anon-123')
+    assert.equal(response.student_ref, 'anon-123')
+  } finally { globalThis.fetch = previous }
+})
+
 test('multipart upload lets the browser supply its own boundary', async () => {
   const previous = globalThis.fetch
   let call

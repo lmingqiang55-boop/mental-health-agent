@@ -98,14 +98,18 @@ def add_follow_up_note(record_id: str,
 @router.get("/group-stats")
 def group_stats() -> dict:
     records = memory_store.list_all_records()
-    total = len(records)
+    # Each student contributes their latest assessment once, even when they
+    # have multiple results in the three-assessment memory.
+    latest_by_student = {record.student_ref: record for record in records}
+    current_records = list(latest_by_student.values())
+    total = len(current_records)
     if total == 0:
         return {"total_students": 0, "risk_distribution": {},
                 "dimension_averages": {}}
 
     distribution = {"low": 0, "medium": 0, "high": 0}
     dim_acc: dict[str, list[float]] = {}
-    for r in records:
+    for r in current_records:
         distribution[r.result.risk.risk_level.value] += 1
         for dimension, score in r.result.psychological_profile.model_dump().items():
             dim_acc.setdefault(dimension, []).append(score)

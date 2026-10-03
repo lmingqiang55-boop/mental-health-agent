@@ -81,11 +81,12 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
             session.turn_count = sum(
                 item.role == MessageRole.USER for item in session.conversation_history
             )
+        # A failed database write must not leave the session marked completed.
+        memory_store.save_result(result)
 
     updated = session_manager.modify_session(request.session_id, link)
     if updated is None:
         raise session_not_found()
-    memory_store.save_result(result)
     return AssessmentResponse(session_id=request.session_id, result=result)
 
 

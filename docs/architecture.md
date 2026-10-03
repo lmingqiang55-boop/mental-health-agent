@@ -12,7 +12,7 @@
 | 会话 | `backend/core/session_manager.py` | 原子修改、消息及幂等回执、TTL；进程内存 |
 | 对话 | `backend/core/dialogue_manager.py`、`backend/policy/` | 文本历史驱动策略动作、基础话术、独立规则式风险识别 |
 | 综合评估 | `backend/core/evaluation_engine.py`、`evaluation_agent/` | 对话原文及双层视觉输入、11 项评分、五维画像、关注指数 |
-| 报告与记录 | `backend/core/report_builder.py`、`memory_store.py` | 规则模板报告、结果索引及查询；进程内存 |
+| 报告与记录 | `backend/core/report_builder.py`、`memory_store.py` | 规则模板报告、结果索引及查询；每位匿名用户最近 3 次结果保存在本机 SQLite |
 | 教师与沟通 | `api/teacher.py`、`core/communication.py` | 记录列表、备注与沟通骨架 |
 
 ## 实时路径
@@ -57,4 +57,4 @@
 
 本期采用按钮录音，不实现 VAD 或流式 ASR。EmotiEffLib 只提供情绪/VA，未实现眼动、微表情和参与度时间模型；这些字段保持缺测。默认视觉 Mock 仅用于虚构数据演示；真实视觉需安装并配置 `VISION_PROVIDER=emotiefflib`，语音需 `ASR_PROVIDER=sensevoice`。
 
-会话和结果仍为单进程内存，重启清空；身份授权、持久化、专业危机响应与评分效度不在本轮修复范围。历史审查见 [2026-10-01 记录](prelaunch_audit_2026-10-01.md)。真人发音、摄像头光照/角度、不同浏览器编码器和全链路延迟仍须单独验收。
+会话仍为单进程内存，重启清空；评估结果持久保留最近 3 次，但匿名标识不是身份认证。沟通记录、身份授权、访问审计、专业危机响应与评分效度仍需单独完成。历史审查见 [2026-10-01 记录](prelaunch_audit_2026-10-01.md)。真人发音、摄像头光照/角度、不同浏览器编码器和全链路延迟仍须单独验收。

@@ -138,7 +138,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `session_id` | string | 会话 ID（UUID） |
-| `student_ref` | string \| null | 匿名学生标识 |
+| `student_ref` | string | 匿名学生标识；跨会话复用以读取同一人的最近 3 次评估 |
 | `conversation_history` | Message[] | 完整对话历史 |
 | `turn_count` | int | 已完成回合数 |
 | `current_stage` | SessionStage | 当前阶段 |
@@ -160,10 +160,17 @@ FollowUpStatus     none | pending | in_progress | resolved
 
 ### POST /api/session
 
-无请求体。
+首次可无请求体，服务端生成匿名 `student_ref`；同一用户下次新建会话时传回它：
 
 ```json
-{ "session_id": "b4fc1bdd-...", "status": "created" }
+{ "student_ref": "a1b2c3d4-..." }
+```
+
+现有页面把该标识保存在当前浏览器的 localStorage。它不是登录凭据，
+换浏览器或清除站点数据后会得到新标识。
+
+```json
+{ "session_id": "b4fc1bdd-...", "student_ref": "a1b2c3d4-...", "status": "created" }
 ```
 
 ### GET /api/session/{session_id}
@@ -438,11 +445,15 @@ DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音�
 
 ### GET /api/history/{student_ref}
 
+每次成功评估会自动保存完整结果到本机 SQLite。每个 `student_ref` 只保留最近
+3 次，第四次保存时移除最早一次；后端重启后仍可查询。历史结果不会自动作为
+本次评估的打分依据。数据库位于未纳入 Git 的 `data/evaluation_memory.sqlite3`。
+
 ```json
 {
   "student_ref": "...",
   "records": [ { "record_id": "...", "result": {...}, ... } ],
-  "total": 1
+  "total": 3
 }
 ```
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter
 from backend.api.errors import session_not_found
 from backend.core.session_manager import session_manager
 from backend.models.enums import ConsentStatus
-from backend.models.requests import ConsentRequest
+from backend.models.requests import ConsentRequest, CreateSessionRequest
 from backend.models.responses import (
     ConsentResponse,
     CreateSessionResponse,
@@ -18,9 +18,13 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 
 
 @router.post("", response_model=CreateSessionResponse)
-def create_session() -> CreateSessionResponse:
-    session = session_manager.create_session()
-    return CreateSessionResponse(session_id=session.session_id)
+def create_session(request: CreateSessionRequest | None = None) -> CreateSessionResponse:
+    session = session_manager.create_session(
+        student_ref=request.student_ref if request else None
+    )
+    return CreateSessionResponse(
+        session_id=session.session_id, student_ref=session.student_ref
+    )
 
 
 @router.get("/{session_id}", response_model=SessionState)

@@ -32,8 +32,9 @@ class SessionManager:
             self._purge_expired_locked()
             if len(self._sessions) >= self._max:
                 self._evict_oldest_locked()
+            session_id = str(uuid4())
             session = SessionState(
-                session_id=str(uuid4()), student_ref=student_ref)
+                session_id=session_id, student_ref=student_ref or session_id)
             self._sessions[session.session_id] = session
             return session.model_copy(deep=True)
 

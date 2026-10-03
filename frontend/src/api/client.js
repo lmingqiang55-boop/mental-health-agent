@@ -18,7 +18,10 @@ async function request(path, options = {}) {
 
 export const api = {
   // Session
-  createSession: () => request('/api/session', { method: 'POST' }),
+  createSession: (studentRef = null) => request('/api/session', {
+    method: 'POST',
+    ...(studentRef ? { body: JSON.stringify({ student_ref: studentRef }) } : {}),
+  }),
   getSession: (id) => request(`/api/session/${id}`),
   deleteSession: (id) => request(`/api/session/${id}`, { method: 'DELETE' }),
   updateConsent: (id, granted, scope = []) =>

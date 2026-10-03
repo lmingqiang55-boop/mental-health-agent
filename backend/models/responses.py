@@ -19,6 +19,7 @@ from backend.models.states import (
 
 class CreateSessionResponse(BaseModel):
     session_id: str
+    student_ref: str
     status: str = "created"
 
 

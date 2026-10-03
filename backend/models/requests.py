@@ -7,6 +7,13 @@ from evaluation_agent.inputs import EvaluationInput
 from backend.models.states import AudioState, SpeechMetadata, VisionState
 
 
+class CreateSessionRequest(BaseModel):
+    # Pseudonymous identifier reused across sessions; it is not an auth token.
+    student_ref: str | None = Field(
+        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$"
+    )
+
+
 class ChatRequest(BaseModel):
     session_id: str
     text: str = Field(min_length=1, max_length=4000)

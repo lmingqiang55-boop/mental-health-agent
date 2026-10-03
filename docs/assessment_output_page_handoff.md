@@ -23,7 +23,7 @@
 | --- | --- | --- | --- |
 | `result.result_id` | 字符串 | 不必直接展示 | 保存下来，供结果详情接口查询。 |
 | `result.session_id` | UUID 字符串 | 不必直接展示 | 与响应外层 `session_id` 相同。 |
-| `result.student_ref` | 字符串或 `null` | 不必直接展示 | 当前公开的创建会话接口不传学生标识，正常页面流程中通常为 `null`。 |
+| `result.student_ref` | 匿名字符串 | 不必直接展示 | 同一浏览器跨会话复用，可查询最近 3 次结果。 |
 | `result.psychological_profile.emotion` | 0～100 整数 | 情绪状态 | 分数越高，相关信号越突出。 |
 | `result.psychological_profile.interest_motivation` | 0～100 整数 | 兴趣与动力 | 同上。 |
 | `result.psychological_profile.sleep_energy` | 0～100 整数 | 睡眠与精力 | 同上。 |
@@ -61,7 +61,7 @@
 
 当前页面流程（2026-10-03）：
 
-1. `POST /api/session`，无请求体，得到 `session_id`。
+1. 首次 `POST /api/session` 可无请求体，得到 `session_id` 和匿名 `student_ref`；同一浏览器新建会话时提交 `{ "student_ref": "..." }`。
 2. 每轮调用 `POST /api/chat`，请求体为 `{ "session_id": "...", "text": "..." }`。页面会先按输入/录音区间调用 `/api/vision/segment`，发送冻结的 `vision_snapshot` 和 `utterance_id`；录音路径另外携带 `speech`。响应中的 `reply` 是对话回复，`risk` 是**本轮**风险提示，不是最终评估结果。
 3. 用户明确点击“生成初步结果”后，调用 `POST /api/assessment`，请求体最简单为 `{ "session_id": "..." }`。对话不会自动触发最终评估；至少需要一条已保存的消息。
 4. 请求成功时显示 `response.result`，保存 `result_id` 和 `session_id`。再次取同一结果：`GET /api/assessment/result/{result_id}?session_id={session_id}`。该接口返回与第 3 步相同的外层结构。
@@ -74,12 +74,12 @@
 
 - 成功响应才有 `status: "completed"` 和 `result`；接口没有 `pending` 的评估结果对象。请求处理中由页面自行显示加载状态，并阻止重复触发。重复调用 `POST /api/assessment` 会生成另一条评估记录。
 - 统一错误体形如 `{ "error": { "code": "...", "message": "..." } }`。常见错误：`404 SESSION_NOT_FOUND`（会话不存在或过期）、`404 RESULT_NOT_FOUND`（结果 ID 与会话不匹配或不存在）、`422 INVALID_EVALUATION_INPUT`（例如空会话）、`422 VALIDATION_ERROR`（请求字段不合法）、`503 EVALUATION_UNAVAILABLE`（评估模型配置缺失或不可用）。`POST /api/chat` 还可能返回 `503 POLICY_UNAVAILABLE`。
-- `GET /api/history/{student_ref}` 返回 `{ "student_ref": "...", "records": [...], "total": 数字 }`。当前公开的创建会话接口不会指定 `student_ref`，记录暂以 `session_id` 为查询键；不同会话不会自动归到同一个学生名下。
-- 会话与评估记录目前保存在后端进程内存里。会话有约 2 小时 TTL；后端重启后历史记录清空。不要把这一版页面做成依赖永久历史数据的流程。
+- `GET /api/history/{student_ref}` 返回 `{ "student_ref": "...", "records": [...], "total": 数字 }`。页面保留 `POST /api/session` 返回的匿名标识，并在新会话请求中复用；每人只返回最近 3 次评估。
+- 会话仍保存在后端进程内存里，约 2 小时 TTL；评估结果保存在本机 SQLite，后端重启后仍在。清除浏览器数据会丢失该浏览器保存的匿名标识，尚无账号找回机制。
 
 ## 5. 交接验收
 
-- 用 [示例 JSON](examples/assessment_response.json) 能显示五维、关注指数、两套等级和生成时间；`student_ref: null`、空数组不显示成“null”或空白标签。
+- 用 [示例 JSON](examples/assessment_response.json) 能显示五维、关注指数、两套等级和生成时间；空数组不显示成空白标签。
 - 能显示 `report` 的总体说明、重点方面、2 条以上关键发现、趋势解读和 2 条以上建议；`unknown` / `unclear` 如实展示，不虚构趋势或视觉一致性。
 - 页面能区分对话接口的本轮 `risk` 与评估接口的最终 `result.risk`。
 - 只传 `session_id` 即可触发有历史消息的文字评估；成功后可用 `result_id` 加 `session_id` 再次读取。

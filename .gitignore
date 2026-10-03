@@ -19,6 +19,7 @@ env/
 .DS_Store
 Thumbs.db
 logs/
+data/
 _tmp_envs/
 scripts/_prompt_samples/
 
