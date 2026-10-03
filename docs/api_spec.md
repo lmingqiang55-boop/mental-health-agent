@@ -339,8 +339,8 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 相同的 `VisionState`，并将原始帧丢弃。帧接口写入检测器返回的完整快照，
 不会把缺失字段与上一帧做 merge；没有检测到人脸时，情绪、VA 和参与度等字段
 会返回 `null`。图片解码后的像素数超过 `1920×1080` 时返回 `422 INVALID_FRAME`。
-默认 provider 为 `mock`；启用真实模型需安装
-`requirements-vision.txt` 并设置 `VISION_PROVIDER=emotiefflib`。
+默认 provider 为 `mock`；统一 Conda 环境已安装真实视觉模型所需的依赖，
+启用时设置 `VISION_PROVIDER=emotiefflib`。安装方式见 [README](../README.md#本地运行)。
 
 ---
 

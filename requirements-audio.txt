@@ -1,8 +1,0 @@
-# Install the matching torch / torchaudio pair first (CPU or CUDA wheels).
-# Verified versions and commands are documented in docs/speech_recognition.md.
-torch==2.8.0
-torchaudio==2.8.0
-funasr==1.4.16
-modelscope==1.40.1
-av==18.1.0
-sentencepiece==0.2.2

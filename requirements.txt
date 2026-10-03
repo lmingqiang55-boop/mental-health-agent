@@ -1,13 +1,31 @@
-fastapi>=0.115.7,<1
-# MultiPartParser's max_part_size constructor argument requires Starlette 0.44+.
-starlette>=0.44.0,<2
-uvicorn>=0.30,<1
-pydantic>=2.8,<3
-pytest>=8,<10
-httpx>=0.27,<1
-Pillow>=10,<13
+# Team baseline: Windows x64, Python 3.11.16, NVIDIA GPU / CUDA 12.8.
+# Pin direct dependencies; transitive dependencies are resolved by pip.
+--index-url https://pypi.org/simple
+--extra-index-url https://download.pytorch.org/whl/cu128
 
-# Dialogue Agent (DeepSeek)
-openai>=1.0
-python-dotenv>=1.0
-python-multipart>=0.0.20,<1
+# Web service and shared tests.
+fastapi==0.141.1
+# MultiPartParser's max_part_size constructor argument requires Starlette 0.44+.
+starlette==1.7.0
+uvicorn==0.54.0
+pydantic==2.13.5
+pytest==9.1.1
+httpx==0.28.1
+Pillow==12.3.0
+
+# Dialogue and evaluation agents (DeepSeek).
+openai==3.23.0
+python-dotenv==1.2.4
+python-multipart==0.0.32
+
+# Real camera emotion backend; installed for every team member.
+emotiefflib==1.1.1
+opencv-python==4.14.0.94
+
+# Whole-recording ASR: the exact CUDA builds must match.
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+funasr==1.4.16
+modelscope==1.40.1
+av==18.1.0
+sentencepiece==0.2.2

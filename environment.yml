@@ -1,0 +1,9 @@
+name: mental-health-agent
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11.16
+  - pip=26.2.1
+  - pip:
+      - -r requirements.txt

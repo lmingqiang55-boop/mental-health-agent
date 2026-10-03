@@ -16,19 +16,20 @@ SenseVoice 的默认自动语言模式也通过。其他发音、设备和噪声
 
 ## 安装与启动
 
-在项目目录使用 Miniforge 环境：
+团队统一使用 Windows x64 + NVIDIA GPU 环境，Miniforge 和 Anaconda 均可。
+在项目目录首次安装完整环境（含语音、视觉及后端依赖）：
 
 ```powershell
+conda env create -f environment.yml
 conda activate mental-health-agent
-python -m pip install -r requirements.txt
-# NVIDIA GPU：先从官方源安装对应的一对 CUDA 包。
-python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-python -m pip install -r requirements-audio.txt
+python -m pip check
 ```
 
-CPU 安装把第二条 pip 命令的 index-url 改为 `https://download.pytorch.org/whl/cpu`。
-不要混用不同版本的 torch、torchaudio；已有可用包时先核对环境，不要求更换其他
-模块的依赖。PyAV 的 Windows wheel 自带 FFmpeg 库，无需设置外部 ffmpeg 路径。
+统一清单已固定 `torch==2.8.0+cu128` 和 `torchaudio==2.8.0+cu128`，
+并配置官方 CUDA 12.8 wheel 源，无需另行安装 CPU 或 CUDA 版。
+已有同名环境的检查与更新步骤见 [README](../README.md#本地运行)。
+正式功能只使用统一的 `requirements.txt`。PyAV 的 Windows wheel 自带
+FFmpeg 库，无需设置外部 ffmpeg 路径。
 
 在本地 `.env` 配置 `ASR_PROVIDER=sensevoice`、`ASR_DEVICE=cuda:0`（或 `cpu`），
 再启动服务。应用启动和 SenseVoice 基准脚本会从项目根目录读取 `.env`；
@@ -205,7 +206,7 @@ python -m scripts.benchmark_asr --device cuda:0 --language zh --repeat 3 samples
 生产服务无需安装对照依赖；模型由 `--model-cache` 指定缓存位置：
 
 ```powershell
-python -m pip install -r requirements-audio-compare.txt
+python -m pip install --index-url https://pypi.org/simple faster-whisper==1.2.1 ctranslate2==4.8.2
 python -m scripts.benchmark_whisper --model small --model-cache models/whisper --revision 536b0662742c02347bc0e980a01041f333bce120 --device cuda --language zh --repeat 3 samples/3s.wav samples/10s.wav samples/30s.wav
 ```
 

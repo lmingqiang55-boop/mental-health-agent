@@ -67,7 +67,7 @@ class EmotiEffLibVisionDetector(VisionDetector):
             from emotiefflib.facial_analysis import EmotiEffLibRecognizer
         except ImportError as exc:
             raise RuntimeError(
-                "EmotiEffLib 未安装，请执行 pip install -r requirements-vision.txt"
+                "EmotiEffLib 未安装，请先激活项目环境，再执行 python -m pip install -r requirements.txt"
             ) from exc
         self.model_name = model_name
         self._inference_lock = RLock()
@@ -84,7 +84,7 @@ class EmotiEffLibVisionDetector(VisionDetector):
                 if self._face_cascade.empty():
                     raise RuntimeError("OpenCV 人脸检测权重加载失败。")
         except ImportError:
-            raise RuntimeError("OpenCV 未安装，请安装 requirements-vision.txt。")
+            raise RuntimeError("OpenCV 未安装，请先激活项目环境，再执行 python -m pip install -r requirements.txt。")
 
     def analyze_frame(self, frame: Any | None = None) -> VisionState:
         # Haar cascade and lazy model state must not be shared concurrently.

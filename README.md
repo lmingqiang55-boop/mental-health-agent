@@ -6,7 +6,7 @@
 
 **语音与摄像头对接已接入页面（2026-10-03）。** 当前支持文字输入、按住/松开完整录音、语音与录音区间视觉聚合、聊天去重、失败重试和逐句视觉会话汇总。摄像头开启/关闭及权限等待取消已处理；最终评估保留原录音信息和冻结的视觉快照。具体行为与验收边界见 [摄像头与录音对接](docs/vision_alignment.md)。
 
-保留 FunASR + SenseVoiceSmall 和可选 EmotiEffLib，当前没有自动 VAD、流式 ASR、眼动或微表情模型。历史语音识别质量实测见 [2026-10-02 验证记录](docs/speech_validation_2026-10-02.md)。页面联调和自动化测试不能替代真实麦克风、摄像头的质量验收。[三人协作分工](docs/三人协作与接口分工_v3.md)已更新；实际协议以 [API 数据协议](docs/api_spec.md) 为准。
+保留 FunASR + SenseVoiceSmall 和 EmotiEffLib，统一环境默认安装语音与视觉依赖；运行时通过 `.env` 启用真实模型。当前没有自动 VAD、流式 ASR、眼动或微表情模型。历史语音识别质量实测见 [2026-10-02 验证记录](docs/speech_validation_2026-10-02.md)。页面联调和自动化测试不能替代真实麦克风、摄像头的质量验收。[三人协作分工](docs/三人协作与接口分工_v3.md)已更新；实际协议以 [API 数据协议](docs/api_spec.md) 为准。
 
 ## 队员 B 需要交付什么
 
@@ -104,7 +104,7 @@ Content-Type: application/json
 
 ## 对话数据流验收（MVB）
 
-安装 `requirements.txt` 后运行：
+按下文创建并激活统一 Conda 环境后运行：
 
 ```powershell
 python -m pytest -q tests/test_conversation_data_flow.py
@@ -116,20 +116,100 @@ python -m pytest -q tests/test_conversation_data_flow.py
 
 ## 本地运行
 
+### 环境要求
+
+- Windows x64 + NVIDIA 显卡，驱动需支持 CUDA 12.8；可用 `nvidia-smi` 检查驱动状态。
+- Miniforge 或 Anaconda 均可，团队统一使用 Python 3.11.16、pip 26.2.1。
+- PyTorch 和 torchaudio 均为 2.8.0+cu128；安装包含 CUDA 运行库，无需另装 CUDA Toolkit。
+- 前端统一推荐 Node.js 22.14.0、npm 10.9.2，分别用 `node --version`、`npm --version` 检查。
+
+`environment.yml` 固定 Python、pip 和 Conda 软件源，并引用 `requirements.txt`。
+后者是正式功能依赖的唯一来源，包含后端、语音、视觉及基础测试包，统一使用
+PyPI 和官方 PyTorch CUDA 12.8 wheel 源。直接依赖已固定版本，间接依赖由 pip
+解析，因此这不是完整锁文件，不能保证每次安装的所有间接依赖完全一致。
+不要在 `base` 中安装项目包。执行以下命令前，切换到 `mental-health-agent` 项目目录。
+
+### 首次安装
+
 ```powershell
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-python -m uvicorn backend.main:app --reload
+conda env create -f environment.yml
+conda activate mental-health-agent
+python --version
+python -m pip check
+python -c "import torch, torchaudio; print(torch.__version__, torchaudio.__version__); print('CUDA:', torch.version.cuda, 'available:', torch.cuda.is_available())"
+if (-not (Test-Path -LiteralPath .env)) {
+    Copy-Item -LiteralPath .env.example -Destination .env
+}
 ```
+
+Python 应为 3.11.16，torch 和 torchaudio 应为 2.8.0+cu128，CUDA 应为 12.8 且
+`available: True`。如果为 False，先检查驱动、显卡和当前 Python 环境。
+Windows 下可在 Miniforge/Anaconda Prompt 中使用 Conda；上面的 `.env` 文件复制
+命令使用 PowerShell，且不会覆盖已有配置。
+
+### 已有同名环境
+
+先检查现有环境，再按统一配置更新；不需要删除环境。更新会调整 Python、pip
+和直接依赖版本，已有其他项目使用的包应放在其他环境中。
+
+```powershell
+conda env list
+conda list -n mental-health-agent
+conda env update -n mental-health-agent -f environment.yml
+conda activate mental-health-agent
+python --version
+python -m pip check
+```
+
+后端、语音、视觉及基础测试依赖只维护 `requirements.txt`，通过
+`environment.yml` 一次安装。faster-whisper 仅用于可选对照，不属于正式功能；
+确需对照时按 [语音对照说明](docs/speech_recognition.md) 安装。
+
+### 启用真实语音、视觉与外部模型
+
+统一环境已安装语音与视觉所需的包。在本地 `.env` 中设置：
+
+```dotenv
+ASR_PROVIDER=sensevoice
+ASR_DEVICE=cuda:0
+VISION_PROVIDER=emotiefflib
+```
+
+`.env.example` 仍保留 `ASR_PROVIDER=disabled`、`ASR_DEVICE=cpu`、
+`VISION_PROVIDER=mock` 的默认值；复制文件后需要手动启用真实功能。
+首次使用会下载 SenseVoice 和 EmotiEffLib 模型，需联网并预留缓存空间。
+`GET /api/audio/status` 的 `state=ready` 才表示语音模型可用；详细配置见
+[语音识别说明](docs/speech_recognition.md)。
 
 在本地 `.env` 填写真实 `DEEPSEEK_API_KEY`，用于综合评估；不要提交 `.env`。对话动作还需要启动已训练的决策模型服务，并在 `.env` 设置 `POLICY_API_BASE_URL` 等参数。评估 Agent 的 `DEEPSEEK_API_STYLE`、`DEEPSEEK_MAX_OUTPUT_TOKENS`、`DEEPSEEK_TIMEOUT_SECONDS` 等配置见 `.env.example`。缺少密钥或模型服务不可用时，评估接口返回 `503 EVALUATION_UNAVAILABLE`，不会回退到旧六维规则。
 
-前端运行：
+### 每次启动后端
+
+```powershell
+conda activate mental-health-agent
+python -m uvicorn backend.main:app --reload
+```
+
+后端地址：<http://127.0.0.1:8000>，API 文档：<http://127.0.0.1:8000/docs>。
+语音模型会在启动阶段加载；`--reload` 重载时也会重新加载模型。
+
+### 前端安装与启动
+
+另开终端，在项目目录执行；首次安装或 `package-lock.json` 更新后运行 `npm ci`，
+日常启动只需在 `frontend` 目录运行 `npm run dev`。前端包由 npm 管理，不放入
+Python 依赖清单。
 
 ```powershell
 Set-Location frontend
 npm ci
 npm run dev
 ```
+
+前端地址：<http://127.0.0.1:5173>。
+
+### 测试与构建
+
+后端在已激活的 Conda 环境中执行 `python -m pytest -q`；前端在 `frontend`
+目录执行 `npm test` 和 `npm run build`。离线测试不要求真实模型服务、密钥或设备。
 
 后端接口详情见 [API 数据协议](docs/api_spec.md)，结果页字段与展示交接见 [评估结果页面交接文档](docs/assessment_output_page_handoff.md)，当前模块关系见 [架构说明](docs/architecture.md)。
