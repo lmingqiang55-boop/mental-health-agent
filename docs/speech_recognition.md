@@ -27,7 +27,7 @@ python -m pip check
 
 统一清单已固定 `torch==2.8.0+cu128` 和 `torchaudio==2.8.0+cu128`，
 并配置官方 CUDA 12.8 wheel 源，无需另行安装 CPU 或 CUDA 版。
-已有同名环境的检查与更新步骤见 [README](../README.md#本地运行)。
+已有同名环境的检查与更新步骤见 [环境配置与验证](environment.md#更新环境)。
 正式功能只使用统一的 `requirements.txt`。PyAV 的 Windows wheel 自带
 FFmpeg 库，无需设置外部 ffmpeg 路径。
 
