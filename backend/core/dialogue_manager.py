@@ -20,7 +20,7 @@ from backend.core.risk_engine import assess_risk
 from backend.llm.client import get_llm_client
 from backend.models.enums import SessionStage
 from backend.models.responses import DialogueResponsePayload
-from backend.models.states import RiskResult, SessionState, VisionState
+from backend.models.states import RiskResult, SessionState, VisionState, _now
 from backend.policy.client import (
     HttpPolicyClient,
     PolicyClientError,
@@ -46,10 +46,17 @@ class DialogueManager:
     def process_turn(self, user_text: str, session: SessionState,
                      vision_snapshot: VisionState | None = None,
                      *, use_latest_states: bool = True) -> DialogueResponsePayload:
+        latest = session.latest_vision_state if use_latest_states else None
+        if latest is not None:
+            # Only recent, timezone-aware observations can inform a legacy text turn.
+            stamp = latest.timestamp
+            age = (_now() - stamp).total_seconds() if stamp.tzinfo is not None else -1
+            if not 0 <= age <= 5:
+                latest = None
         fused = fuse_turn(
             user_text,
             vision_snapshot if vision_snapshot is not None else (
-                session.latest_vision_state if use_latest_states else None),
+                latest),
             session.latest_audio_state if use_latest_states else None,
         )
         risk = assess_risk(fused)

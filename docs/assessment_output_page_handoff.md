@@ -59,14 +59,14 @@
 
 ## 3. 页面如何取到结果
 
-当前文字对话流程：
+当前页面流程（2026-10-03）：
 
 1. `POST /api/session`，无请求体，得到 `session_id`。
-2. 每轮调用 `POST /api/chat`，请求体为 `{ "session_id": "...", "text": "..." }`。可选的 `vision_snapshot` 由上游负责与该句话对齐。响应中的 `reply` 是对话回复，`risk` 是**本轮**风险提示，不是最终评估结果。
+2. 每轮调用 `POST /api/chat`，请求体为 `{ "session_id": "...", "text": "..." }`。页面会先按输入/录音区间调用 `/api/vision/segment`，发送冻结的 `vision_snapshot` 和 `utterance_id`；录音路径另外携带 `speech`。响应中的 `reply` 是对话回复，`risk` 是**本轮**风险提示，不是最终评估结果。
 3. 用户明确点击“生成初步结果”后，调用 `POST /api/assessment`，请求体最简单为 `{ "session_id": "..." }`。对话不会自动触发最终评估；至少需要一条已保存的消息。
 4. 请求成功时显示 `response.result`，保存 `result_id` 和 `session_id`。再次取同一结果：`GET /api/assessment/result/{result_id}?session_id={session_id}`。该接口返回与第 3 步相同的外层结构。
 
-上游多模态模块也可以在 `POST /api/assessment` 中提供完整的 `evaluation_input`（逐句对话与句级视觉快照、整段视觉汇总）。单纯上传摄像头帧不会自动把帧变成逐句快照或最终评估的视觉汇总；未接入对齐数据时，页面不要宣称结果已经综合了摄像头信息。
+上游多模态模块也可以在 `POST /api/assessment` 中提供完整的 `evaluation_input`（逐句对话与句级视觉快照、整段视觉汇总）。单纯上传帧仍不会成为句级证据；当前页面已经调用区间聚合并把快照绑定到消息。后端在简单评估时从这些句级快照生成汇总；没有可用帧时保持缺测。完整评估省略快照不会擦除既有快照，改写已绑定快照返回 HISTORY_CONFLICT。参见 [当前对接说明](vision_alignment.md)。
 
 现有前端已经封装 `api.triggerAssessment(sessionId)`、`api.getResult(resultId, sessionId)`，并有 `AssessmentResultView` 组件。页面同学可以从这些现有入口继续做展示，不需要另造接口。
 

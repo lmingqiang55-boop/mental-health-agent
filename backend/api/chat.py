@@ -54,13 +54,23 @@ def chat(request: ChatRequest) -> ChatResponse:
                     "code": "UTTERANCE_CONFLICT",
                     "message": "该标识已存在于导入历史中，无法作为新聊天重复提交。",
                 })
+        segment = session.vision_segments.get(request.utterance_id)
+        if segment is not None:
+            supplied = request.vision_snapshot.model_dump(exclude={"timestamp"}) if request.vision_snapshot else None
+            frozen = segment.vision_snapshot.model_dump(exclude={"timestamp"}) if segment.vision_snapshot else None
+            wrong_interval = request.speech is not None and (
+                request.speech.capture_id, request.speech.recording_start_ms,
+                request.speech.recording_end_ms) != (segment.capture_id, segment.start_ms, segment.end_ms)
+            if supplied != frozen or wrong_interval:
+                raise HTTPException(status_code=409, detail={
+                    "code": "UTTERANCE_CONFLICT", "message": "聊天输入必须复用已冻结的本句视觉结果和时间区间。"})
         session.conversation_history.append(Message(
             role=MessageRole.USER, content=text,
             vision_snapshot=request.vision_snapshot,
             utterance_id=request.utterance_id, speech=request.speech,
         ))
         kwargs = {"vision_snapshot": request.vision_snapshot}
-        if request.speech is not None:
+        if request.speech is not None or "vision_snapshot" in request.model_fields_set:
             kwargs["use_latest_states"] = False
         payload = dialogue_manager.process_turn(text, session, **kwargs)
         session.conversation_history.append(Message(

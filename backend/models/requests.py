@@ -1,6 +1,6 @@
 """API 请求体模型。路由层只做校验和转发，不在这里写业务逻辑。"""
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from evaluation_agent.inputs import EvaluationInput
 
@@ -33,8 +33,43 @@ class VisionUpsertRequest(BaseModel):
 
 class VisionFrameRequest(BaseModel):
     """浏览器摄像头帧，服务端即时分析且不落盘。"""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     session_id: str
     image_base64: str = Field(min_length=32, max_length=3_000_000)
+    frame_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"\S")
+    capture_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"\S")
+    captured_at_ms: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def complete_timing(self) -> "VisionFrameRequest":
+        supplied = [self.frame_id is not None, self.capture_id is not None,
+                    self.captured_at_ms is not None]
+        if any(supplied) and not all(supplied):
+            raise ValueError("Timed frames require frame_id, capture_id and captured_at_ms")
+        return self
+
+
+class VisionCaptureRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session_id: str
+    capture_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
+    generation: int = Field(ge=0)
+    active: bool
+
+
+class VisionSegmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    session_id: str
+    utterance_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
+    capture_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
+    start_ms: float = Field(ge=0)
+    end_ms: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def bounded_interval(self) -> "VisionSegmentRequest":
+        if not 0 < self.end_ms - self.start_ms <= 60_000:
+            raise ValueError("Vision interval must be positive and at most 60 seconds")
+        return self
 
 
 class AudioUpsertRequest(BaseModel):

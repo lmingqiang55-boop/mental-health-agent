@@ -10,6 +10,8 @@ A/C 不直接调用检测器，只通过 API 或对话流程读取 VisionState�
 import io
 import os
 import random
+import math
+from threading import RLock
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -68,20 +70,28 @@ class EmotiEffLibVisionDetector(VisionDetector):
                 "EmotiEffLib 未安装，请执行 pip install -r requirements-vision.txt"
             ) from exc
         self.model_name = model_name
+        self._inference_lock = RLock()
         self._recognizer = EmotiEffLibRecognizer(engine=engine, model_name=model_name)
         try:
             import cv2
             cascade_type = getattr(cv2, "CascadeClassifier", None)
             if cascade_type is None:
-                self._face_cascade = None
+                raise RuntimeError("OpenCV 人脸检测不可用。")
             else:
                 self._face_cascade = cascade_type(
                     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
                 )
+                if self._face_cascade.empty():
+                    raise RuntimeError("OpenCV 人脸检测权重加载失败。")
         except ImportError:
-            self._face_cascade = None
+            raise RuntimeError("OpenCV 未安装，请安装 requirements-vision.txt。")
 
     def analyze_frame(self, frame: Any | None = None) -> VisionState:
+        # Haar cascade and lazy model state must not be shared concurrently.
+        with self._inference_lock:
+            return self._analyze_frame(frame)
+
+    def _analyze_frame(self, frame: Any | None = None) -> VisionState:
         image = self._decode_frame(frame)
         if image is None:
             return VisionState(face_detected=False)
@@ -114,6 +124,8 @@ class EmotiEffLibVisionDetector(VisionDetector):
 
     @staticmethod
     def _clip(value: float, low: float, high: float) -> float:
+        if not math.isfinite(value):
+            raise ValueError("视觉模型返回非有限数值。")
         return round(max(low, min(high, value)), 4)
 
     @staticmethod
@@ -133,7 +145,7 @@ class EmotiEffLibVisionDetector(VisionDetector):
 
     def _crop_largest_face(self, image):
         if self._face_cascade is None:
-            return image
+            raise RuntimeError("人脸检测不可用，不能将整张场景图作为人脸。")
         import cv2
 
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -159,24 +171,29 @@ class EmotiEffLibVisionDetector(VisionDetector):
 
 
 _detector: VisionDetector | None = None
+_detector_lock = RLock()
 
 
 def get_detector() -> VisionDetector:
     """按 ``VISION_PROVIDER`` 返回检测器，默认是 Mock。"""
     global _detector
-    if _detector is None:
-        provider = os.getenv("VISION_PROVIDER", "mock").strip().lower()
-        if provider == "emotiefflib":
-            _detector = EmotiEffLibVisionDetector(
-                model_name=os.getenv("VISION_MODEL", "enet_b0_8_va_mtl"),
-                engine=os.getenv("VISION_ENGINE", "onnx"),
-            )
-        else:
-            _detector = MockVisionDetector()
-    return _detector
+    with _detector_lock:
+        if _detector is None:
+            provider = os.getenv("VISION_PROVIDER", "mock").strip().lower()
+            if provider == "emotiefflib":
+                _detector = EmotiEffLibVisionDetector(
+                    model_name=os.getenv("VISION_MODEL", "enet_b0_8_va_mtl"),
+                    engine=os.getenv("VISION_ENGINE", "onnx"),
+                )
+            elif provider == "mock":
+                _detector = MockVisionDetector()
+            else:
+                raise ValueError("Unsupported VISION_PROVIDER")
+        return _detector
 
 
 def set_detector(detector: VisionDetector) -> None:
     """注入自定义检测器（B 接入真实模型时使用）。"""
     global _detector
-    _detector = detector
+    with _detector_lock:
+        _detector = detector

@@ -19,7 +19,7 @@ export default function DeviceStatus({ visionEnabled, audioEnabled, cameraError 
         </span>
       </div>
       <p className="device-hint">
-        {cameraError ? '摄像头分析暂不可用，仍可继续文字筛查。' : '摄像头按间隔上传压缩帧，后端可配置 Mock 或 EmotiEffLib。'}
+        {cameraError ? '摄像头分析暂不可用，仍可继续筛查。' : '视觉结果按发言区间绑定；未采集到的指标不会填成零。'}
       </p>
     </section>
   )

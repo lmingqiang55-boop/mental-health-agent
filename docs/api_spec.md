@@ -1,4 +1,4 @@
-# API 数据协议 v0.3
+# API 数据协议 v0.4（2026-10-03）
 
 基础地址：`http://127.0.0.1:8000`，交互文档：`/docs`。
 
@@ -18,6 +18,8 @@
 | POST | `/api/chat` | 提交一轮文字对话 |
 | POST | `/api/vision` | 提交句级视觉状态（merge） |
 | POST | `/api/vision/frame` | 提交一张摄像头帧并即时分析 |
+| POST | `/api/vision/capture` | 开启/关闭采集，使用递增代次隔离旧请求 |
+| POST | `/api/vision/segment` | 按发言时间区间聚合并冻结视觉快照 |
 | POST | `/api/audio` | 兼容现有实时音频状态；队员 B 的评估交接不需要调用 |
 | POST | `/api/audio/transcribe` | 上传完整录音，返回原文与采集时间；不创建聊天回合 |
 | GET | `/api/audio/status` | 查看 ASR 就绪状态和录音限制 |
@@ -83,7 +85,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `gaze_focus` | float \| null | 0~1 | 注视点稳定度 |
 | `micro_expression_intensity` | float \| null | 0~1 | 微表情强度 |
 | `face_detected` | bool | — | 是否检测到人脸 |
-| `timestamp` | datetime | — | 采样时间 |
+| `timestamp` | datetime | — | 服务端 UTC 状态时间，不能替代前端 captured_at_ms |
 
 ### AudioState（现有可选状态，不属于评估输入）
 
@@ -96,13 +98,13 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `pitch_mean` | float \| null | 0~1（标准化） | 平均音高 |
 | `pitch_variability` | float \| null | ≥0 | 音高变化率 |
 | `audio_available` | bool | — | 是否有有效音频 |
-| `timestamp` | datetime | — | 采样时间 |
+| `timestamp` | datetime | — | 服务端 UTC 状态时间，不能替代前端 captured_at_ms |
 
 ### SessionVisionSummary / SessionAudioSummary（会话级汇总）
 
-视觉汇总由上游基于逐句状态生成，评估接口直接接收。字段见
+视觉汇总由后端从消息快照生成，也支持上游显式提交。字段见
 `backend/models/states.py`，包含均值、趋势序列、出现占比和采样数。
-当前摄像头帧日志不自动生成评估用 `vision_summary`。
+评估默认从消息绑定的逐句快照生成 `vision_summary`，sample_count 计句级样本数；无时间帧日志不会直接成为评估输入。完整上游汇总仍可显式提交。
 
 ### RiskResult
 
@@ -323,6 +325,9 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 }
 ```
 
+这是兼容旧客户端的无时间请求。新页面使用文末“带时间的视觉采集”协议，
+无时间帧不能进入录音区间聚合。
+
 服务端按 `VISION_PROVIDER` 选择 Mock 或 EmotiEffLib，返回与 `POST /api/vision`
 相同的 `VisionState`，并将原始帧丢弃。帧接口写入检测器返回的完整快照，
 不会把缺失字段与上一帧做 merge；没有检测到人脸时，情绪、VA 和参与度等字段
@@ -339,8 +344,8 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 显式触发综合评估。上游语音/视觉模块完成逐句对齐后，直接提供
 `evaluation_input`：每句话的 `vision_snapshot` 放在对应消息内，整段对话的
 `vision_summary` 放在顶层。评估服务直接接收这些结构，不用摄像头帧的时间戳
-重新猜测逐句对应关系。语音模块尚未接通时，现有文字对话可只传 `session_id`，
-服务端从已保存的消息构造输入；没有对应快照的消息保持为空。
+重新猜测逐句对应关系。当前文字和语音页面均可只传 `session_id`，
+服务端从已保存的消息及绑定快照构造输入和会话汇总；没有对应快照的消息保持为空。
 
 ```json
 {
@@ -532,3 +537,46 @@ DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音�
 - 所有风险/评估结果均为**初步筛查提示**，不得表述为临床诊断或治疗建议。
 - `session_id` 是会话定位符，不是身份认证或授权凭据。
 - 不提交 `.env`、密钥、原始音视频或真实个人对话。
+
+
+## 2026-10-03：带时间的视觉采集与录音页面
+
+旧不带时间的帧请求仍用于实时展示。新页面先调用以下采集接口，再提交带时间的帧；未知帧字段会拒收，防止拼写错误静默丢失时间。
+
+### POST /api/vision/capture
+
+```json
+{"session_id":"...","capture_id":"capture-1","generation":1,"active":true}
+```
+
+关闭使用 active=false 并递增 generation。迟到的低 generation 命令不改变当前采集；同代次相同内容可重试，不同内容返回 409 VISION_CAPTURE_CONFLICT。关闭清空 latest_vision_state。响应为当前 session_id/capture_id/generation，关闭时 capture_id=null。
+
+### POST /api/vision/frame（扩展）
+
+```json
+{"session_id":"...","image_base64":"data:image/jpeg;base64,...","frame_id":"frame-1","capture_id":"capture-1","captured_at_ms":12500.5}
+```
+
+frame_id/capture_id 为 1～128 字符非空标识，captured_at_ms 为有限非负数；三者同时提供或同时省略。带时间的帧要求当前活动 capture_id 匹配。响应在原 vision_state 之外回显这三项。旧帧在推理前和写回前被拒绝为 409 VISION_CAPTURE_INACTIVE；相同 frame_id 改图像/时间返回 409 VISION_FRAME_CONFLICT。保留最近 512 条结构化帧，不保存图像。
+
+### POST /api/vision/segment
+
+```json
+{"session_id":"...","utterance_id":"utterance-1","capture_id":"capture-1","start_ms":12000,"end_ms":16800}
+```
+
+区间正时长且不超过 60000 ms，只选同 capture_id 上 [start_ms,end_ms) 的帧。响应示例：
+
+```json
+{"session_id":"...","utterance_id":"utterance-1","capture_id":"capture-1","start_ms":12000,"end_ms":16800,"frame_count":8,"valid_frame_count":6,"vision_snapshot":{"face_detected":true,"emotion":"sad","valence":-0.4}}
+```
+
+首次结果冻结；重试不吸收晚到帧，改变区间返回 409 UTTERANCE_CONFLICT。无帧 vision_snapshot=null；全无脸为 face_detected=false 且数值为 null。有脸指标只平均非缺失数值。聊天须复用冻结快照；speech 存在时也必须匹配其 capture_id 与区间。
+
+### 聊天与评估保留规则
+
+新页面传递 utterance_id、vision_snapshot（可为 null），语音还传递 speech。显式 null 不借用旧视觉。旧文字客户端的实时风险计算仅借用最近 5 秒的视觉状态，不将它存为句级证据。
+
+简单评估 {session_id} 从消息上的用户快照构造汇总，sample_count 计句级样本，按句等权；face_present_ratio 是句级有效人脸比例。完整输入省略或 null 的视觉快照不会删除既有快照，改写已绑定视觉返回 HISTORY_CONFLICT；省略汇总时按已有快照生成。简单与完整评估均拒绝将评估期间已过时的历史结果链接到会话。
+
+前端 FormData 上传 /api/audio/transcribe 时不设置 JSON Content-Type；须由浏览器附加 multipart boundary。已提供录音按钮、取消、最长时长、收尾、视觉等待和失败重试，细节见 [当前对接说明](vision_alignment.md)。

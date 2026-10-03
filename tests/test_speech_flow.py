@@ -174,7 +174,8 @@ def test_assessment_cannot_reassign_recording_id(policy_stub, evaluation_stub):
     assert evaluation_stub.inputs == []
 
 
-def test_assessment_does_not_overwrite_concurrent_chat(policy_stub, evaluation_stub, monkeypatch):
+@pytest.mark.parametrize("full_input", [False, True])
+def test_assessment_does_not_overwrite_concurrent_chat(policy_stub, evaluation_stub, monkeypatch, full_input):
     policy_stub()
     request = new_request()
     client.post("/api/chat", json=request)
@@ -186,8 +187,10 @@ def test_assessment_does_not_overwrite_concurrent_chat(policy_stub, evaluation_s
                                              "text": "还有点累"}).status_code == 200
         return result
     monkeypatch.setattr(evaluation_stub, "evaluate", during_model)
-    response = client.post("/api/assessment", json={"session_id": request["session_id"],
-        "evaluation_input": {"dialogue_history": history}})
+    body = {"session_id": request["session_id"]}
+    if full_input:
+        body["evaluation_input"] = {"dialogue_history": history}
+    response = client.post("/api/assessment", json=body)
     assert response.status_code == 409
     state = client.get(f"/api/session/{request['session_id']}").json()
     assert len(state["conversation_history"]) == 4

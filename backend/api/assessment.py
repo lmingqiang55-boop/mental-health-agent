@@ -4,10 +4,12 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 
 from evaluation_agent.llm_client import LLMError
+from evaluation_agent.inputs import EvaluationInput
 
 from backend.api.errors import session_not_found
 from backend.core.evaluation_engine import evaluation_engine
 from backend.core.memory_store import memory_store
+from backend.core.multimodal_fusion import build_vision_summary
 from backend.core.session_manager import session_manager
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.requests import TriggerAssessmentRequest
@@ -29,7 +31,29 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
         prepared_history = (
             _prepare_history(session, request.evaluation_input.dialogue_history)
             if request.evaluation_input is not None else None)
-        result = evaluation_engine.assess(session, request.evaluation_input)
+        working = session.model_copy(deep=True)
+        if prepared_history is not None:
+            working.conversation_history = prepared_history
+        snapshots = [message.vision_snapshot for message in working.conversation_history
+                     if message.role == MessageRole.USER and message.vision_snapshot is not None]
+        if request.evaluation_input is not None and request.evaluation_input.vision_summary is not None:
+            working.vision_summary = SessionVisionSummary.model_validate(
+                request.evaluation_input.vision_summary.model_dump(mode="json"))
+        elif snapshots:
+            working.vision_summary = build_vision_summary(snapshots)
+        elif prepared_history is not None and not _same_history(initial_history, prepared_history):
+            # A summary belongs to its transcript; keep it only for unchanged-history retries.
+            working.vision_summary = None
+        data = None
+        if request.evaluation_input is not None:
+            data = EvaluationInput.model_validate({
+                "dialogue_history": [message.model_dump(mode="json")
+                                     for message in prepared_history],
+                "vision_summary": working.vision_summary.model_dump(mode="json")
+                                  if working.vision_summary is not None else None,
+                "user_memory": request.evaluation_input.user_memory,
+            })
+        result = evaluation_engine.assess(working, data)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={
             "code": "INVALID_EVALUATION_INPUT", "message": str(exc),
@@ -41,7 +65,7 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
         }) from exc
 
     def link(session: SessionState) -> None:
-        if request.evaluation_input is not None and not _same_history(
+        if not _same_history(
                 session.conversation_history, initial_history):
             raise HTTPException(status_code=409, detail={
                 "code": "HISTORY_CONFLICT",
@@ -49,18 +73,13 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
             })
         session.assessment_result_id = result.result_id
         session.current_stage = SessionStage.COMPLETED
+        session.vision_summary = working.vision_summary
         if request.evaluation_input is not None:
             data = request.evaluation_input
             _validate_speech_history(session, data.dialogue_history)
             session.conversation_history = prepared_history
             session.turn_count = sum(
                 item.role == MessageRole.USER for item in session.conversation_history
-            )
-            session.vision_summary = (
-                SessionVisionSummary.model_validate(
-                    data.vision_summary.model_dump(mode="json")
-                )
-                if data.vision_summary is not None else None
             )
 
     updated = session_manager.modify_session(request.session_id, link)
@@ -106,9 +125,20 @@ def _prepare_history(session: SessionState, incoming) -> list[Message]:
                 raise HTTPException(status_code=409, detail={
                     "code": "HISTORY_CONFLICT", "message": "评估输入中的录音标识或时间与原消息不一致。",
                 })
+            supplied_vision = item.vision_snapshot
+            if supplied_vision is not None and (
+                (original.vision_snapshot is not None and
+                 supplied_vision.model_dump(mode="json", exclude={"timestamp"}) !=
+                 original.vision_snapshot.model_dump(mode="json", exclude={"timestamp"})) or
+                (original.vision_snapshot is None and original.utterance_id is not None)
+            ):
+                raise HTTPException(status_code=409, detail={
+                    "code": "HISTORY_CONFLICT", "message": "已绑定发言的视觉快照不能被评估输入改写。"})
             data.update({"created_at": original.created_at,
                          "utterance_id": original.utterance_id,
                          "speech": original.speech, "audio_snapshot": original.audio_snapshot})
+            if original.vision_snapshot is not None:
+                data["vision_snapshot"] = original.vision_snapshot
         message = Message.model_validate(data)
         if message.speech is not None and message.utterance_id is None:
             raise ValueError("录音元数据需要 utterance_id")

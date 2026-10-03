@@ -1,7 +1,6 @@
 """多模态状态、风险结果、消息与会话状态。
 
-这是三个模块之间的「插头标准」。修改任何字段都必须走 development_rules.md
-第 4 节的公共接口变更流程，不得直接 Push。
+公共字段与接入方式见 docs/api_spec.md 和 docs/vision_alignment.md。
 """
 
 from datetime import datetime, timezone
@@ -25,7 +24,7 @@ def _now() -> datetime:
 # ---------------------------------------------------------------------------
 
 class VisionState(BaseModel):
-    """句级视觉状态（实时），用于对话 Agent 动态调整提问策略。
+    """视觉指标；消息绑定的句级快照用于风险辅助及最终评估。
 
     对应目标图「微表情和眼动检测输出心理状态」。
     A 不关心 B 用 OpenFace / MediaPipe / 自训练模型。
@@ -46,6 +45,25 @@ class VisionState(BaseModel):
                                                       description="微表情强度")
     face_detected: bool = False
     timestamp: datetime = Field(default_factory=_now)
+
+
+class VisionFrameObservation(BaseModel):
+    """Structured frame only; client capture time is separate from server UTC."""
+    frame_id: str
+    capture_id: str
+    captured_at_ms: float
+    image_digest: str
+    state: VisionState
+
+
+class VisionSegment(BaseModel):
+    """Frozen interval result, reused even if more frames arrive later."""
+    capture_id: str
+    start_ms: float
+    end_ms: float
+    vision_snapshot: VisionState | None = None
+    frame_count: int = 0
+    valid_frame_count: int = 0
 
 
 class AudioState(BaseModel):
@@ -78,7 +96,7 @@ class SessionVisionSummary(BaseModel):
     valence_trend: list[float] = Field(default_factory=list,
                                        description="逐句效价序列，用于变化分析")
     face_present_ratio: float | None = Field(default=None, ge=0, le=1,
-                                             description="人脸出现时长占比")
+                                             description="句级视觉样本中有效人脸的比例")
     sample_count: int = 0
 
 
@@ -172,7 +190,13 @@ class SessionState(BaseModel):
     vision_state_log: list[VisionState] = Field(default_factory=list)
     audio_state_log: list[AudioState] = Field(default_factory=list)
 
-    # 会话级汇总由上游提供，评估时原样交给 Evaluation Agent。
+    # Capture generations reject delayed start/stop and in-flight old frames.
+    vision_capture_generation: int = -1
+    active_vision_capture_id: str | None = None
+    vision_frames: list[VisionFrameObservation] = Field(default_factory=list, exclude=True)
+    vision_segments: dict[str, VisionSegment] = Field(default_factory=dict, exclude=True)
+
+    # 可接收上游汇总；缺省时从消息绑定的逐句快照生成。
     vision_summary: SessionVisionSummary | None = None
     audio_summary: SessionAudioSummary | None = None
 
