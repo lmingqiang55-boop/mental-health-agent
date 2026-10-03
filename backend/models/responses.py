@@ -11,6 +11,8 @@ from backend.models.states import (
     ConsentRecord,
     RiskResult,
     SessionState,
+    SpeechMetadata,
+    VisionSegment,
     VisionState,
 )
 
@@ -33,11 +35,29 @@ class ChatResponse(DialogueResponsePayload):
     turn_count: int
 
 
+class TranscriptionResponse(BaseModel):
+    session_id: str
+    utterance_id: str
+    text: str
+    speech: SpeechMetadata
+
+
 class StateUpsertResponse(BaseModel):
     session_id: str
     status: str = "updated"
     vision_state: VisionState | None = None
     audio_state: AudioState | None = None
+
+
+class VisionFrameResponse(StateUpsertResponse):
+    frame_id: str | None = None
+    capture_id: str | None = None
+    captured_at_ms: float | None = None
+
+
+class VisionSegmentResponse(VisionSegment):
+    session_id: str
+    utterance_id: str
 
 
 class AssessmentResponse(BaseModel):

@@ -1,9 +1,10 @@
 // 统一 API 客户端。所有页面通过这里访问后端，不直接 fetch。
 
 async function request(path, options = {}) {
+  const multipart = typeof FormData !== 'undefined' && options.body instanceof FormData
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { ...(multipart ? {} : { 'Content-Type': 'application/json' }), ...options.headers },
   })
   const data = await response.json()
   if (!response.ok) {
@@ -27,10 +28,11 @@ export const api = {
     }),
 
   // Chat
-  sendChat: (sessionId, text) =>
+  sendChat: (sessionId, text, metadata = {}, options = {}) =>
     request('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, text }),
+      ...options,
+      body: JSON.stringify({ ...metadata, session_id: sessionId, text }),
     }),
 
   // Vision / Audio
@@ -39,11 +41,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ session_id: sessionId, state }),
     }),
-  analyzeVisionFrame: (sessionId, imageBase64) =>
+  analyzeVisionFrame: (sessionId, imageBase64, timing = {}, options = {}) =>
     request('/api/vision/frame', {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, image_base64: imageBase64 }),
+      ...options,
+      body: JSON.stringify({ ...timing, session_id: sessionId, image_base64: imageBase64 }),
     }),
+  setVisionCapture: (sessionId, captureId, generation, active) =>
+    request('/api/vision/capture', {
+      method: 'POST', body: JSON.stringify({ session_id: sessionId, capture_id: captureId, generation, active }),
+    }),
+  freezeVisionSegment: (payload, options = {}) =>
+    request('/api/vision/segment', { method: 'POST', ...options, body: JSON.stringify(payload) }),
+  audioStatus: () => request('/api/audio/status'),
+  transcribe: (form, options = {}) =>
+    request('/api/audio/transcribe', { method: 'POST', ...options, body: form }),
   submitAudio: (sessionId, state) =>
     request('/api/audio', {
       method: 'POST',

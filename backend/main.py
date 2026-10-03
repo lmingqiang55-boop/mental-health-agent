@@ -4,6 +4,7 @@
 """
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,7 +22,21 @@ from backend.api import (
     vision,
 )
 
-app = FastAPI(title="多模态心理状态筛查 Demo", version="0.2.0")
+from backend.audio.transcriber import get_transcription_service
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    service = get_transcription_service()
+    await service.start()
+    try:
+        yield
+    finally:
+        service.close()
+        get_transcription_service.cache_clear()
+
+
+app = FastAPI(title="多模态心理状态筛查 Demo", version="0.3.0", lifespan=lifespan)
 
 _default_origins = "http://localhost:5173,http://127.0.0.1:5173"
 allowed_origins = [

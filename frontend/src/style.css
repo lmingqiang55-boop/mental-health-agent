@@ -21,6 +21,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 button.secondary { background: #e7edf2; color: #2c3e50; }
 button.ghost { background: transparent; color: #dce6ee; }
 button.small { padding: 6px 12px; font-size: .85rem; }
+.speech-button { touch-action: none; user-select: none; }
+.speech-button.recording { background: var(--red); }
+.retry-input { padding: 12px 16px; background: #fff4e7; }
+.retry-input p { margin: 0 0 10px; white-space: pre-wrap; }
+.retry-input button { margin-right: 8px; }
 h1 { margin: 0 0 4px; font-size: 1.5rem; }
 h3 { margin: 0 0 14px; font-size: 1.05rem; }
 h4 { margin: 16px 0 8px; font-size: .95rem; }

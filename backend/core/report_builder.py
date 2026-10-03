@@ -113,6 +113,10 @@ def build_report(
     ) or bool(
         input_data.vision_summary is not None
         and input_data.vision_summary.sample_count > 0
+        and any(value is not None for value in (
+            input_data.vision_summary.mean_valence, input_data.vision_summary.mean_arousal,
+            input_data.vision_summary.mean_engagement, input_data.vision_summary.mean_attention,
+            input_data.vision_summary.dominant_emotion))
     )
     multimodal_summary = (
         "本次提供了与对话相关的视觉数据；视觉线索只作辅助，"

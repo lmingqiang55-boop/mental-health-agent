@@ -4,20 +4,22 @@
 
 > **MVB 演示只使用虚构数据。** 对话到评估的数据流可按下文的离线集成测试验收。面向真实中小学生开放所需的权限、同意、危机响应和效度验证另见 [真实用户上线前审查](docs/prelaunch_audit_2026-10-01.md)。评估提示词已同步至 `PROMPT_VERSION=1.2`。
 
-当前前端支持文字输入和摄像头帧采样。队员 B 的自动语音切分与 ASR 尚未接入，以下接口已为它预留。原来的六维规则评估引擎已移除。[三人协作规划 v3](docs/三人协作与接口分工_v3.md)保留在 `docs/`；实际请求与响应以本文件及 [API 数据协议](docs/api_spec.md) 为准。
+**语音与摄像头对接已接入页面（2026-10-03）。** 当前支持文字输入、按住/松开完整录音、语音与录音区间视觉聚合、聊天去重、失败重试和逐句视觉会话汇总。摄像头开启/关闭及权限等待取消已处理；最终评估保留原录音信息和冻结的视觉快照。具体行为与验收边界见 [摄像头与录音对接](docs/vision_alignment.md)。
+
+保留 FunASR + SenseVoiceSmall 和可选 EmotiEffLib，当前没有自动 VAD、流式 ASR、眼动或微表情模型。历史语音识别质量实测见 [2026-10-02 验证记录](docs/speech_validation_2026-10-02.md)。页面联调和自动化测试不能替代真实麦克风、摄像头的质量验收。[三人协作分工](docs/三人协作与接口分工_v3.md)已更新；实际协议以 [API 数据协议](docs/api_spec.md) 为准。
 
 ## 队员 B 需要交付什么
 
-队员 B 在自己的模块内完成语音起止检测、ASR、摄像头采样，以及**每句话和视觉状态的时间对齐**。后端评估接口只接收已经对齐的结构，不用帧时间戳重新推断对应关系。
+前端记录实际录音与帧的共同时间轴，上传完整文件，并汇合 ASR 与冻结的视觉聚合结果后自动聊天。后端语音模块执行整段 ASR；视觉模块按区间聚合结构化帧。评估模块从消息上已绑定的逐句快照生成汇总，不重新推断帧与消息的对应关系。
 
 | 时机 | 队员 B 的输出 | 提交位置 |
 | --- | --- | --- |
 | 用户说完一句话 | ASR 原文 `text`，必填且非空 | `POST /api/chat` 的 `text` |
 | 同一句话 | 该句期间聚合的视觉状态 `vision_snapshot`，有数据时提供 | 同一个 `/api/chat` 请求，后续也放在 `evaluation_input.dialogue_history` 的对应消息内 |
-| 整段对话结束 | 基于句级视觉状态计算的 `vision_summary` | `POST /api/assessment` 的 `evaluation_input.vision_summary` |
+| 整段对话结束 | 基于句级视觉状态计算的 `vision_summary` | 通常由后端从消息快照生成；外部也可提交 `evaluation_input.vision_summary` |
 | 触发最终评估 | 按时间顺序排列的完整 `dialogue_history` | `POST /api/assessment` 的 `evaluation_input.dialogue_history` |
 
-所有请求使用同一个 `session_id`。`dialogue_history` 的 `role` 可为 `user`、`assistant`、`counselor`、`system`；只有 `user` 的话是被评估者自述，其他角色仅作上下文。每条消息的 `vision_snapshot` 必须对应**这条消息**，不能用最近一帧代替。没有采集到视觉时省略快照；缺测值用 `null`，不要填 `0`。语音模块只提供转写文本，不需要提交音频特征。
+所有请求使用同一个 `session_id`。`dialogue_history` 的 `role` 可为 `user`、`assistant`、`counselor`、`system`；只有 `user` 的话是被评估者自述，其他角色仅作上下文。每条消息的 `vision_snapshot` 必须对应**这条消息**，由 `/api/vision/segment` 冻结，不能用最近一帧代替。没有采集到视觉时省略快照；缺测值用 `null`，不要填 `0`。语音模块只提供转写文本，不需要提交音频特征。
 
 ### 1. 每句话的语音与视觉输出
 
@@ -46,7 +48,7 @@ Content-Type: application/json
 }
 ```
 
-`text` 是参与对话决策和最终评估的转写文本。`vision_snapshot` 可省略。现有 `POST /api/vision` 和 `POST /api/vision/frame` 仍可供实时状态更新，但帧采样日志不会自动变成某句话的快照，也不会自动生成最终评估的视觉汇总。
+`text` 是参与对话决策和最终评估的转写文本。`vision_snapshot` 可省略。`POST /api/vision/frame` 提供单帧分析；新页面先登记 `/api/vision/capture`，再提交带 `frame_id/capture_id/captured_at_ms` 的帧，并用 `/api/vision/segment` 聚合为句级快照。已绑定消息的快照会在评估时生成会话汇总；旧无时间帧日志不参与该过程。
 
 句级 `vision_snapshot` 使用 `VisionState`：`emotion` 为可选字符串；`emotion_confidence`、`arousal`、`engagement`、`attention_score`、`gaze_focus`、`micro_expression_intensity` 为可选的 0～1 数值；`valence` 为可选的 -1～1 数值；`face_detected` 为布尔值；`timestamp` 可选，使用 ISO 8601 时间。具体定义见 [`backend/models/states.py`](backend/models/states.py)。
 
@@ -94,7 +96,7 @@ Content-Type: application/json
 
 `dialogue_history` 至少一条消息，每条 `content` 必须非空。`vision_summary` 的均值和 `face_present_ratio` 范围分别为 -1～1 或 0～1；`valence_trend` 按**句级样本**的时间顺序排列；`sample_count` 是参与汇总的句级样本数，不是摄像头帧数。没有视觉能力时省略 `vision_snapshot` 和 `vision_summary`，不要构造全零汇总。`evaluation_input.user_memory` 可选，用于长期背景信息。
 
-语音模块尚未接通时，现有文字界面仍可只提交 `{ "session_id": "会话 ID" }`。后端会使用会话内已保存的文本和准确附着在消息上的快照；缺失的视觉数据保持缺失。评估服务把对话原文和结构化视觉状态发送到配置的 DeepSeek 接口，不发送原始音频或图像。当前响应包含五维画像、0～100 关注指数、关注等级、独立风险结果，以及 `result.report` 中的总体说明、关键发现、趋势说明与建议。文案为规则模板：缺少可靠纵向数据时，趋势会明确标为 `unclear`；不会把视觉缺测当作一致性 0 分。页面字段见 [评估结果页面交接文档](docs/assessment_output_page_handoff.md)。
+当前页面触发最终评估时只需提交 `{ "session_id": "会话 ID" }`。后端会使用会话内已保存的文本和准确附着在消息上的快照；缺失的视觉数据保持缺失。评估服务把对话原文和结构化视觉状态发送到配置的 DeepSeek 接口，不发送原始音频或图像。当前响应包含五维画像、0～100 关注指数、关注等级、独立风险结果，以及 `result.report` 中的总体说明、关键发现、趋势说明与建议。文案为规则模板：缺少可靠纵向数据时，趋势会明确标为 `unclear`；不会把视觉缺测当作一致性 0 分。页面字段见 [评估结果页面交接文档](docs/assessment_output_page_handoff.md)。
 
 ## 对话数据流验收（MVB）
 
@@ -106,7 +108,7 @@ python -m pytest -q tests/test_conversation_data_flow.py
 
 该测试仅在**两个外部模型接口**返回可控响应，项目内部仍实际执行：创建会话 → 接收视觉状态和逐句对齐快照 → 调用策略客户端 → 保存用户与助手消息 → 构造评估输入 → 评估 Agent 解析 11 项并计算五维和关注指数 → 保存评估 → 按结果 ID 和学生历史查询。另一路测试验证上游直接提交完整 `dialogue_history` 与 `vision_summary` 时，这两层视觉数据进入评估请求。
 
-当前没有在此测试中连接训练决策模型或 DeepSeek，因此测试通过不代表外部模型服务可用。定时摄像头帧日志不会自动变成逐句快照；上游必须在 `/api/chat` 或最终 `evaluation_input` 中提供与话语对齐的视觉数据。语音 ASR 仍需队员 B 接入。
+这些测试没有连接真实训练决策模型或 DeepSeek，因此通过不代表外部模型可用。新增对接回归测试见 `tests/test_vision_alignment.py`；前端媒体生命周期与上传协议测试使用 `cd frontend; npm test`。实际设备、光照与真人发音仍需验收。
 
 ## 本地运行
 

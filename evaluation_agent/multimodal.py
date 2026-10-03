@@ -88,7 +88,7 @@ class SessionVisionSummary(UpstreamSchemaBase):
         description="逐句效价序列（按时间顺序），用于判断情绪走向",
     )
     face_present_ratio: UnitFloat | None = Field(
-        default=None, description="人脸出现时长占比 0~1"
+        default=None, description="句级视觉样本中有效人脸的比例 0~1"
     )
     sample_count: NonNegativeCount = Field(default=0, description="参与聚合的句级样本数")
 

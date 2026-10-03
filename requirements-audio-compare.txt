@@ -1,0 +1,3 @@
+# Optional reference benchmark; not required by the production ASR service.
+faster-whisper==1.2.1
+ctranslate2==4.8.2

@@ -8,6 +8,8 @@
 A/C 不直接调用视觉/音频模型，只读这里的融合结果。
 """
 
+from collections import Counter
+
 from pydantic import BaseModel
 
 from backend.models.states import (
@@ -60,14 +62,15 @@ def build_vision_summary(states: list[VisionState]) -> SessionVisionSummary:
     """聚合整段对话的句级视觉状态 → 会话级视觉汇总。"""
     valid = [s for s in states if s.face_detected]
     if not valid:
-        return SessionVisionSummary(sample_count=len(states))
+        return SessionVisionSummary(
+            sample_count=len(states), face_present_ratio=0.0 if states else None)
 
     def avg(values: list[float | None]) -> float | None:
         nums = [v for v in values if v is not None]
         return round(sum(nums) / len(nums), 3) if nums else None
 
     emotions = [s.emotion for s in valid if s.emotion]
-    dominant = max(set(emotions), key=emotions.count) if emotions else None
+    dominant = Counter(emotions).most_common(1)[0][0] if emotions else None
     return SessionVisionSummary(
         dominant_emotion=dominant,
         mean_valence=avg([s.valence for s in valid]),
