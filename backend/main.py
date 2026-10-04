@@ -19,6 +19,7 @@ from backend.api import (
     history,
     session,
     teacher,
+    tts,
     vision,
 )
 
@@ -78,6 +79,7 @@ app.include_router(session.router)
 app.include_router(chat.router)
 app.include_router(vision.router)
 app.include_router(audio.router)
+app.include_router(tts.router)
 app.include_router(assessment.router)
 app.include_router(history.router)
 app.include_router(teacher.router)

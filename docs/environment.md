@@ -65,6 +65,9 @@ if (-not (Test-Path -LiteralPath .env)) {
 | `ASR_PROVIDER=sensevoice` | 启用真实语音转写 |
 | `ASR_DEVICE=cuda:0` | 使用 NVIDIA GPU 进行语音推理 |
 | `VISION_PROVIDER=emotiefflib` | 启用真实表情分析 |
+| `DASHSCOPE_API_KEY` | 阿里云百炼语音合成密钥；只在后端使用 |
+| `DASHSCOPE_WORKSPACE_ID` | 华北2（北京）业务空间 ID，例如 `ws-...` |
+| `TTS_MODEL` / `TTS_VOICE` | 默认 `cosyvoice-v3-flash` / `longyingtao_v3` |
 
 `.env.example` 保留 `ASR_PROVIDER=disabled`、`ASR_DEVICE=cpu` 和
 `VISION_PROVIDER=mock` 的默认值；复制后需要按实际用途配置。
@@ -76,6 +79,7 @@ if (-not (Test-Path -LiteralPath .env)) {
 
 首次启用真实语音与视觉需要联网下载模型并预留缓存空间。
 `GET /api/audio/status` 的 `state=ready` 表示语音模型可以接收请求；
+`GET /api/tts/status` 的 `state=ready` 表示语音播报已配置；
 `/api/health` 只表示 Web 服务可用。使用 `--reload` 时，重载也会重新加载模型。
 
 可选 faster-whisper 对照工具的安装与运行见

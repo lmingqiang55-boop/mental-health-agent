@@ -281,6 +281,22 @@ FormData 的 Content-Type 和 boundary 由浏览器设置，不继承 JSON 请�
 上传时同时校验采集区间与实际解码时长，超限返回 `422 AUDIO_TOO_LONG`。
 `GET /api/audio/status` 单独报告 ASR 状态；通用 `/api/health` 不代表模型已就绪。
 
+### GET /api/tts/status 与 POST /api/tts
+
+`GET /api/tts/status` 返回 `state: ready | unconfigured`，仅表示阿里云
+CosyVoice 的密钥与业务空间 ID 是否已配置。`POST /api/tts` 请求：
+
+```json
+{ "session_id": "会话 ID", "turn_count": 1 }
+```
+
+后端只读取该回合已保存的助手回复，并向 CosyVoice 请求合成；成功时返回
+`audio/mpeg` 音频。前端可在 `POST /api/chat` 返回 `turn_count` 后，携带同一
+`session_id` 调用本接口并播放收到的二进制音频。前端播放尚未接入。
+密钥不返回浏览器，合成失败不影响聊天或评估，音频不写入数据库。
+未配置或上游不可用返回 `503 TTS_UNAVAILABLE`，不存在的回合返回
+`404 REPLY_NOT_FOUND`。
+
 ### POST /api/vision
 
 请求（状态字段全部嵌套在 `state` 中，支持部分更新）：

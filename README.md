@@ -6,7 +6,7 @@
 ## 主要功能
 
 - **多轮对话**：由训练的决策模型选择对话动作，使用本地话术生成回复。
-- **语音与视觉**：SenseVoice 转写完整录音，EmotiEffLib 分析表情，并按录音区间聚合视觉状态。
+- **语音与视觉**：SenseVoice 转写完整录音，CosyVoice 提供助手回复的语音合成接口；EmotiEffLib 分析表情，并按录音区间聚合视觉状态。
 - **综合评估**：生成五维心理状态画像、关注指数、关注等级和建议，独立识别危机风险。
 - **结果与历史**：展示评估报告，使用 SQLite 保存每位学生最近三次完整评估结果。
 
@@ -18,7 +18,7 @@
 | --- | --- |
 | 后端 | Python、FastAPI |
 | 前端 | React、Vite |
-| 语音 | FunASR、SenseVoiceSmall、PyAV |
+| 语音 | FunASR、SenseVoiceSmall、PyAV、阿里云 CosyVoice |
 | 视觉 | EmotiEffLib、OpenCV |
 | 对话与评估 | 训练的决策模型服务、DeepSeek |
 | 环境 | Conda、PyTorch CUDA 12.8 |
@@ -46,11 +46,16 @@ DEEPSEEK_API_KEY=你的密钥
 ASR_PROVIDER=sensevoice
 ASR_DEVICE=cuda:0
 VISION_PROVIDER=emotiefflib
+# 可选：启用助手回复的语音合成接口（华北2/北京的百炼业务空间）
+DASHSCOPE_API_KEY=你的百炼密钥
+DASHSCOPE_WORKSPACE_ID=你的业务空间ID
 ```
 
 对话还需要启动小组训练的决策模型服务，默认地址为 `http://127.0.0.1:8001`；
 地址不同时修改 `.env` 中的 `POLICY_API_BASE_URL`。
 完整配置见 [环境配置与验证](docs/environment.md)。真实密钥只保存在本地 `.env`。
+语音合成接口默认使用 `cosyvoice-v3-flash` 的 `longyingtao_v3` 预置音色；
+未配置时文字对话仍可使用。前端播放由页面开发者接入；音频不进入评估记录。
 
 ### 2. 启动后端
 
