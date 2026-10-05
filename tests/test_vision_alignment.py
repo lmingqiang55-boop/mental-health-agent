@@ -191,7 +191,7 @@ def test_bound_visuals_survive_assessment_and_summary_counts_turns(
     response = client.post("/api/assessment", json=body)
     assert response.status_code == 200, response.json()
     received = evaluation_stub.inputs[-1]
-    assert received.dialogue_history[0].vision_snapshot.valence == -0.6
+    assert received.dialogue_history[1].vision_snapshot.valence == -0.6
     assert received.vision_summary.sample_count == 2
     assert received.vision_summary.mean_valence == -0.2
     assert received.vision_summary.valence_trend == [-0.6, 0.2]
@@ -204,7 +204,7 @@ def test_assessment_cannot_rewrite_frozen_visuals(policy_stub, evaluation_stub):
     client.post("/api/chat", json={"session_id": sid, "utterance_id": "u1", "text": "还好",
         "vision_snapshot": {"face_detected": True, "valence": -0.4}})
     history = client.get(f"/api/session/{sid}").json()["conversation_history"]
-    history[0]["vision_snapshot"]["valence"] = 0.9
+    history[1]["vision_snapshot"]["valence"] = 0.9
     response = client.post("/api/assessment", json={"session_id": sid,
         "evaluation_input": {"dialogue_history": history}})
     assert response.status_code == 409 and evaluation_stub.inputs == []

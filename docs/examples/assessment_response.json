@@ -5,6 +5,8 @@
     "result_id": "asmt-20261001T102030-a1b2c3d4",
     "session_id": "7d63a2e1-9c44-4c96-a570-22efb1f42a18",
     "student_ref": "8c54a41c-1dde-44e5-97ad-f8d72cf2c4fd",
+    "age": 12,
+    "grade": "初一",
     "psychological_profile": {
       "emotion": 67,
       "interest_motivation": 50,

@@ -24,6 +24,8 @@
 | `result.result_id` | 字符串 | 不必直接展示 | 保存下来，供结果详情接口查询。 |
 | `result.session_id` | UUID 字符串 | 不必直接展示 | 与响应外层 `session_id` 相同。 |
 | `result.student_ref` | 匿名字符串 | 不必直接展示 | 同一浏览器跨会话复用，可查询最近 3 次结果。 |
+| `result.age` | 整数岁或 null | 年龄 | 从第一条用户回答中读取，随评估结果保存。 |
+| `result.grade` | 字符串或 null | 年级 | 例如 `初一`，随评估结果保存。 |
 | `result.psychological_profile.emotion` | 0～100 整数 | 情绪状态 | 分数越高，相关信号越突出。 |
 | `result.psychological_profile.interest_motivation` | 0～100 整数 | 兴趣与动力 | 同上。 |
 | `result.psychological_profile.sleep_energy` | 0～100 整数 | 睡眠与精力 | 同上。 |
@@ -61,9 +63,9 @@
 
 当前页面流程（2026-10-03）：
 
-1. 首次 `POST /api/session` 可无请求体，得到 `session_id` 和匿名 `student_ref`；同一浏览器新建会话时提交 `{ "student_ref": "..." }`。
+1. 首次 `POST /api/session` 可无请求体，得到 `session_id`、匿名 `student_ref` 和固定的 `opening_message`；页面先显示该开场问题，同一浏览器新建会话时提交 `{ "student_ref": "..." }`。
 2. 每轮调用 `POST /api/chat`，请求体为 `{ "session_id": "...", "text": "..." }`。页面会先按输入/录音区间调用 `/api/vision/segment`，发送冻结的 `vision_snapshot` 和 `utterance_id`；录音路径另外携带 `speech`。响应中的 `reply` 是对话回复，`risk` 是**本轮**风险提示，不是最终评估结果。
-3. 用户明确点击“生成初步结果”后，调用 `POST /api/assessment`，请求体最简单为 `{ "session_id": "..." }`。对话不会自动触发最终评估；至少需要一条已保存的消息。
+3. 用户明确点击“生成初步结果”后，调用 `POST /api/assessment`，请求体最简单为 `{ "session_id": "..." }`。对话不会自动触发最终评估；至少需要一条已保存的用户消息。
 4. 请求成功时显示 `response.result`，保存 `result_id` 和 `session_id`。再次取同一结果：`GET /api/assessment/result/{result_id}?session_id={session_id}`。该接口返回与第 3 步相同的外层结构。
 
 上游多模态模块也可以在 `POST /api/assessment` 中提供完整的 `evaluation_input`（逐句对话与句级视觉快照、整段视觉汇总）。单纯上传帧仍不会成为句级证据；当前页面已经调用区间聚合并把快照绑定到消息。后端在简单评估时从这些句级快照生成汇总；没有可用帧时保持缺测。完整评估省略快照不会擦除既有快照，改写已绑定快照返回 HISTORY_CONFLICT。参见 [当前对接说明](vision_alignment.md)。

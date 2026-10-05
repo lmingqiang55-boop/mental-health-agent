@@ -85,7 +85,8 @@ def test_policy_failure_does_not_append_partial_turn(monkeypatch) -> None:
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "POLICY_UNAVAILABLE"
     assert session["turn_count"] == 0
-    assert session["conversation_history"] == []
+    assert len(session["conversation_history"]) == 1
+    assert session["conversation_history"][0]["role"] == "assistant"
 
 
 def test_legacy_provider_env_var_no_longer_selects_a_fallback(monkeypatch) -> None:
@@ -108,7 +109,8 @@ def test_legacy_provider_env_var_no_longer_selects_a_fallback(monkeypatch) -> No
     # 没有兜底提问：本轮不落库，也不产生 explore_* 之类的规则策略
     session = client.get(f"/api/session/{session_id}").json()
     assert session["turn_count"] == 0
-    assert session["conversation_history"] == []
+    assert len(session["conversation_history"]) == 1
+    assert session["conversation_history"][0]["role"] == "assistant"
 
 
 def test_invalid_policy_config_fails_on_first_use_not_on_import(monkeypatch) -> None:

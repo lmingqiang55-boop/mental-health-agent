@@ -23,7 +23,8 @@ def create_session(request: CreateSessionRequest | None = None) -> CreateSession
         student_ref=request.student_ref if request else None
     )
     return CreateSessionResponse(
-        session_id=session.session_id, student_ref=session.student_ref
+        session_id=session.session_id, student_ref=session.student_ref,
+        opening_message=session.conversation_history[0].content,
     )
 
 

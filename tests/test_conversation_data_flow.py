@@ -112,8 +112,8 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
     saved_session = client.get(f"/api/session/{session_id}").json()
     assert saved_session["current_stage"] == "completed"
     assert saved_session["turn_count"] == 2
-    assert saved_session["conversation_history"][0]["vision_snapshot"]["valence"] == -0.7
-    assert saved_session["conversation_history"][2]["vision_snapshot"] is None
+    assert saved_session["conversation_history"][1]["vision_snapshot"]["valence"] == -0.7
+    assert saved_session["conversation_history"][3]["vision_snapshot"] is None
     assert saved_session["assessment_result_id"] == result["result_id"]
 
     retrieved = client.get(

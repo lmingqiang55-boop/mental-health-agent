@@ -13,7 +13,10 @@ from datetime import datetime, timedelta, timezone
 from threading import RLock
 from uuid import uuid4
 
-from backend.models.states import SessionState
+from evaluation_agent.opening import OPENING_QUESTION
+
+from backend.models.enums import MessageRole
+from backend.models.states import Message, SessionState
 
 SESSION_TTL = timedelta(hours=2)
 MAX_SESSIONS = 1000
@@ -34,7 +37,11 @@ class SessionManager:
                 self._evict_oldest_locked()
             session_id = str(uuid4())
             session = SessionState(
-                session_id=session_id, student_ref=student_ref or session_id)
+                session_id=session_id, student_ref=student_ref or session_id,
+                conversation_history=[Message(
+                    role=MessageRole.ASSISTANT, content=OPENING_QUESTION,
+                )],
+            )
             self._sessions[session.session_id] = session
             return session.model_copy(deep=True)
 

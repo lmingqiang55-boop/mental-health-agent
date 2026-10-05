@@ -139,7 +139,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | --- | --- | --- |
 | `session_id` | string | 会话 ID（UUID） |
 | `student_ref` | string | 匿名学生标识；跨会话复用以读取同一人的最近 3 次评估 |
-| `conversation_history` | Message[] | 完整对话历史 |
+| `conversation_history` | Message[] | 完整对话历史；新会话的第 1 条是固定开场问题 |
 | `turn_count` | int | 已完成回合数 |
 | `current_stage` | SessionStage | 当前阶段 |
 | `latest_vision_state` | VisionState \| null | 最新视觉状态 |
@@ -170,8 +170,16 @@ FollowUpStatus     none | pending | in_progress | resolved
 换浏览器或清除站点数据后会得到新标识。
 
 ```json
-{ "session_id": "b4fc1bdd-...", "student_ref": "a1b2c3d4-...", "status": "created" }
+{
+  "session_id": "b4fc1bdd-...",
+  "student_ref": "a1b2c3d4-...",
+  "opening_message": "你好！你今年几岁、现在上几年级？有什么想和我说的吗？",
+  "status": "created"
+}
 ```
+
+页面直接显示 `opening_message`；服务端已把同一句保存为会话第一条助手消息。
+它不计入 `turn_count`，第一次用户回答后才由决策模型选择下一步动作。
 
 ### GET /api/session/{session_id}
 
@@ -290,7 +298,7 @@ CosyVoice 的密钥与业务空间 ID 是否已配置。`POST /api/tts` 请求�
 { "session_id": "会话 ID", "turn_count": 1 }
 ```
 
-后端只读取该回合已保存的助手回复，并向 CosyVoice 请求合成；成功时返回
+传 `turn_count: 0` 可合成新会话的固定开场问题；传 `1` 及以上可合成对应回合的助手回复。后端只读取已保存的助手文本，并向 CosyVoice 请求合成；成功时返回
 `audio/mpeg` 音频。前端可在 `POST /api/chat` 返回 `turn_count` 后，携带同一
 `session_id` 调用本接口并播放收到的二进制音频。前端播放尚未接入。
 密钥不返回浏览器，合成失败不影响聊天或评估，音频不写入数据库。
@@ -443,6 +451,8 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 
 | 字段 | 说明 |
 | --- | --- |
+| `age` | 用户第一句明确说明的年龄，整数岁 |
+| `grade` | 用户第一句明确说明的年级，例如 `初一` |
 | `psychological_profile` | 评估 Agent 的五维画像，各维 0~100 |
 | `concern_index` | 五维派生的关注指数，0~100 |
 | `overall_level` | 关注等级 |

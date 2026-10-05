@@ -2,6 +2,7 @@
 
 from typing import Protocol
 
+from evaluation_agent.demographics import extract_age_grade
 from evaluation_agent.inputs import DialogueRole, EvaluationInput
 from evaluation_agent.llm_client import EvaluationLLMClient, LLMConfig
 from evaluation_agent.service import EvaluationService, ScoredAssessment
@@ -10,7 +11,7 @@ from backend.core.multimodal_fusion import fuse_turn
 from backend.core.report_builder import build_report
 from backend.core.risk_engine import assess_risk
 from backend.llm.config import DEFAULT_ENV_FILE
-from backend.models.enums import RiskLevel
+from backend.models.enums import MessageRole, RiskLevel
 from backend.models.evaluation import EvaluationResult
 from backend.models.states import RiskResult, SessionState, VisionState, _now
 
@@ -23,8 +24,8 @@ class AssessmentService(Protocol):
 
 def input_from_session(session: SessionState) -> EvaluationInput:
     """当前文本会话的适配器；只转发已经与消息绑定的视觉快照。"""
-    if not session.conversation_history:
-        raise ValueError("至少需要一条对话消息才能评估")
+    if not any(message.role == MessageRole.USER for message in session.conversation_history):
+        raise ValueError("至少需要一条用户消息才能评估")
     return EvaluationInput.model_validate({
         "dialogue_history": [
             message.model_dump(mode="json", exclude={"audio_snapshot"})
@@ -73,6 +74,9 @@ class EvaluationEngine:
         self, session: SessionState, input_data: EvaluationInput | None = None
     ) -> EvaluationResult:
         data = input_data if input_data is not None else input_from_session(session)
+        if not any(message.role == DialogueRole.USER for message in data.dialogue_history):
+            raise ValueError("至少需要一条用户消息才能评估")
+        age, grade = extract_age_grade(data)
         service = self._service
         if service is None:
             config = LLMConfig.from_env(env_file=DEFAULT_ENV_FILE)
@@ -84,6 +88,8 @@ class EvaluationEngine:
             result_id=scored.assessment_id,
             session_id=session.session_id,
             student_ref=session.student_ref,
+            age=age,
+            grade=grade,
             psychological_profile=scored.psychological_profile,
             concern_index=scored.concern_index,
             overall_level=scored.overall_level,

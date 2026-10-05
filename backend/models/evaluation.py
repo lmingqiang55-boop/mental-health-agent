@@ -18,6 +18,8 @@ class EvaluationResult(BaseModel):
     result_id: str
     session_id: str
     student_ref: str | None = None
+    age: int | None = Field(default=None, ge=1, le=99)
+    grade: str | None = Field(default=None, min_length=1, max_length=20)
     psychological_profile: PsychologicalProfile
     concern_index: int = Field(ge=0, le=100)
     overall_level: OverallLevel

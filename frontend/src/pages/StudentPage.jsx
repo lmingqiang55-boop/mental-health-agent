@@ -67,6 +67,7 @@ export default function StudentPage() {
       try { localStorage.setItem(STUDENT_REF_KEY, data.student_ref) } catch { /* keep it for this page only */ }
       mediaRef.current.resetSession(data.session_id)
       setSessionId(data.session_id)
+      setMessages([{ role: 'assistant', content: data.opening_message }])
     } catch (e) { if (flow === flowRef.current) setError(e.message) }
     finally {
       if (flow === flowRef.current) { pendingRef.current = false; setBusy(false) }

@@ -11,6 +11,7 @@ from backend.audio.tts import CosyVoiceTTS, TTSConfig, TTSError
 from backend.core.session_manager import session_manager
 from backend.main import app
 from backend.models.enums import MessageRole
+from evaluation_agent.opening import OPENING_QUESTION
 from backend.models.states import Message
 
 
@@ -55,6 +56,10 @@ def test_tts_route_reads_saved_assistant_turn(monkeypatch):
     fake = FakeTTS()
     monkeypatch.setattr(tts_api, "get_tts_service", lambda: fake)
     session_id = client.post("/api/session").json()["session_id"]
+    opening = client.post("/api/tts", json={"session_id": session_id, "turn_count": 0})
+    assert opening.status_code == 200
+    assert opening.content == b"ID3test"
+    assert fake.received == OPENING_QUESTION
 
     def add_turn(session):
         session.conversation_history.extend([

@@ -32,12 +32,12 @@ def test_retry_returns_original_response_after_later_turn(policy_stub):
     assert len(calls) == 2
     session = client.get(f"/api/session/{request['session_id']}").json()
     assert session["turn_count"] == 2
-    assert len(session["conversation_history"]) == 4
+    assert len(session["conversation_history"]) == 5
     assert "chat_receipts" not in session
-    message = session["conversation_history"][0]
+    message = session["conversation_history"][1]
     assert message["utterance_id"] == "utterance-1"
     assert message["speech"] == SPEECH
-    assert session["conversation_history"][1]["speech"] is None
+    assert session["conversation_history"][2]["speech"] is None
 
 
 @pytest.mark.parametrize("change", ["text", "speech", "vision_snapshot"])
@@ -75,7 +75,7 @@ def test_policy_failure_can_retry_same_speech_id(policy_stub):
     failed = client.post("/api/chat", json=request)
     assert failed.status_code == 503
     before = client.get(f"/api/session/{request['session_id']}").json()
-    assert before["turn_count"] == 0 and before["conversation_history"] == []
+    assert before["turn_count"] == 0 and len(before["conversation_history"]) == 1
     policy_stub()
     assert client.post("/api/chat", json=request).status_code == 200
     assert client.get(f"/api/session/{request['session_id']}").json()["turn_count"] == 1
@@ -91,7 +91,7 @@ def test_speech_missing_modalities_do_not_use_stale_states(policy_stub):
     response = client.post("/api/chat", json=request)
     assert response.status_code == 200
     assert response.json()["risk"]["risk_level"] == "low"
-    message = client.get(f"/api/session/{request['session_id']}").json()["conversation_history"][0]
+    message = client.get(f"/api/session/{request['session_id']}").json()["conversation_history"][1]
     assert message["vision_snapshot"] is None and message["audio_snapshot"] is None
 
 
@@ -167,7 +167,7 @@ def test_assessment_cannot_reassign_recording_id(policy_stub, evaluation_stub):
     request = new_request()
     client.post("/api/chat", json=request)
     history = client.get(f"/api/session/{request['session_id']}").json()["conversation_history"]
-    history[0]["utterance_id"] = "wrong-id"
+    history[1]["utterance_id"] = "wrong-id"
     response = client.post("/api/assessment", json={"session_id": request["session_id"],
         "evaluation_input": {"dialogue_history": history}})
     assert response.status_code == 409
@@ -193,5 +193,5 @@ def test_assessment_does_not_overwrite_concurrent_chat(policy_stub, evaluation_s
     response = client.post("/api/assessment", json=body)
     assert response.status_code == 409
     state = client.get(f"/api/session/{request['session_id']}").json()
-    assert len(state["conversation_history"]) == 4
+    assert len(state["conversation_history"]) == 5
     assert state["assessment_result_id"] is None

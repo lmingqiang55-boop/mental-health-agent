@@ -42,7 +42,7 @@ def test_chat_without_multimodal_or_api_key() -> None:
     assert second.json()["turn_count"] == 2
 
     session = client.get(f"/api/session/{session_id}").json()
-    assert len(session["conversation_history"]) == 4
+    assert len(session["conversation_history"]) == 5
     assert session["latest_vision_state"] is None
     assert session["latest_audio_state"] is None
     # 六维固定提问状态机删除后，这两个公共字段不再存在
@@ -97,8 +97,8 @@ def test_multimodal_state_is_saved_and_chat_still_works() -> None:
     session = client.get(f"/api/session/{session_id}").json()
     assert session["latest_vision_state"]["emotion"] == "sad"
     assert session["latest_audio_state"]["energy"] == 0.4
-    assert session["conversation_history"][0]["vision_snapshot"] is None
-    assert session["conversation_history"][0]["audio_snapshot"] is None
+    assert session["conversation_history"][1]["vision_snapshot"] is None
+    assert session["conversation_history"][1]["audio_snapshot"] is None
 
 
 def test_chat_stores_only_exact_utterance_vision() -> None:
@@ -109,7 +109,7 @@ def test_chat_stores_only_exact_utterance_vision() -> None:
         "vision_snapshot": {"face_detected": True, "valence": -0.4},
     })
     assert response.status_code == 200
-    message = client.get(f"/api/session/{session_id}").json()["conversation_history"][0]
+    message = client.get(f"/api/session/{session_id}").json()["conversation_history"][1]
     assert message["vision_snapshot"]["valence"] == -0.4
     assert message["audio_snapshot"] is None
 
