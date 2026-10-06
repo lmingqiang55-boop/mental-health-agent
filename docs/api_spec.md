@@ -173,7 +173,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 {
   "session_id": "b4fc1bdd-...",
   "student_ref": "a1b2c3d4-...",
-  "opening_message": "你好！你今年几岁、现在上几年级？有什么想和我说的吗？",
+  "opening_message": "你好呀，我们先认识一下吧。你今年几岁、读几年级？最近有什么想和我聊聊的吗？",
   "status": "created"
 }
 ```
