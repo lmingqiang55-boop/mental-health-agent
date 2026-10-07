@@ -117,11 +117,13 @@ npm --prefix frontend run build
 ## 项目文档
 
 - [环境配置与验证](docs/environment.md)
+- [队友本地运行指南](docs/队友本地运行指南.md)
 - [系统架构](docs/architecture.md)
 - [API 数据协议](docs/api_spec.md)
 - [三人协作与接口分工](docs/三人协作与接口分工_v3.md)
 - [语音识别说明](docs/speech_recognition.md)
 - [摄像头与录音对接](docs/vision_alignment.md)
+- [前端交接文档](docs/前端交接文档.md)
 - [评估结果页面交接](docs/assessment_output_page_handoff.md)
 - [治愈 Agent 后端与前端接口交接](docs/healing_agent.md)
 - [治愈 Agent 竞赛演示版完成里程碑](docs/healing_completion_20261007.md)
