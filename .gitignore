@@ -25,3 +25,6 @@ scripts/_prompt_samples/
 
 # .env.example 必须被提交（它不含真实 Key）
 !.env.example
+
+# --- 本地模型与训练产物（体积大，不入库）---
+models/
