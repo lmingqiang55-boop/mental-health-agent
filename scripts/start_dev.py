@@ -7,7 +7,8 @@
 它会自动完成这些事：
 
     1. 没有 .env 就从 .env.example 复制一份
-    2. 缺依赖就按 requirements.txt 装（--skip-install 可跳过）
+    2. 缺依赖就装（--skip-install 跳过；--core-only 只装对话链路需要的，
+       跳过 CUDA torch / funasr / opencv 这些几 GB 的重包）
     3. 自动挑决策源，优先级：
            已有人在 8001  →  队长的模型（--team / 局域网自动发现）
            →  本机 Ollama 真模型  →  内置占位服务
@@ -24,6 +25,7 @@ Ctrl+C 一次停掉所有子进程。
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -41,6 +43,14 @@ POLICY_PORT = 8001
 BACKEND_PORT = 8000
 OLLAMA_PORT = 11434
 PIP_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+# 只有语音识别(funasr/torch)、摄像头情绪(emotiefflib/opencv)才需要的重包。
+# 实测：不装这些，后端照样正常启动，ASR 只降级为 unavailable，
+# 对话与决策链路完全不受影响。所以 --core-only 时把它们摘掉。
+HEAVY_PACKAGES = {
+    "torch", "torchaudio", "torchvision", "funasr", "modelscope",
+    "av", "emotiefflib", "opencv-python", "sentencepiece",
+}
 
 
 def log(message: str) -> None:
@@ -95,7 +105,21 @@ def ensure_env() -> None:
         log("已从 .env.example 生成 .env")
 
 
-def ensure_deps(skip: bool) -> None:
+def core_requirement_lines() -> list[str]:
+    """从 requirements.txt 里摘掉重包，只留跑对话链路需要的。"""
+    lines: list[str] = []
+    for raw in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("--"):
+            continue
+        name = re.split(r"[=<>!\[;]", line, 1)[0].strip().lower()
+        if name in HEAVY_PACKAGES:
+            continue
+        lines.append(line)
+    return lines
+
+
+def ensure_deps(skip: bool, core_only: bool = False) -> None:
     missing = []
     for module in ("fastapi", "uvicorn", "pydantic", "httpx", "dotenv"):
         try:
@@ -106,9 +130,19 @@ def ensure_deps(skip: bool) -> None:
         return
     if skip:
         sys.exit(f"[start] 缺少依赖 {missing}，请先执行 pip install -r requirements.txt")
-    log(f"缺少依赖 {missing}，正在安装（首次约 1~2 分钟）...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
-                           "-r", str(ROOT / "requirements.txt"), "-i", PIP_INDEX])
+
+    if core_only:
+        lines = core_requirement_lines()
+        log(f"缺少依赖 {missing}，只装对话链路需要的 {len(lines)} 个包"
+            f"（跳过 torch/funasr/opencv 等）...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
+                               *lines, "-i", PIP_INDEX])
+    else:
+        log(f"缺少依赖 {missing}，按项目 requirements.txt 安装。")
+        log("  团队的 baseline 含 CUDA 版 torch / funasr，首次可能要几十分钟、数 GB。")
+        log("  只想跑对话与决策链路的话，加 --core-only 可以跳过这些重包。")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
+                               "-r", str(ROOT / "requirements.txt"), "-i", PIP_INDEX])
     log("依赖安装完成")
 
 
@@ -223,12 +257,14 @@ def main() -> None:
     parser.add_argument("--backend-port", type=int, default=BACKEND_PORT,
                         help="后端端口，默认 8000")
     parser.add_argument("--skip-install", action="store_true", help="缺依赖时不自动安装")
+    parser.add_argument("--core-only", action="store_true",
+                        help="装依赖时跳过 torch/funasr/opencv 等重包（只跑对话与决策链路）")
     args = parser.parse_args()
 
     children: list = []
     try:
         ensure_env()
-        ensure_deps(args.skip_install)
+        ensure_deps(args.skip_install, args.core_only)
 
         kind, remote = pick_source(args)
         label = start_policy(kind, remote, children)
