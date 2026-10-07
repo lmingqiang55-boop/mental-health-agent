@@ -1,0 +1,17 @@
+FROM ./policy-qwen3-8b-Q4_K_M.gguf
+
+# 模板取自 LLaMA-Factory 导出时生成的 Modelfile，即训练使用的 qwen3_nothink。
+# 关键：user 之后直接接 <|im_start|>assistant，没有 <think></think> 空块。
+# 若换成基座自带的 chat_template.jinja（带 enable_thinking 分支），
+# 提示格式会与训练不一致，动作会乱。
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ range .Messages }}{{ if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+<|im_start|>assistant
+{{ else if eq .Role "assistant" }}{{ .Content }}<|im_end|>
+{{ end }}{{ end }}"""
+
+PARAMETER stop "<|im_end|>"
+PARAMETER num_ctx 4096
+PARAMETER temperature 0
