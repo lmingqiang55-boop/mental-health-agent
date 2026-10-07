@@ -19,14 +19,24 @@
 
   队友机器（把本地 8001 接到队长的模型上，从而满足回环要求）:
       python scripts/policy_tunnel.py borrow --remote 10.254.253.222:11435
+      python scripts/policy_tunnel.py borrow --remote [2409:890f:4e08:38c1::1]:11435
 
   队友随后**不用改 `.env`**，保持 `.env.example` 的默认值
   （POLICY_API_BASE_URL=http://127.0.0.1:8001）照常启动后端即可。
 
+局域网 / 跨网段
+---------------
+`host` 默认**双栈监听**：同一个端口既收局域网的 IPv4，也收走 IPv6 的跨网段连接。
+所以队友不在同一个网段时，只要两边都有 IPv6，直接把上面横幅里那条 IPv6 命令发给他即可，
+不需要端口映射、也不需要装组网工具（IPv6 一般不做 NAT，地址本身就是可达的）。
+
+IPv6 地址必须写成 `[地址]:端口`——地址内部的冒号会和端口分隔符冲突。
+
 前提
 ----
 - 队长的机器必须**保持开机**、本脚本保持运行；
-- 两台机器网络可达（同一局域网，或有公网隧道）；
+- 两台机器网络可达（同一局域网，或两边都有 IPv6，或有公网隧道）；
+- 跨网段走 IPv6 时，队长机器的防火墙要放行该端口的入站；
 - 这不是"把模型下载下来了"，而是**借用**：断线即失效。
 
 安全提示
@@ -46,6 +56,36 @@ BUFFER = 65536
 DISCOVER_PORT = 11436
 DISCOVER_PROBE = b"MMA-POLICY-DISCOVER/1"
 DISCOVER_REPLY = b"MMA-POLICY-HERE/1 "
+
+
+def split_host_port(spec: str) -> tuple[str, int]:
+    """拆开 HOST:PORT，兼容 IPv6 的 ``[2409:...]:11435`` 写法。
+
+    直接用 ``rpartition(":")`` 会被 IPv6 地址内部的冒号截断（拿到的"端口"其实是
+    地址的最后一段），所以带方括号的形式必须单独处理。
+    """
+    text = spec.strip()
+    if text.startswith("["):
+        host, sep, rest = text[1:].partition("]")
+        port_text = rest.lstrip(":")
+        if not sep or not port_text:
+            raise ValueError(f"IPv6 需要写成 [地址]:端口：{spec}")
+        return host, int(port_text)
+    host, _, port_text = text.rpartition(":")
+    if not host or not port_text:
+        raise ValueError(f"需要写成 HOST:PORT：{spec}")
+    return host, int(port_text)
+
+
+def format_host_port(host: str, port: int) -> str:
+    """IPv6 补上方括号，好直接传给 --team / --remote。"""
+    return f"[{host}]:{port}" if ":" in host else f"{host}:{port}"
+
+
+def peer_ip(client_address) -> str:  # noqa: ANN001
+    """双栈监听下 IPv4 客户端会被看成 ``::ffff:1.2.3.4``，这里还原成 IPv4。"""
+    ip = client_address[0] if client_address else ""
+    return ip[7:] if ip.startswith("::ffff:") else ip
 
 
 def start_discovery(port: int, relay_port: int) -> socket.socket | None:
@@ -104,15 +144,18 @@ def discover(timeout: float = 1.5, port: int = DISCOVER_PORT) -> str | None:
                 continue
             # 多网卡机器（比如还装了 WSL/VMware）可能报错地址，所以逐个试
             for ip in info.get("addresses") or []:
-                candidates.append(f"{ip}:{relay_port}")
-            candidates.append(f"{addr[0]}:{relay_port}")
+                candidates.append(format_host_port(str(ip), int(relay_port)))
+            candidates.append(format_host_port(peer_ip(addr), int(relay_port)))
     finally:
         sock.close()
 
     for spec in candidates:
-        host, _, port_text = spec.rpartition(":")
         try:
-            with socket.create_connection((host, int(port_text)), timeout=1.5):
+            host, port_number = split_host_port(spec)
+        except ValueError:
+            continue
+        try:
+            with socket.create_connection((host, port_number), timeout=1.5):
                 return spec
         except (OSError, ValueError):
             continue
@@ -145,7 +188,7 @@ class Relay(socketserver.BaseRequestHandler):
         except OSError as exc:
             print(f"[tunnel] 连不上目标 {self.target[0]}:{self.target[1]} — {exc}", flush=True)
             return
-        print(f"[tunnel] {self.client_address[0]} → {self.target[0]}:{self.target[1]}", flush=True)
+        print(f"[tunnel] {peer_ip(self.client_address)} → {self.target[0]}:{self.target[1]}", flush=True)
         with upstream:
             worker = threading.Thread(target=pipe, args=(self.request, upstream), daemon=True)
             worker.start()
@@ -159,41 +202,81 @@ class RelayServer(socketserver.ThreadingTCPServer):
 
     def verify_request(self, request, client_address):  # noqa: ANN001
         allowed = getattr(self, "allowed", None)
-        if allowed is not None and client_address[0] not in allowed:
-            print(f"[tunnel] 拒绝未授权来源 {client_address[0]}", flush=True)
+        if allowed is not None and peer_ip(client_address) not in allowed:
+            print(f"[tunnel] 拒绝未授权来源 {peer_ip(client_address)}", flush=True)
             return False
         return True
 
 
+class DualStackRelayServer(RelayServer):
+    """同时监听 IPv4 和 IPv6。
+
+    Windows 上 ``IPV6_V6ONLY`` 默认是 1，只绑 ``::`` 会收不到 IPv4 连接，
+    必须显式关掉；这样同一个端口既能接局域网的 IPv4 队友，也能接跨网段走
+    IPv6 直连的队友。
+    """
+
+    address_family = socket.AF_INET6
+
+    def server_bind(self) -> None:
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except OSError:
+            pass
+        super().server_bind()
+
+
 def lan_addresses() -> list[str]:
-    found: list[str] = []
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+    """本机可以提供给队友的地址：局域网 IPv4 在前，全局 IPv6 在后。
+
+    带上 IPv6 是为了跨网段的队友——他的机器如果也有 IPv6，就能直接连过来，
+    不必依赖同一局域网或第三方组网工具。
+    """
+    v4: list[str] = []
+    v6: list[str] = []
+    for family, bucket in ((socket.AF_INET, v4), (socket.AF_INET6, v6)):
+        try:
+            infos = socket.getaddrinfo(socket.gethostname(), None, family)
+        except OSError:
+            continue
+        for info in infos:
             ip = info[4][0]
-            if not ip.startswith("127.") and ip not in found:
-                found.append(ip)
-    except OSError:
-        pass
-    return found
+            if family == socket.AF_INET6:
+                ip = ip.split("%", 1)[0]  # 去掉 fe80::1%12 这种 zone id
+                if ip.startswith(("fe80", "::1")):
+                    continue
+            elif ip.startswith("127."):
+                continue
+            if ip not in bucket:
+                bucket.append(ip)
+    return v4 + v6
 
 
 def run_host(args: argparse.Namespace) -> None:
     handler = type("HostHandler", (Relay,), {"target": ("127.0.0.1", args.to_port)})
-    server = RelayServer(("0.0.0.0", args.port), handler)
+    bind_note = "IPv4 / IPv6 双栈"
+    try:
+        server = DualStackRelayServer(("::", args.port), handler)
+    except OSError as exc:
+        # 机器禁用了 IPv6 时退回纯 IPv4，局域网共享照旧可用。
+        print(f"[tunnel] IPv6 监听不可用（{exc}），退回 IPv4", flush=True)
+        server = RelayServer(("0.0.0.0", args.port), handler)
+        bind_note = "仅 IPv4"
     # 默认放开（不限制来源）；给了 --allow 就只允许这些 IP。
     server.allowed = set(args.allow) if args.allow else None
 
-    scope = "、".join(args.allow) if args.allow else "同网段任意机器"
+    scope = "、".join(args.allow) if args.allow else "不限制来源"
     print("\n" + "=" * 68)
     print("  决策模型已共享（队长端）")
-    print(f"  本机模型   127.0.0.1:{args.to_port}  →  对外监听 0.0.0.0:{args.port}")
+    print(f"  本机模型   127.0.0.1:{args.to_port}  →  对外监听 :{args.port}（{bind_note}）")
     print(f"  允许来源   {scope}")
     if not args.no_discovery:
-        print("  队友**什么都不用填**，直接运行：")
+        print("  同一局域网：队友**什么都不用填**，直接运行：")
         print("      python scripts/start_dev.py")
-        print("  （会自动在局域网里找到你；找不到时再手动指定：）")
+        print("  （会自动在局域网里找到你；跨网段时用下面的地址：）")
     for ip in lan_addresses():
-        print(f"      python scripts/start_dev.py --team {ip}:{args.port}")
+        tag = "IPv6（跨网段可用）" if ":" in ip else "局域网 IPv4"
+        print(f"      python scripts/start_dev.py --team {format_host_port(ip, args.port)}   # {tag}")
     print("  ⚠️  你的机器要保持开机，本窗口不能关；关闭即断开。")
     print("=" * 68 + "\n", flush=True)
 
@@ -209,13 +292,11 @@ def run_host(args: argparse.Namespace) -> None:
 
 
 def run_borrow(args: argparse.Namespace) -> None:
-    if ":" not in args.remote:
-        sys.exit("--remote 需要写成 HOST:PORT，例如 10.254.253.222:11435")
-    host, _, port_text = args.remote.rpartition(":")
     try:
-        port = int(port_text)
+        host, port = split_host_port(args.remote)
     except ValueError:
-        sys.exit(f"--remote 的端口不是数字：{port_text}")
+        sys.exit("--remote 需要写成 HOST:PORT；IPv6 要加方括号，"
+                 "例如 10.254.253.222:11435 或 [2409:890f:4e08:38c1::1]:11435")
 
     try:
         probe = socket.create_connection((host, port), timeout=8)
@@ -230,13 +311,13 @@ def run_borrow(args: argparse.Namespace) -> None:
     if not args.quiet:
         print("\n" + "=" * 68)
         print("  决策模型转发已启动（borrow）")
-        print(f"  本地 127.0.0.1:{args.local}  →  目标 {host}:{port}   [{reachable}]")
+        print(f"  本地 127.0.0.1:{args.local}  →  目标 {format_host_port(host, port)}   [{reachable}]")
         print(f"  .env 保持默认即可：POLICY_API_BASE_URL=http://127.0.0.1:{args.local}")
         print("  然后照常启动后端：uvicorn backend.main:app --reload")
         print("  ⚠️  目标服务不可用（或队长关机）时，请求会失败。")
         print("=" * 68 + "\n", flush=True)
     elif reachable != "可达":
-        print(f"[tunnel] 目标 {host}:{port} {reachable}", flush=True)
+        print(f"[tunnel] 目标 {format_host_port(host, port)} {reachable}", flush=True)
 
     try:
         server.serve_forever()

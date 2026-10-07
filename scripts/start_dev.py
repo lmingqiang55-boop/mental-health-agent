@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from policy_tunnel import DISCOVER_PORT, discover  # noqa: E402
+from policy_tunnel import DISCOVER_PORT, discover, split_host_port  # noqa: E402
 
 POLICY_PORT = 8001
 BACKEND_PORT = 8000
@@ -62,9 +62,12 @@ def alive(proc: subprocess.Popen | None) -> bool:
 
 
 def port_open(spec: str, timeout: float = 2.0) -> bool:
-    host, _, port_text = spec.rpartition(":")
     try:
-        with socket.create_connection((host, int(port_text)), timeout=timeout):
+        host, port = split_host_port(spec)
+    except ValueError:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
             return True
     except (OSError, ValueError):
         return False
@@ -247,7 +250,8 @@ def shutdown(children: list) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="一条命令跑起本地开发环境")
     parser.add_argument("--team", metavar="HOST:PORT", default=os.getenv("TEAM_POLICY_RELAY"),
-                        help="队长的模型地址；不填会自动在局域网里找")
+                        help="队长的模型地址；不填会自动在局域网里找。"
+                             "IPv6 要加方括号，例如 [2409:890f:4e08:38c1::1]:11435")
     parser.add_argument("--no-discover", action="store_true",
                         help="不做局域网自动发现，只按 --team / 本机模型 / 占位服务 顺序")
     parser.add_argument("--discover-port", type=int, default=DISCOVER_PORT,
