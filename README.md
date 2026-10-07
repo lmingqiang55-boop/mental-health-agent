@@ -58,6 +58,13 @@ DASHSCOPE_WORKSPACE_ID=你的业务空间ID
 对话还需要启动小组训练的决策模型服务，默认地址为 `http://127.0.0.1:8001`；
 地址不同时修改 `.env` 中的 `POLICY_API_BASE_URL`。
 完整配置见 [环境配置与验证](docs/environment.md)。真实密钥只保存在本地 `.env`。
+
+> **队友不用自己起这个服务，也不用下载模型权重。** 一条命令即可跑通：
+> `python scripts/start_dev.py --core-only` —— 它会自动补齐 `.env`、安装依赖、
+> 在局域网里发现队长共享的模型（找不到则退回内置占位服务），并接到 `127.0.0.1:8001`。
+> 队长侧共享：`python scripts/policy_tunnel.py host`。
+> 调用样例、端口对应关系与已知问题见 [队友本地运行指南](docs/队友本地运行指南.md)。
+
 语音合成接口默认使用 `cosyvoice-v3-flash` 的 `longyingtao_v3` 预置音色；
 未配置时文字对话仍可使用。前端播放由页面开发者接入；音频不进入评估记录。
 
