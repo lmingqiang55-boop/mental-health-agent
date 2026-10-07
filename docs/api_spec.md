@@ -570,7 +570,7 @@ DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音�
 
 ## 数据边界
 
-- Session 与记忆库当前均为进程内存，重启清空，TTL 2 小时。
+- Session 与治愈陪伴状态为进程内存，重启清空，TTL 2 小时；评估记忆使用 SQLite 持久保存每位学生最近三次结果。
 - 所有风险/评估结果均为**初步筛查提示**，不得表述为临床诊断或治疗建议。
 - `session_id` 是会话定位符，不是身份认证或授权凭据。
 - 不提交 `.env`、密钥、原始音视频或真实个人对话。
@@ -617,3 +617,13 @@ frame_id/capture_id 为 1～128 字符非空标识，captured_at_ms 为有限非
 简单评估 {session_id} 从消息上的用户快照构造汇总，sample_count 计句级样本，按句等权；face_present_ratio 是句级有效人脸比例。完整输入省略或 null 的视觉快照不会删除既有快照，改写已绑定视觉返回 HISTORY_CONFLICT；省略汇总时按已有快照生成。简单与完整评估均拒绝将评估期间已过时的历史结果链接到会话。
 
 前端 FormData 上传 /api/audio/transcribe 时不设置 JSON Content-Type；须由浏览器附加 multipart boundary。已提供录音按钮、取消、最长时长、收尾、视觉等待和失败重试，细节见 [当前对接说明](vision_alignment.md)。
+
+## 2026-10-04：治愈 Agent 后端接口
+
+新增 `POST /api/healing/start`、`GET /api/healing/{session_id}` 和 `POST /api/healing/chat`。
+这三项接口维护独立陪伴状态，不改动原筛查聊天、评估结果或老师跟进字段。
+请求、响应、幂等约定、错误码和前端接入要求见 [治愈 Agent 交接](healing_agent.md)。
+
+2026-10-05 补充：接口字段保持兼容。多诉求进入时可先返回无方法的优先方向确认；明确方向后生成支持报告。新限制会调整方法可用性，明确无效反馈保留原关联；有经来源校验的简短表达时可简化同一方法。风险字段缺失、默认来源无法确认或相互矛盾时暂停普通支持，`status=referred` 不表示已通知任何现实人员。报告的知识来源及内部反馈关联仍只留在后端。
+
+2026-10-06 年龄与年级接通：`/api/healing/start` 从最新持久评估的 `result.age` 读取年龄，从 `result.grade` 映射已识别的学段。`background.age` 已移除，显式传入返回 422；通常只需 `session_id`、`request_id`，其他背景按需传入。缺失年龄不根据年级或旧记录补齐；记忆年龄超出当前支持的 6–18 岁或与最终学段冲突返回 422 `VALIDATION_ERROR`，缺少评估记录仍返回 409。恢复沿用原绑定，显式重生成成功后才绑定最新评估；具体学段兼容和未知字段约定见 [治愈 Agent 交接](healing_agent.md)。

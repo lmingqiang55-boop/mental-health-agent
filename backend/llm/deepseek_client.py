@@ -49,6 +49,7 @@ class DeepSeekClient:
 
     def __init__(self, config: DeepSeekConfig) -> None:
         self.config = config
+        self.last_usage: dict[str, int | None] | None = None
         # 注意：api_key 只在这里传入 SDK，绝不打印。
         self.client = AsyncOpenAI(
             api_key=config.api_key,
@@ -105,6 +106,10 @@ class DeepSeekClient:
                 f"DeepSeek API request failed: {type(exc).__name__}"
             ) from exc
 
+        usage = getattr(response, "usage", None)
+        self.last_usage = ({"prompt_tokens": getattr(usage, "prompt_tokens", None),
+                            "completion_tokens": getattr(usage, "completion_tokens", None),
+                            "total_tokens": getattr(usage, "total_tokens", None)} if usage is not None else None)
         return self._extract_content(response)
 
     @staticmethod

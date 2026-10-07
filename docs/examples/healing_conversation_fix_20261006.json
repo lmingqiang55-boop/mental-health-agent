@@ -1,0 +1,2000 @@
+{
+  "date": "2026-10-06",
+  "synthetic_data": true,
+  "full_chain_accepted": false,
+  "age_group_experience_accepted": false,
+  "targeted_replay": {
+    "synthetic_data": true,
+    "scope": "Original two-method pre-503 state replay; no assessment model, not full-chain acceptance",
+    "seed_source": "docs/examples/healing_feedback_acceptance_20261006.json",
+    "seed_state": {
+      "healing_id": "887cd0e6-7a48-4e7d-b71a-77e8e2779ebd",
+      "memory": {
+        "student_ref": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+        "session_id": "ac7856b8-86fb-4467-b6a5-a6f0208379b8",
+        "assessment": {
+          "result_id": "asmt-20261006T132554-6734bd1f",
+          "session_id": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+          "student_ref": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+          "age": 16,
+          "grade": "高一",
+          "psychological_profile": {
+            "emotion": 0,
+            "interest_motivation": 0,
+            "sleep_energy": 0,
+            "attention_thinking": 0,
+            "social_daily": 17
+          },
+          "concern_index": 7,
+          "overall_level": "low_concern",
+          "risk": {
+            "risk_level": "low",
+            "risk_score": 0.1,
+            "risk_reasons": [],
+            "risk_types": [],
+            "key_evidence": [],
+            "requires_intervention": false
+          },
+          "report": {
+            "overall_status": {
+              "level": "low_concern",
+              "concern_index": 7,
+              "summary": "本次初步筛查显示“状态较平稳”。社交与日常功能方面的线索相对更突出，可进一步了解具体情况。"
+            },
+            "psychological_profile": {
+              "emotion": 0,
+              "interest_motivation": 0,
+              "sleep_energy": 0,
+              "attention_thinking": 0,
+              "social_daily": 17
+            },
+            "primary_concern": {
+              "dimension": "social_daily",
+              "description": "社交与日常功能在五个维度中的关注分数最高（17/100），适合作为后续沟通时优先了解的方面。"
+            },
+            "key_findings": [
+              {
+                "title": "社交与日常功能受损",
+                "description": "本次对话在社交与日常功能受损方面有值得继续了解的线索；这个分数只反映当前对话，不代表诊断。"
+              },
+              {
+                "title": "情绪状态",
+                "description": "本次对话没有提供足够的情绪状态相关线索，不能据此排除困扰。"
+              }
+            ],
+            "multimodal_observation": {
+              "consistency_score": null,
+              "consistency_level": "unknown",
+              "summary": "本次没有可用的视觉信息，仅依据对话文字作初步整理；无法判断语言与视觉信息的一致性。"
+            },
+            "trend_and_suggestions": {
+              "trend": "unclear",
+              "trend_summary": "一次对话缺少可靠的前后对比，暂无法判断状态变化方向。",
+              "suggestions": [
+                "可以和信任的成年人谈谈学习、同伴相处或日常活动中的具体困难。",
+                "如果这些困扰持续存在或影响学习、生活，可以请家长或学校心理老师协助联系专业人员进一步评估。"
+              ]
+            },
+            "metadata": {
+              "schema_version": "1.0",
+              "assessment_id": "asmt-20261006T132554-6734bd1f",
+              "generated_at": "2026-10-06T13:26:10.817183Z"
+            }
+          },
+          "assessment_method": "evaluation_agent",
+          "created_at": "2026-10-06T13:26:10.817183Z"
+        },
+        "recent_assessments": [
+          {
+            "result_id": "asmt-20261006T132554-6734bd1f",
+            "session_id": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+            "student_ref": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+            "age": 16,
+            "grade": "高一",
+            "psychological_profile": {
+              "emotion": 0,
+              "interest_motivation": 0,
+              "sleep_energy": 0,
+              "attention_thinking": 0,
+              "social_daily": 17
+            },
+            "concern_index": 7,
+            "overall_level": "low_concern",
+            "risk": {
+              "risk_level": "low",
+              "risk_score": 0.1,
+              "risk_reasons": [],
+              "risk_types": [],
+              "key_evidence": [],
+              "requires_intervention": false
+            },
+            "report": {
+              "overall_status": {
+                "level": "low_concern",
+                "concern_index": 7,
+                "summary": "本次初步筛查显示“状态较平稳”。社交与日常功能方面的线索相对更突出，可进一步了解具体情况。"
+              },
+              "psychological_profile": {
+                "emotion": 0,
+                "interest_motivation": 0,
+                "sleep_energy": 0,
+                "attention_thinking": 0,
+                "social_daily": 17
+              },
+              "primary_concern": {
+                "dimension": "social_daily",
+                "description": "社交与日常功能在五个维度中的关注分数最高（17/100），适合作为后续沟通时优先了解的方面。"
+              },
+              "key_findings": [
+                {
+                  "title": "社交与日常功能受损",
+                  "description": "本次对话在社交与日常功能受损方面有值得继续了解的线索；这个分数只反映当前对话，不代表诊断。"
+                },
+                {
+                  "title": "情绪状态",
+                  "description": "本次对话没有提供足够的情绪状态相关线索，不能据此排除困扰。"
+                }
+              ],
+              "multimodal_observation": {
+                "consistency_score": null,
+                "consistency_level": "unknown",
+                "summary": "本次没有可用的视觉信息，仅依据对话文字作初步整理；无法判断语言与视觉信息的一致性。"
+              },
+              "trend_and_suggestions": {
+                "trend": "unclear",
+                "trend_summary": "一次对话缺少可靠的前后对比，暂无法判断状态变化方向。",
+                "suggestions": [
+                  "可以和信任的成年人谈谈学习、同伴相处或日常活动中的具体困难。",
+                  "如果这些困扰持续存在或影响学习、生活，可以请家长或学校心理老师协助联系专业人员进一步评估。"
+                ]
+              },
+              "metadata": {
+                "schema_version": "1.0",
+                "assessment_id": "asmt-20261006T132554-6734bd1f",
+                "generated_at": "2026-10-06T13:26:10.817183Z"
+              }
+            },
+            "assessment_method": "evaluation_agent",
+            "created_at": "2026-10-06T13:26:10.817183Z"
+          }
+        ],
+        "background": {
+          "school_stage": "high",
+          "current_concern": "晚上在床上看手机，经常晚睡，我想先聊睡眠习惯",
+          "important_events": [],
+          "preferences": [],
+          "constraints": [],
+          "previous_attempts": [],
+          "adult_support_available": false,
+          "age": 16
+        },
+        "current_session_messages": [
+          "我16岁，读高一，晚上在床上看手机，经常晚睡，平时正常上学吃饭。"
+        ],
+        "provenance": {
+          "assessment": "persistent_evaluation_record",
+          "risk": "serialized_assessment_fields_inspected_before_defaults; missing_blocks_support",
+          "recent_assessments": "persistent_last_three_evaluation_records",
+          "background": "explicit_caller_context; demographics_from_persistent_assessment",
+          "background.age": "persistent_evaluation_record.age",
+          "assessment.grade": "persistent_evaluation_record.grade",
+          "background.school_stage": "persistent_evaluation_record.grade_to_school_stage",
+          "current_session_messages": "current_process_last_20_user_messages; not_persistent; not_assessment_transcript",
+          "multimodal_observation": "saved_report; unknown_consistency_is_not_an_emotion_conclusion"
+        },
+        "risk_input_issues": []
+      },
+      "scene": "sleep",
+      "goal": {
+        "scene": "sleep",
+        "mentioned_scenes": [
+          "sleep"
+        ],
+        "needs_confirmation": false,
+        "evidence": "先聊睡眠习惯"
+      },
+      "report": {
+        "understanding": "你16岁读高一，晚上在床上看手机，经常晚睡，平时上学吃饭都正常。你想先聊睡眠习惯，我听到了。",
+        "focus": "了解你晚上在床上看手机、晚睡的具体情况，以及你希望从哪方面开始聊。",
+        "suggestion_ids": [
+          "25c01832-50a4-45b0-afd8-c7f392ed61e4",
+          "60c6cb67-8f40-4b19-8163-67fe58568229"
+        ],
+        "cautions": [
+          "这些是心理支持建议；如果困扰持续加重，请寻求可信任的成人或专业人员帮助。"
+        ],
+        "question": "晚上在床上看手机的时候，通常是在做什么，让你停不下来？",
+        "generated_at": "2026-10-06T13:26:13.644269Z",
+        "degraded_reason": null
+      },
+      "suggestions": [
+        {
+          "suggestion_id": "25c01832-50a4-45b0-afd8-c7f392ed61e4",
+          "knowledge_id": "heal-678d7dbec55f",
+          "method_key": "sleep_habits",
+          "title": "自己调整睡眠习惯",
+          "goal": "你可以通过调整饮食、运动和电子产品使用，帮助自己养成有利于睡眠的习惯。",
+          "steps": [
+            "下午2点以后，避免饮用咖啡和茶。",
+            "睡前2小时，避免剧烈运动。",
+            "晚餐宜进食易消化的食物。",
+            "尽量不要在床上使用电子产品。"
+          ],
+          "prerequisites": [],
+          "cautions": [],
+          "proposed_turn": 0,
+          "execution": "unconfirmed",
+          "effect": "unknown",
+          "active": true,
+          "wording_id": "heal-678d7dbec55f:autonomous",
+          "revisions": []
+        },
+        {
+          "suggestion_id": "60c6cb67-8f40-4b19-8163-67fe58568229",
+          "knowledge_id": "heal-bdad91a65daf",
+          "method_key": "bedtime_screen_break__bdad91a65daf",
+          "title": "睡前关闭电子设备",
+          "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+          "steps": [
+            "你可以选择让卧室成为无电子设备区域。",
+            "你可以在熄灯前一小时关闭所有电子设备。",
+            "你可以关掉手机，避免深夜短信吵醒你。"
+          ],
+          "prerequisites": [],
+          "cautions": [
+            "在经常出现睡眠困难时寻求医疗帮助。"
+          ],
+          "proposed_turn": 0,
+          "execution": "unconfirmed",
+          "effect": "unknown",
+          "active": true,
+          "wording_id": "heal-bdad91a65daf:autonomous",
+          "revisions": []
+        }
+      ],
+      "feedback": [],
+      "messages": [],
+      "context_updates": [],
+      "adult_support": {
+        "available": null,
+        "source": null,
+        "evidence": null,
+        "turn": 0,
+        "asked": false,
+        "waiting": false,
+        "deferred_knowledge_ids": [],
+        "blocked_suggestion_ids": []
+      },
+      "turn_count": 0,
+      "status": "active",
+      "risk": {
+        "risk_level": "low",
+        "risk_score": 0.1,
+        "risk_reasons": [],
+        "risk_types": [],
+        "key_evidence": [],
+        "requires_intervention": false
+      },
+      "audit": [
+        {
+          "phase": "report",
+          "at": "2026-10-06T13:26:13.644269+00:00",
+          "knowledge": [
+            {
+              "item": {
+                "knowledge_id": "heal-678d7dbec55f",
+                "method_key": "sleep_habits",
+                "source_id": "pku-sleep",
+                "source_url": "https://www.pkuh6.cn/Html/News/Articles/4977.html",
+                "source_title": "北大六院：一文带你全面了解青少年失眠",
+                "source_version": "accessed:2026-10-04",
+                "source_digest": "3aa960d29684ccaa1f80128f864e0e3455bd682c5e20d916128a5097b7716b19",
+                "source_location": "normalized_text:3499-3568",
+                "title": "坚持良好的睡眠习惯",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "通过调整日常饮食、运动和电子产品使用，养成有利于睡眠的习惯。",
+                "steps": [
+                  "下午2点以后避免饮用咖啡和茶。",
+                  "睡前2小时避免剧烈运动。",
+                  "晚餐宜进食易消化的食物。",
+                  "尽量不要在床上使用电子产品。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [],
+                "keywords": [
+                  "睡眠习惯",
+                  "咖啡因",
+                  "剧烈运动",
+                  "电子产品"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "一文带你全面了解青少年失眠",
+                    "start": 7,
+                    "end": 20
+                  },
+                  {
+                    "field": "audience",
+                    "quote": "一文带你全面了解青少年失眠",
+                    "start": 7,
+                    "end": 20
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "坚持良好的睡眠习惯",
+                    "start": 3499,
+                    "end": 3508
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "下午\n2\n点以后避免饮用咖啡和茶，睡前\n2\n小时避免剧烈运动，晚餐宜进食易消化的食物，尽量不要在床上使用电子产品。",
+                    "start": 3510,
+                    "end": 3567
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-678d7dbec55f:simple",
+                    "style": "simple",
+                    "title": "睡好觉的小习惯",
+                    "goal": "调整吃喝、运动和用电子产品的时间，帮助自己睡得更好。",
+                    "steps": [
+                      "下午2点以后，不喝咖啡和茶。",
+                      "睡前2小时，不做剧烈运动。",
+                      "晚餐吃容易消化的食物。",
+                      "尽量不要在床上用电子产品。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-678d7dbec55f:conversational",
+                    "style": "conversational",
+                    "title": "养成好睡眠习惯",
+                    "goal": "通过调整日常饮食、运动和电子产品使用，让自己更容易睡好。",
+                    "steps": [
+                      "下午2点以后，尽量别喝咖啡和茶。",
+                      "睡前2小时，先别做剧烈运动。",
+                      "晚餐可以吃些容易消化的食物。",
+                      "在床上时，尽量不要用电子产品。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-678d7dbec55f:autonomous",
+                    "style": "autonomous",
+                    "title": "自己调整睡眠习惯",
+                    "goal": "你可以通过调整饮食、运动和电子产品使用，帮助自己养成有利于睡眠的习惯。",
+                    "steps": [
+                      "下午2点以后，避免饮用咖啡和茶。",
+                      "睡前2小时，避免剧烈运动。",
+                      "晚餐宜进食易消化的食物。",
+                      "尽量不要在床上使用电子产品。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 5.162097761876127,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-bdad91a65daf",
+                "method_key": "bedtime_screen_break__bdad91a65daf",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "睡前关闭电子设备",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "减少电子设备光线和夜间信息对睡眠的干扰。",
+                "steps": [
+                  "让卧室成为无电子设备区域。",
+                  "在熄灯前一小时关闭所有电子设备。",
+                  "关掉手机，避免深夜短信吵醒你。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "电子设备",
+                  "睡前",
+                  "无科技区",
+                  "手机"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "tech-free",
+                    "start": 1642,
+                    "end": 1651
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "tech-free",
+                    "start": 1642,
+                    "end": 1651
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-bdad91a65daf:simple",
+                    "style": "simple",
+                    "title": "睡前关掉电子设备",
+                    "goal": "让电子设备的光和夜间消息少打扰你的睡眠。",
+                    "steps": [
+                      "让卧室不放电子设备。",
+                      "在熄灯前一小时，关掉所有电子设备。",
+                      "关掉手机，避免深夜短信打扰你。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-bdad91a65daf:conversational",
+                    "style": "conversational",
+                    "title": "睡前和电子设备说晚安",
+                    "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+                    "steps": [
+                      "你可以把卧室变成没有电子设备的地方。",
+                      "在熄灯前一小时，把所有电子设备都关掉。",
+                      "把手机关掉，避免被深夜短信吵醒。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-bdad91a65daf:autonomous",
+                    "style": "autonomous",
+                    "title": "睡前关闭电子设备",
+                    "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+                    "steps": [
+                      "你可以选择让卧室成为无电子设备区域。",
+                      "你可以在熄灯前一小时关闭所有电子设备。",
+                      "你可以关掉手机，避免深夜短信吵醒你。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 3.039523016821851,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-1018bde6be82",
+                "method_key": "consistent_sleep_schedule__1018bde6be82",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "保持固定睡眠作息",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "帮助身体预期睡眠。",
+                "steps": [
+                  "每晚在同一时间上床睡觉。",
+                  "建立固定的睡前程序。",
+                  "每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "睡眠作息",
+                  "固定时间",
+                  "睡前程序",
+                  "放松"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "Going",
+                    "start": 1883,
+                    "end": 1888
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "Going",
+                    "start": 1883,
+                    "end": 1888
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-1018bde6be82:simple",
+                    "style": "simple",
+                    "title": "固定睡觉时间",
+                    "goal": "帮身体知道什么时候该睡觉。",
+                    "steps": [
+                      "每晚在同一时间上床睡觉。",
+                      "建立一个固定的睡前程序。",
+                      "每晚用阅读、听音乐、陪宠物、写日记、冥想或其他让你放松的事来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-1018bde6be82:conversational",
+                    "style": "conversational",
+                    "title": "保持固定睡眠作息",
+                    "goal": "练习固定上床时间和睡前常规。",
+                    "steps": [
+                      "每晚在同一时间上床睡觉。",
+                      "建立一个固定的睡前程序。",
+                      "每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-1018bde6be82:autonomous",
+                    "style": "autonomous",
+                    "title": "保持固定睡眠作息",
+                    "goal": "你可以练习固定上床时间和睡前常规。",
+                    "steps": [
+                      "你可以选择每晚在同一时间上床睡觉。",
+                      "你可以建立固定的睡前程序。",
+                      "你可以每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 1.7521098370924812,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-f9bfeb05039e",
+                "method_key": "limit_caffeine_near_bedtime",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "睡前避免咖啡因",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "减少咖啡因导致的入睡困难和夜间辗转。",
+                "steps": [
+                  "限制白天摄入的咖啡因量。",
+                  "晚上改喝低咖啡因或无咖啡因饮料。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "咖啡因",
+                  "睡前",
+                  "无咖啡因",
+                  "饮料"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "caffeine",
+                    "start": 1495,
+                    "end": 1503
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "caffeine",
+                    "start": 1495,
+                    "end": 1503
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-f9bfeb05039e:simple",
+                    "style": "simple",
+                    "title": "晚上减少咖啡因",
+                    "goal": "留意白天和晚上的咖啡因摄入。",
+                    "steps": [
+                      "白天少喝含咖啡因的饮料。",
+                      "晚上换成低咖啡因或不含咖啡因的饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-f9bfeb05039e:conversational",
+                    "style": "conversational",
+                    "title": "睡前少喝含咖啡因的饮料",
+                    "goal": "练习限制咖啡因摄入，晚上选择低咖啡因或无咖啡因饮料。",
+                    "steps": [
+                      "白天注意限制自己摄入的咖啡因量。",
+                      "晚上换成低咖啡因或不含咖啡因的饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-f9bfeb05039e:autonomous",
+                    "style": "autonomous",
+                    "title": "睡前控制咖啡因",
+                    "goal": "你可以练习限制咖啡因摄入，晚上选择低咖啡因或无咖啡因饮料。",
+                    "steps": [
+                      "你可以限制白天摄入的咖啡因量。",
+                      "晚上你可以改喝低咖啡因或无咖啡因饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 1.5302407353802348,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            }
+          ],
+          "goal": {
+            "scene": "sleep",
+            "mentioned_scenes": [
+              "sleep"
+            ],
+            "needs_confirmation": false,
+            "evidence": "先聊睡眠习惯"
+          },
+          "explanations": [],
+          "context_removed": [],
+          "communication_style": "autonomous",
+          "risk_ms": 0.0743000055081211,
+          "context_filter_ms": 0.015600002370774746,
+          "generation_ms": 1702.9866999946535,
+          "generation_attempts": 1,
+          "narrative_check_ms": 1107.3018999959459,
+          "retrieval_ms": 1.6279999981634319,
+          "total_ms": 2813.457299998845,
+          "degraded_reason": null,
+          "model_calls": [
+            {
+              "schema": "AgentDraft",
+              "model": "DeepSeek-V4.1-Flash",
+              "elapsed_ms": 1697.7523000023211,
+              "usage": {
+                "prompt_tokens": 4532,
+                "completion_tokens": 138,
+                "total_tokens": 4670
+              }
+            },
+            {
+              "schema": "NarrativeCheck",
+              "model": "DeepSeek-V4.1-Flash",
+              "elapsed_ms": 1101.13519999868,
+              "usage": {
+                "prompt_tokens": 2132,
+                "completion_tokens": 10,
+                "total_tokens": 2142
+              }
+            }
+          ],
+          "adapter_ms": 1.4086000010138378
+        }
+      ],
+      "memory_update_suggestions": [],
+      "receipts": {},
+      "created_at": "2026-10-06T13:26:10.830551Z"
+    },
+    "request": {
+      "session_id": "ac7856b8-86fb-4467-b6a5-a6f0208379b8",
+      "healing_id": "887cd0e6-7a48-4e7d-b71a-77e8e2779ebd",
+      "message_id": "50dffa1a-7693-4b70-b5b5-70f1905226c4",
+      "text": "第一个方法并不复杂，先别改；第二个方法也看得懂，不用改"
+    },
+    "status": 200,
+    "response": {
+      "session_id": "ac7856b8-86fb-4467-b6a5-a6f0208379b8",
+      "healing_id": "887cd0e6-7a48-4e7d-b71a-77e8e2779ebd",
+      "assessment_result_id": "asmt-20261006T132554-6734bd1f",
+      "status": "active",
+      "turn_count": 1,
+      "report": {
+        "understanding": "你16岁读高一，晚上在床上看手机，经常晚睡，平时上学吃饭都正常。你想先聊睡眠习惯，我听到了。",
+        "focus": "了解你晚上在床上看手机、晚睡的具体情况，以及你希望从哪方面开始聊。",
+        "suggestions": [
+          {
+            "title": "自己调整睡眠习惯",
+            "goal": "你可以通过调整饮食、运动和电子产品使用，帮助自己养成有利于睡眠的习惯。",
+            "steps": [
+              "下午2点以后，避免饮用咖啡和茶。",
+              "睡前2小时，避免剧烈运动。",
+              "晚餐宜进食易消化的食物。",
+              "尽量不要在床上使用电子产品。"
+            ],
+            "prerequisites": [],
+            "cautions": [],
+            "execution": "unconfirmed",
+            "effect": "unknown",
+            "active": true
+          },
+          {
+            "title": "睡前关闭电子设备",
+            "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+            "steps": [
+              "你可以选择让卧室成为无电子设备区域。",
+              "你可以在熄灯前一小时关闭所有电子设备。",
+              "你可以关掉手机，避免深夜短信吵醒你。"
+            ],
+            "prerequisites": [],
+            "cautions": [
+              "在经常出现睡眠困难时寻求医疗帮助。"
+            ],
+            "execution": "unconfirmed",
+            "effect": "unknown",
+            "active": true
+          }
+        ],
+        "cautions": [
+          "这些是心理支持建议；如果困扰持续加重，请寻求可信任的成人或专业人员帮助。"
+        ],
+        "question": "晚上在床上看手机的时候，通常是在做什么，让你停不下来？",
+        "generated_at": "2026-10-06T13:26:13.644269Z"
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "第一个方法并不复杂，先别改；第二个方法也看得懂，不用改",
+          "created_at": "2026-10-06T15:27:28.741317Z"
+        },
+        {
+          "role": "assistant",
+          "content": "你明确说第一个方法不复杂、先别改，第二个方法也看得懂、不用改。我听到了，不会去动这两个方法。\n\n确认两个方法都保持原样，了解你接下来想从哪一步开始。\n\n开始这两个方法时，你最担心遇到什么困难？",
+          "created_at": "2026-10-06T15:27:32.661373Z"
+        }
+      ],
+      "risk": {
+        "risk_level": "low",
+        "risk_score": 0.1,
+        "risk_reasons": [],
+        "risk_types": [],
+        "key_evidence": [],
+        "requires_intervention": false
+      },
+      "notice": "本次陪伴记录仅在当前会话中保留；刷新或服务重启后请重新进入。"
+    },
+    "passed": true,
+    "final_state": {
+      "healing_id": "887cd0e6-7a48-4e7d-b71a-77e8e2779ebd",
+      "memory": {
+        "student_ref": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+        "session_id": "ac7856b8-86fb-4467-b6a5-a6f0208379b8",
+        "assessment": {
+          "result_id": "asmt-20261006T132554-6734bd1f",
+          "session_id": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+          "student_ref": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+          "age": 16,
+          "grade": "高一",
+          "psychological_profile": {
+            "emotion": 0,
+            "interest_motivation": 0,
+            "sleep_energy": 0,
+            "attention_thinking": 0,
+            "social_daily": 17
+          },
+          "concern_index": 7,
+          "overall_level": "low_concern",
+          "risk": {
+            "risk_level": "low",
+            "risk_score": 0.1,
+            "risk_reasons": [],
+            "risk_types": [],
+            "key_evidence": [],
+            "requires_intervention": false
+          },
+          "report": {
+            "overall_status": {
+              "level": "low_concern",
+              "concern_index": 7,
+              "summary": "本次初步筛查显示“状态较平稳”。社交与日常功能方面的线索相对更突出，可进一步了解具体情况。"
+            },
+            "psychological_profile": {
+              "emotion": 0,
+              "interest_motivation": 0,
+              "sleep_energy": 0,
+              "attention_thinking": 0,
+              "social_daily": 17
+            },
+            "primary_concern": {
+              "dimension": "social_daily",
+              "description": "社交与日常功能在五个维度中的关注分数最高（17/100），适合作为后续沟通时优先了解的方面。"
+            },
+            "key_findings": [
+              {
+                "title": "社交与日常功能受损",
+                "description": "本次对话在社交与日常功能受损方面有值得继续了解的线索；这个分数只反映当前对话，不代表诊断。"
+              },
+              {
+                "title": "情绪状态",
+                "description": "本次对话没有提供足够的情绪状态相关线索，不能据此排除困扰。"
+              }
+            ],
+            "multimodal_observation": {
+              "consistency_score": null,
+              "consistency_level": "unknown",
+              "summary": "本次没有可用的视觉信息，仅依据对话文字作初步整理；无法判断语言与视觉信息的一致性。"
+            },
+            "trend_and_suggestions": {
+              "trend": "unclear",
+              "trend_summary": "一次对话缺少可靠的前后对比，暂无法判断状态变化方向。",
+              "suggestions": [
+                "可以和信任的成年人谈谈学习、同伴相处或日常活动中的具体困难。",
+                "如果这些困扰持续存在或影响学习、生活，可以请家长或学校心理老师协助联系专业人员进一步评估。"
+              ]
+            },
+            "metadata": {
+              "schema_version": "1.0",
+              "assessment_id": "asmt-20261006T132554-6734bd1f",
+              "generated_at": "2026-10-06T13:26:10.817183Z"
+            }
+          },
+          "assessment_method": "evaluation_agent",
+          "created_at": "2026-10-06T13:26:10.817183Z"
+        },
+        "recent_assessments": [
+          {
+            "result_id": "asmt-20261006T132554-6734bd1f",
+            "session_id": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+            "student_ref": "b9d5999d-aecc-4882-b920-dfc9d5ffc497",
+            "age": 16,
+            "grade": "高一",
+            "psychological_profile": {
+              "emotion": 0,
+              "interest_motivation": 0,
+              "sleep_energy": 0,
+              "attention_thinking": 0,
+              "social_daily": 17
+            },
+            "concern_index": 7,
+            "overall_level": "low_concern",
+            "risk": {
+              "risk_level": "low",
+              "risk_score": 0.1,
+              "risk_reasons": [],
+              "risk_types": [],
+              "key_evidence": [],
+              "requires_intervention": false
+            },
+            "report": {
+              "overall_status": {
+                "level": "low_concern",
+                "concern_index": 7,
+                "summary": "本次初步筛查显示“状态较平稳”。社交与日常功能方面的线索相对更突出，可进一步了解具体情况。"
+              },
+              "psychological_profile": {
+                "emotion": 0,
+                "interest_motivation": 0,
+                "sleep_energy": 0,
+                "attention_thinking": 0,
+                "social_daily": 17
+              },
+              "primary_concern": {
+                "dimension": "social_daily",
+                "description": "社交与日常功能在五个维度中的关注分数最高（17/100），适合作为后续沟通时优先了解的方面。"
+              },
+              "key_findings": [
+                {
+                  "title": "社交与日常功能受损",
+                  "description": "本次对话在社交与日常功能受损方面有值得继续了解的线索；这个分数只反映当前对话，不代表诊断。"
+                },
+                {
+                  "title": "情绪状态",
+                  "description": "本次对话没有提供足够的情绪状态相关线索，不能据此排除困扰。"
+                }
+              ],
+              "multimodal_observation": {
+                "consistency_score": null,
+                "consistency_level": "unknown",
+                "summary": "本次没有可用的视觉信息，仅依据对话文字作初步整理；无法判断语言与视觉信息的一致性。"
+              },
+              "trend_and_suggestions": {
+                "trend": "unclear",
+                "trend_summary": "一次对话缺少可靠的前后对比，暂无法判断状态变化方向。",
+                "suggestions": [
+                  "可以和信任的成年人谈谈学习、同伴相处或日常活动中的具体困难。",
+                  "如果这些困扰持续存在或影响学习、生活，可以请家长或学校心理老师协助联系专业人员进一步评估。"
+                ]
+              },
+              "metadata": {
+                "schema_version": "1.0",
+                "assessment_id": "asmt-20261006T132554-6734bd1f",
+                "generated_at": "2026-10-06T13:26:10.817183Z"
+              }
+            },
+            "assessment_method": "evaluation_agent",
+            "created_at": "2026-10-06T13:26:10.817183Z"
+          }
+        ],
+        "background": {
+          "school_stage": "high",
+          "current_concern": "晚上在床上看手机，经常晚睡，我想先聊睡眠习惯",
+          "important_events": [],
+          "preferences": [],
+          "constraints": [],
+          "previous_attempts": [],
+          "adult_support_available": false,
+          "age": 16
+        },
+        "current_session_messages": [
+          "我16岁，读高一，晚上在床上看手机，经常晚睡，平时正常上学吃饭。"
+        ],
+        "provenance": {
+          "assessment": "persistent_evaluation_record",
+          "risk": "serialized_assessment_fields_inspected_before_defaults; missing_blocks_support",
+          "recent_assessments": "persistent_last_three_evaluation_records",
+          "background": "explicit_caller_context; demographics_from_persistent_assessment",
+          "background.age": "persistent_evaluation_record.age",
+          "assessment.grade": "persistent_evaluation_record.grade",
+          "background.school_stage": "persistent_evaluation_record.grade_to_school_stage",
+          "current_session_messages": "current_process_last_20_user_messages; not_persistent; not_assessment_transcript",
+          "multimodal_observation": "saved_report; unknown_consistency_is_not_an_emotion_conclusion"
+        },
+        "risk_input_issues": []
+      },
+      "scene": "sleep",
+      "goal": {
+        "scene": "sleep",
+        "mentioned_scenes": [
+          "sleep"
+        ],
+        "needs_confirmation": false,
+        "evidence": "先聊睡眠习惯"
+      },
+      "report": {
+        "understanding": "你16岁读高一，晚上在床上看手机，经常晚睡，平时上学吃饭都正常。你想先聊睡眠习惯，我听到了。",
+        "focus": "了解你晚上在床上看手机、晚睡的具体情况，以及你希望从哪方面开始聊。",
+        "suggestion_ids": [
+          "25c01832-50a4-45b0-afd8-c7f392ed61e4",
+          "60c6cb67-8f40-4b19-8163-67fe58568229"
+        ],
+        "cautions": [
+          "这些是心理支持建议；如果困扰持续加重，请寻求可信任的成人或专业人员帮助。"
+        ],
+        "question": "晚上在床上看手机的时候，通常是在做什么，让你停不下来？",
+        "generated_at": "2026-10-06T13:26:13.644269Z",
+        "degraded_reason": null
+      },
+      "suggestions": [
+        {
+          "suggestion_id": "25c01832-50a4-45b0-afd8-c7f392ed61e4",
+          "knowledge_id": "heal-678d7dbec55f",
+          "method_key": "sleep_habits",
+          "title": "自己调整睡眠习惯",
+          "goal": "你可以通过调整饮食、运动和电子产品使用，帮助自己养成有利于睡眠的习惯。",
+          "steps": [
+            "下午2点以后，避免饮用咖啡和茶。",
+            "睡前2小时，避免剧烈运动。",
+            "晚餐宜进食易消化的食物。",
+            "尽量不要在床上使用电子产品。"
+          ],
+          "prerequisites": [],
+          "cautions": [],
+          "proposed_turn": 0,
+          "execution": "unconfirmed",
+          "effect": "unknown",
+          "active": true,
+          "wording_id": "heal-678d7dbec55f:autonomous",
+          "revisions": []
+        },
+        {
+          "suggestion_id": "60c6cb67-8f40-4b19-8163-67fe58568229",
+          "knowledge_id": "heal-bdad91a65daf",
+          "method_key": "bedtime_screen_break__bdad91a65daf",
+          "title": "睡前关闭电子设备",
+          "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+          "steps": [
+            "你可以选择让卧室成为无电子设备区域。",
+            "你可以在熄灯前一小时关闭所有电子设备。",
+            "你可以关掉手机，避免深夜短信吵醒你。"
+          ],
+          "prerequisites": [],
+          "cautions": [
+            "在经常出现睡眠困难时寻求医疗帮助。"
+          ],
+          "proposed_turn": 0,
+          "execution": "unconfirmed",
+          "effect": "unknown",
+          "active": true,
+          "wording_id": "heal-bdad91a65daf:autonomous",
+          "revisions": []
+        }
+      ],
+      "feedback": [],
+      "messages": [
+        {
+          "role": "user",
+          "content": "第一个方法并不复杂，先别改；第二个方法也看得懂，不用改",
+          "created_at": "2026-10-06T15:27:28.741317Z"
+        },
+        {
+          "role": "assistant",
+          "content": "你明确说第一个方法不复杂、先别改，第二个方法也看得懂、不用改。我听到了，不会去动这两个方法。\n\n确认两个方法都保持原样，了解你接下来想从哪一步开始。\n\n开始这两个方法时，你最担心遇到什么困难？",
+          "created_at": "2026-10-06T15:27:32.661373Z"
+        }
+      ],
+      "context_updates": [],
+      "adult_support": {
+        "available": null,
+        "source": null,
+        "evidence": null,
+        "turn": 0,
+        "asked": false,
+        "waiting": false,
+        "deferred_knowledge_ids": [],
+        "blocked_suggestion_ids": []
+      },
+      "turn_count": 1,
+      "status": "active",
+      "risk": {
+        "risk_level": "low",
+        "risk_score": 0.1,
+        "risk_reasons": [],
+        "risk_types": [],
+        "key_evidence": [],
+        "requires_intervention": false
+      },
+      "audit": [
+        {
+          "phase": "report",
+          "at": "2026-10-06T13:26:13.644269+00:00",
+          "knowledge": [
+            {
+              "item": {
+                "knowledge_id": "heal-678d7dbec55f",
+                "method_key": "sleep_habits",
+                "source_id": "pku-sleep",
+                "source_url": "https://www.pkuh6.cn/Html/News/Articles/4977.html",
+                "source_title": "北大六院：一文带你全面了解青少年失眠",
+                "source_version": "accessed:2026-10-04",
+                "source_digest": "3aa960d29684ccaa1f80128f864e0e3455bd682c5e20d916128a5097b7716b19",
+                "source_location": "normalized_text:3499-3568",
+                "title": "坚持良好的睡眠习惯",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "通过调整日常饮食、运动和电子产品使用，养成有利于睡眠的习惯。",
+                "steps": [
+                  "下午2点以后避免饮用咖啡和茶。",
+                  "睡前2小时避免剧烈运动。",
+                  "晚餐宜进食易消化的食物。",
+                  "尽量不要在床上使用电子产品。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [],
+                "keywords": [
+                  "睡眠习惯",
+                  "咖啡因",
+                  "剧烈运动",
+                  "电子产品"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "一文带你全面了解青少年失眠",
+                    "start": 7,
+                    "end": 20
+                  },
+                  {
+                    "field": "audience",
+                    "quote": "一文带你全面了解青少年失眠",
+                    "start": 7,
+                    "end": 20
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "坚持良好的睡眠习惯",
+                    "start": 3499,
+                    "end": 3508
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "下午\n2\n点以后避免饮用咖啡和茶，睡前\n2\n小时避免剧烈运动，晚餐宜进食易消化的食物，尽量不要在床上使用电子产品。",
+                    "start": 3510,
+                    "end": 3567
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-678d7dbec55f:simple",
+                    "style": "simple",
+                    "title": "睡好觉的小习惯",
+                    "goal": "调整吃喝、运动和用电子产品的时间，帮助自己睡得更好。",
+                    "steps": [
+                      "下午2点以后，不喝咖啡和茶。",
+                      "睡前2小时，不做剧烈运动。",
+                      "晚餐吃容易消化的食物。",
+                      "尽量不要在床上用电子产品。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-678d7dbec55f:conversational",
+                    "style": "conversational",
+                    "title": "养成好睡眠习惯",
+                    "goal": "通过调整日常饮食、运动和电子产品使用，让自己更容易睡好。",
+                    "steps": [
+                      "下午2点以后，尽量别喝咖啡和茶。",
+                      "睡前2小时，先别做剧烈运动。",
+                      "晚餐可以吃些容易消化的食物。",
+                      "在床上时，尽量不要用电子产品。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-678d7dbec55f:autonomous",
+                    "style": "autonomous",
+                    "title": "自己调整睡眠习惯",
+                    "goal": "你可以通过调整饮食、运动和电子产品使用，帮助自己养成有利于睡眠的习惯。",
+                    "steps": [
+                      "下午2点以后，避免饮用咖啡和茶。",
+                      "睡前2小时，避免剧烈运动。",
+                      "晚餐宜进食易消化的食物。",
+                      "尽量不要在床上使用电子产品。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 5.162097761876127,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-bdad91a65daf",
+                "method_key": "bedtime_screen_break__bdad91a65daf",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "睡前关闭电子设备",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "减少电子设备光线和夜间信息对睡眠的干扰。",
+                "steps": [
+                  "让卧室成为无电子设备区域。",
+                  "在熄灯前一小时关闭所有电子设备。",
+                  "关掉手机，避免深夜短信吵醒你。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "电子设备",
+                  "睡前",
+                  "无科技区",
+                  "手机"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "tech-free",
+                    "start": 1642,
+                    "end": 1651
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "tech-free",
+                    "start": 1642,
+                    "end": 1651
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-bdad91a65daf:simple",
+                    "style": "simple",
+                    "title": "睡前关掉电子设备",
+                    "goal": "让电子设备的光和夜间消息少打扰你的睡眠。",
+                    "steps": [
+                      "让卧室不放电子设备。",
+                      "在熄灯前一小时，关掉所有电子设备。",
+                      "关掉手机，避免深夜短信打扰你。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-bdad91a65daf:conversational",
+                    "style": "conversational",
+                    "title": "睡前和电子设备说晚安",
+                    "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+                    "steps": [
+                      "你可以把卧室变成没有电子设备的地方。",
+                      "在熄灯前一小时，把所有电子设备都关掉。",
+                      "把手机关掉，避免被深夜短信吵醒。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-bdad91a65daf:autonomous",
+                    "style": "autonomous",
+                    "title": "睡前关闭电子设备",
+                    "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+                    "steps": [
+                      "你可以选择让卧室成为无电子设备区域。",
+                      "你可以在熄灯前一小时关闭所有电子设备。",
+                      "你可以关掉手机，避免深夜短信吵醒你。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 3.039523016821851,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-1018bde6be82",
+                "method_key": "consistent_sleep_schedule__1018bde6be82",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "保持固定睡眠作息",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "帮助身体预期睡眠。",
+                "steps": [
+                  "每晚在同一时间上床睡觉。",
+                  "建立固定的睡前程序。",
+                  "每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "睡眠作息",
+                  "固定时间",
+                  "睡前程序",
+                  "放松"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "Going",
+                    "start": 1883,
+                    "end": 1888
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "Going",
+                    "start": 1883,
+                    "end": 1888
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-1018bde6be82:simple",
+                    "style": "simple",
+                    "title": "固定睡觉时间",
+                    "goal": "帮身体知道什么时候该睡觉。",
+                    "steps": [
+                      "每晚在同一时间上床睡觉。",
+                      "建立一个固定的睡前程序。",
+                      "每晚用阅读、听音乐、陪宠物、写日记、冥想或其他让你放松的事来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-1018bde6be82:conversational",
+                    "style": "conversational",
+                    "title": "保持固定睡眠作息",
+                    "goal": "练习固定上床时间和睡前常规。",
+                    "steps": [
+                      "每晚在同一时间上床睡觉。",
+                      "建立一个固定的睡前程序。",
+                      "每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-1018bde6be82:autonomous",
+                    "style": "autonomous",
+                    "title": "保持固定睡眠作息",
+                    "goal": "你可以练习固定上床时间和睡前常规。",
+                    "steps": [
+                      "你可以选择每晚在同一时间上床睡觉。",
+                      "你可以建立固定的睡前程序。",
+                      "你可以每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 1.7521098370924812,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-f9bfeb05039e",
+                "method_key": "limit_caffeine_near_bedtime",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "睡前避免咖啡因",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "减少咖啡因导致的入睡困难和夜间辗转。",
+                "steps": [
+                  "限制白天摄入的咖啡因量。",
+                  "晚上改喝低咖啡因或无咖啡因饮料。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "咖啡因",
+                  "睡前",
+                  "无咖啡因",
+                  "饮料"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "caffeine",
+                    "start": 1495,
+                    "end": 1503
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "caffeine",
+                    "start": 1495,
+                    "end": 1503
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-f9bfeb05039e:simple",
+                    "style": "simple",
+                    "title": "晚上减少咖啡因",
+                    "goal": "留意白天和晚上的咖啡因摄入。",
+                    "steps": [
+                      "白天少喝含咖啡因的饮料。",
+                      "晚上换成低咖啡因或不含咖啡因的饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-f9bfeb05039e:conversational",
+                    "style": "conversational",
+                    "title": "睡前少喝含咖啡因的饮料",
+                    "goal": "练习限制咖啡因摄入，晚上选择低咖啡因或无咖啡因饮料。",
+                    "steps": [
+                      "白天注意限制自己摄入的咖啡因量。",
+                      "晚上换成低咖啡因或不含咖啡因的饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-f9bfeb05039e:autonomous",
+                    "style": "autonomous",
+                    "title": "睡前控制咖啡因",
+                    "goal": "你可以练习限制咖啡因摄入，晚上选择低咖啡因或无咖啡因饮料。",
+                    "steps": [
+                      "你可以限制白天摄入的咖啡因量。",
+                      "晚上你可以改喝低咖啡因或无咖啡因饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 1.5302407353802348,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            }
+          ],
+          "goal": {
+            "scene": "sleep",
+            "mentioned_scenes": [
+              "sleep"
+            ],
+            "needs_confirmation": false,
+            "evidence": "先聊睡眠习惯"
+          },
+          "explanations": [],
+          "context_removed": [],
+          "communication_style": "autonomous",
+          "risk_ms": 0.0743000055081211,
+          "context_filter_ms": 0.015600002370774746,
+          "generation_ms": 1702.9866999946535,
+          "generation_attempts": 1,
+          "narrative_check_ms": 1107.3018999959459,
+          "retrieval_ms": 1.6279999981634319,
+          "total_ms": 2813.457299998845,
+          "degraded_reason": null,
+          "model_calls": [
+            {
+              "schema": "AgentDraft",
+              "model": "DeepSeek-V4.1-Flash",
+              "elapsed_ms": 1697.7523000023211,
+              "usage": {
+                "prompt_tokens": 4532,
+                "completion_tokens": 138,
+                "total_tokens": 4670
+              }
+            },
+            {
+              "schema": "NarrativeCheck",
+              "model": "DeepSeek-V4.1-Flash",
+              "elapsed_ms": 1101.13519999868,
+              "usage": {
+                "prompt_tokens": 2132,
+                "completion_tokens": 10,
+                "total_tokens": 2142
+              }
+            }
+          ],
+          "adapter_ms": 1.4086000010138378
+        },
+        {
+          "phase": "follow_up",
+          "turn": 1,
+          "at": "2026-10-06T15:27:32.661373+00:00",
+          "knowledge": [
+            {
+              "item": {
+                "knowledge_id": "heal-1018bde6be82",
+                "method_key": "consistent_sleep_schedule__1018bde6be82",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "保持固定睡眠作息",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "帮助身体预期睡眠。",
+                "steps": [
+                  "每晚在同一时间上床睡觉。",
+                  "建立固定的睡前程序。",
+                  "每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "睡眠作息",
+                  "固定时间",
+                  "睡前程序",
+                  "放松"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "Going",
+                    "start": 1883,
+                    "end": 1888
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "Going",
+                    "start": 1883,
+                    "end": 1888
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-1018bde6be82:simple",
+                    "style": "simple",
+                    "title": "固定睡觉时间",
+                    "goal": "帮身体知道什么时候该睡觉。",
+                    "steps": [
+                      "每晚在同一时间上床睡觉。",
+                      "建立一个固定的睡前程序。",
+                      "每晚用阅读、听音乐、陪宠物、写日记、冥想或其他让你放松的事来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-1018bde6be82:conversational",
+                    "style": "conversational",
+                    "title": "保持固定睡眠作息",
+                    "goal": "练习固定上床时间和睡前常规。",
+                    "steps": [
+                      "每晚在同一时间上床睡觉。",
+                      "建立一个固定的睡前程序。",
+                      "每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-1018bde6be82:autonomous",
+                    "style": "autonomous",
+                    "title": "保持固定睡眠作息",
+                    "goal": "你可以练习固定上床时间和睡前常规。",
+                    "steps": [
+                      "你可以选择每晚在同一时间上床睡觉。",
+                      "你可以建立固定的睡前程序。",
+                      "你可以每晚通过阅读、听音乐、陪伴宠物、写日记、冥想或其他让你放松的事情来放松。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 3.118289271537686,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            },
+            {
+              "item": {
+                "knowledge_id": "heal-f9bfeb05039e",
+                "method_key": "limit_caffeine_near_bedtime",
+                "source_id": "nemours-teens-tips-sleep",
+                "source_url": "https://kidshealth.org/en/teens/tips-sleep.html",
+                "source_title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+                "source_version": "accessed:2026-10-05",
+                "source_digest": "509dc77d040227bc69c26c1cc75efa00621753361780607b9b4a0773c058c055",
+                "source_location": "normalized_text:794-2665",
+                "title": "睡前避免咖啡因",
+                "scenes": [
+                  "sleep"
+                ],
+                "audience": "adolescents",
+                "age_min": null,
+                "age_max": null,
+                "school_stages": [],
+                "executor": "student",
+                "purpose": "method",
+                "goal": "减少咖啡因导致的入睡困难和夜间辗转。",
+                "steps": [
+                  "限制白天摄入的咖啡因量。",
+                  "晚上改喝低咖啡因或无咖啡因饮料。"
+                ],
+                "prerequisites": [],
+                "exclusions": [],
+                "referral_conditions": [
+                  "在经常出现睡眠困难时寻求医疗帮助。"
+                ],
+                "keywords": [
+                  "咖啡因",
+                  "睡前",
+                  "无咖啡因",
+                  "饮料"
+                ],
+                "evidence": [
+                  {
+                    "field": "audience",
+                    "quote": "Teens",
+                    "start": 30,
+                    "end": 35
+                  },
+                  {
+                    "field": "executor",
+                    "quote": "caffeine",
+                    "start": 1495,
+                    "end": 1503
+                  },
+                  {
+                    "field": "steps",
+                    "quote": "caffeine",
+                    "start": 1495,
+                    "end": 1503
+                  },
+                  {
+                    "field": "referral_conditions",
+                    "quote": "regularly",
+                    "start": 2611,
+                    "end": 2620
+                  }
+                ],
+                "status": "usable",
+                "validation_issues": [],
+                "semantic_checked": true,
+                "wordings": [
+                  {
+                    "wording_id": "heal-f9bfeb05039e:simple",
+                    "style": "simple",
+                    "title": "晚上减少咖啡因",
+                    "goal": "留意白天和晚上的咖啡因摄入。",
+                    "steps": [
+                      "白天少喝含咖啡因的饮料。",
+                      "晚上换成低咖啡因或不含咖啡因的饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-f9bfeb05039e:conversational",
+                    "style": "conversational",
+                    "title": "睡前少喝含咖啡因的饮料",
+                    "goal": "练习限制咖啡因摄入，晚上选择低咖啡因或无咖啡因饮料。",
+                    "steps": [
+                      "白天注意限制自己摄入的咖啡因量。",
+                      "晚上换成低咖啡因或不含咖啡因的饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  },
+                  {
+                    "wording_id": "heal-f9bfeb05039e:autonomous",
+                    "style": "autonomous",
+                    "title": "睡前控制咖啡因",
+                    "goal": "你可以练习限制咖啡因摄入，晚上选择低咖啡因或无咖啡因饮料。",
+                    "steps": [
+                      "你可以限制白天摄入的咖啡因量。",
+                      "晚上你可以改喝低咖啡因或无咖啡因饮料。"
+                    ],
+                    "semantic_checked": true,
+                    "validation_issues": []
+                  }
+                ]
+              },
+              "score": 1.0482144688674937,
+              "age_match": "explicit_age_or_stage; source_audience_preserved",
+              "scene_match": "sleep",
+              "risk_limits": []
+            }
+          ],
+          "goal": {
+            "scene": "sleep",
+            "mentioned_scenes": [
+              "sleep"
+            ],
+            "needs_confirmation": false,
+            "evidence": "先聊睡眠习惯"
+          },
+          "goal_changed": false,
+          "explanations": [],
+          "context_removed": [],
+          "risk_ms": 0.08789999992586672,
+          "context_filter_ms": 0.18679999629966915,
+          "generation_ms": 1898.0312999992748,
+          "generation_attempts": 1,
+          "narrative_check_ms": 1543.3493000018643,
+          "retrieval_ms": 472.5470999983372,
+          "total_ms": 3920.941699994728,
+          "model_calls": [
+            {
+              "schema": "AgentDraft",
+              "model": "DeepSeek-V4.1-Flash",
+              "elapsed_ms": 1802.1519999965676,
+              "usage": {
+                "prompt_tokens": 4778,
+                "completion_tokens": 109,
+                "total_tokens": 4887
+              }
+            },
+            {
+              "schema": "NarrativeCheck",
+              "model": "DeepSeek-V4.1-Flash",
+              "elapsed_ms": 1538.6767999953008,
+              "usage": {
+                "prompt_tokens": 2364,
+                "completion_tokens": 10,
+                "total_tokens": 2374
+              }
+            }
+          ]
+        }
+      ],
+      "memory_update_suggestions": [],
+      "receipts": {
+        "50dffa1a-7693-4b70-b5b5-70f1905226c4": {
+          "fingerprint": "1d4cd55984178b596b6fc2d23450470e1b2b4dea5d98d2aa5ef9af92c080e4ab"
+        }
+      },
+      "created_at": "2026-10-06T13:26:10.830551Z"
+    },
+    "retry": {
+      "session_id": "ac7856b8-86fb-4467-b6a5-a6f0208379b8",
+      "healing_id": "887cd0e6-7a48-4e7d-b71a-77e8e2779ebd",
+      "assessment_result_id": "asmt-20261006T132554-6734bd1f",
+      "status": "active",
+      "turn_count": 1,
+      "report": {
+        "understanding": "你16岁读高一，晚上在床上看手机，经常晚睡，平时上学吃饭都正常。你想先聊睡眠习惯，我听到了。",
+        "focus": "了解你晚上在床上看手机、晚睡的具体情况，以及你希望从哪方面开始聊。",
+        "suggestions": [
+          {
+            "title": "自己调整睡眠习惯",
+            "goal": "你可以通过调整饮食、运动和电子产品使用，帮助自己养成有利于睡眠的习惯。",
+            "steps": [
+              "下午2点以后，避免饮用咖啡和茶。",
+              "睡前2小时，避免剧烈运动。",
+              "晚餐宜进食易消化的食物。",
+              "尽量不要在床上使用电子产品。"
+            ],
+            "prerequisites": [],
+            "cautions": [],
+            "execution": "unconfirmed",
+            "effect": "unknown",
+            "active": true
+          },
+          {
+            "title": "睡前关闭电子设备",
+            "goal": "练习减少电子设备光线和夜间信息对睡眠的干扰。",
+            "steps": [
+              "你可以选择让卧室成为无电子设备区域。",
+              "你可以在熄灯前一小时关闭所有电子设备。",
+              "你可以关掉手机，避免深夜短信吵醒你。"
+            ],
+            "prerequisites": [],
+            "cautions": [
+              "在经常出现睡眠困难时寻求医疗帮助。"
+            ],
+            "execution": "unconfirmed",
+            "effect": "unknown",
+            "active": true
+          }
+        ],
+        "cautions": [
+          "这些是心理支持建议；如果困扰持续加重，请寻求可信任的成人或专业人员帮助。"
+        ],
+        "question": "晚上在床上看手机的时候，通常是在做什么，让你停不下来？",
+        "generated_at": "2026-10-06T13:26:13.644269Z"
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "第一个方法并不复杂，先别改；第二个方法也看得懂，不用改",
+          "created_at": "2026-10-06T15:27:28.741317Z"
+        },
+        {
+          "role": "assistant",
+          "content": "你明确说第一个方法不复杂、先别改，第二个方法也看得懂、不用改。我听到了，不会去动这两个方法。\n\n确认两个方法都保持原样，了解你接下来想从哪一步开始。\n\n开始这两个方法时，你最担心遇到什么困难？",
+          "created_at": "2026-10-06T15:27:32.661373Z"
+        }
+      ],
+      "risk": {
+        "risk_level": "low",
+        "risk_score": 0.1,
+        "risk_reasons": [],
+        "risk_types": [],
+        "key_evidence": [],
+        "requires_intervention": false
+      },
+      "notice": "本次陪伴记录仅在当前会话中保留；刷新或服务重启后请重新进入。"
+    },
+    "runtime_verification": {
+      "protected_files": 102,
+      "changed_files": [],
+      "assessment_invocations": 0,
+      "healing_requests": 2,
+      "usage_missing_invocations": 0,
+      "known_usage": {
+        "prompt_tokens": 7142,
+        "completion_tokens": 119,
+        "total_tokens": 7261
+      },
+      "assessment_trace_preserves_attempt_counts": true
+    }
+  }
+}

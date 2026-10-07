@@ -1,0 +1,21 @@
+{
+  "provenance": "合成校验资料，只验证抽取约束，不是心理支持知识来源，不进入运行知识库。",
+  "source_text": "合成校验资料。儿童中的小学学生，方法仅适用10至12岁。需要成人指导，并且必须在安静的空间里进行。你在成人指导下，在安静的空间里说出一次同伴矛盾。另一段是家长自身的任务：家长向老师了解孩子在学校的情况，不要求学生去调查其他孩子。",
+  "student_method": {
+    "audience": "children", "age_min": 10, "age_max": 12, "school_stages": ["primary"],
+    "executor": "adult_guided", "purpose": "method", "title": "在成人指导下说出同伴矛盾",
+    "goal": "说清一次同伴矛盾", "steps": ["在成人指导下，在安静的空间里说出一次同伴矛盾。"],
+    "prerequisites": ["需要成人指导。", "必须在安静的空间里进行。"],
+    "proofs": {"audience": "儿童中的小学学生", "age": "方法仅适用10至12岁", "school_stages": "儿童中的小学学生",
+      "executor": "你在成人指导下", "steps": "你在成人指导下，在安静的空间里说出一次同伴矛盾。",
+      "prerequisites": "需要成人指导，并且必须在安静的空间里进行。"}
+  },
+  "adult_task": {
+    "audience": "children", "age_min": null, "age_max": null, "school_stages": ["primary"],
+    "executor": "adult", "purpose": "explanation", "title": "由家长向老师了解情况",
+    "goal": "说明家长可以承担的了解情况任务", "steps": ["成人：向老师了解孩子在学校的情况。"],
+    "prerequisites": [],
+    "proofs": {"audience": "儿童中的小学学生", "school_stages": "儿童中的小学学生",
+      "executor": "家长自身的任务：家长向老师了解孩子在学校的情况", "steps": "家长向老师了解孩子在学校的情况"}
+  }
+}

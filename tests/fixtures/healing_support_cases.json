@@ -1,0 +1,14 @@
+[
+  {"id":"primary-mood","age":9,"school_stage":"primary","scene":"low_mood","concern":"今天想玩的游戏没玩成，我很难过，心情低落"},
+  {"id":"primary-study","age":9,"school_stage":"primary","scene":"study_stress","concern":"明天有小测验，我想到考试就紧张"},
+  {"id":"primary-relationships","age":9,"school_stage":"primary","scene":"relationships","concern":"我和朋友为了座位吵架了，我想聊这次同伴冲突"},
+  {"id":"primary-sleep","age":9,"school_stage":"primary","scene":"sleep","concern":"睡前一直看手机，晚上很晚才睡，我想先聊睡觉的事"},
+  {"id":"middle-mood","age":12,"school_stage":"middle","scene":"low_mood","concern":"今天的活动没做好，我有点难过，提不起劲"},
+  {"id":"middle-study","age":12,"school_stage":"middle","scene":"study_stress","concern":"快考试了，复习时担心成绩不好，学习压力很大"},
+  {"id":"middle-relationships","age":12,"school_stage":"middle","scene":"relationships","concern":"我和同学发生一次争吵，想先聊这次同伴冲突"},
+  {"id":"middle-sleep","age":12,"school_stage":"middle","scene":"sleep","concern":"周末睡觉很晚，想先聊睡眠作息"},
+  {"id":"high-mood","age":16,"school_stage":"high","scene":"low_mood","concern":"今天喜欢的活动没能参加，我有点沮丧，心情低落"},
+  {"id":"high-study","age":16,"school_stage":"high","scene":"study_stress","concern":"明天考试，我担心考不好，学习压力很大"},
+  {"id":"high-relationships","age":16,"school_stage":"high","scene":"relationships","concern":"我和朋友因为分工吵架了，想先聊这次同伴冲突"},
+  {"id":"high-sleep","age":16,"school_stage":"high","scene":"sleep","concern":"晚上在床上看手机，经常晚睡，我想先聊睡眠习惯"}
+]

@@ -1,4 +1,4 @@
-# 当前架构与数据流（2026-10-03）
+# 当前架构与数据流（2026-10-04）
 
 本文件描述仓库当前实现；目标研究图见 `assets/target_architecture.png`，不代表全部能力已实现。HTTP 协议见 [API 数据协议](api_spec.md)，设备及时间对齐细节见 [摄像头与录音对接](vision_alignment.md)。
 
@@ -13,6 +13,7 @@
 | 对话 | `backend/core/dialogue_manager.py`、`backend/policy/` | 文本历史驱动策略动作、基础话术、独立规则式风险识别 |
 | 综合评估 | `backend/core/evaluation_engine.py`、`evaluation_agent/` | 对话原文及双层视觉输入、11 项评分、五维画像、关注指数 |
 | 报告与记录 | `backend/core/report_builder.py`、`memory_store.py` | 规则模板报告、结果索引及查询；每位匿名用户最近 3 次结果保存在本机 SQLite |
+| 治愈陪伴 | `core/healing_adapter.py`、`healing/`、`api/healing.py` | 从真实记忆适配输入、检索知识、支持报告及反馈；陪伴状态独立保存在进程内存，前端待对接 |
 | 教师与沟通 | `api/teacher.py`、`core/communication.py` | 记录列表、备注与沟通骨架 |
 
 ## 实时路径
@@ -52,6 +53,23 @@
 - 摄像头关闭清空最新状态，前端停止 tracks、定时器和在途请求；权限等待也可取消。
 - ASR 串行工作线程与上传前容量预留继续沿用；视觉初始化与同实例推理加锁。
 - 帧缓存及实时视觉日志最多 512 条；不保存原图或录音。
+
+## 治愈陪伴路径
+
+```text
+评估成功 → MemoryStore 按现有流程保存结果
+用户明确进入 → /api/healing/start
+  → healing_adapter 在填默认值前检查原始风险字段，读取最近三次结果与可选背景
+  → 风险分流、多诉求优先方向确认
+  → 年龄/学段、场景、执行者与前提过滤 → 中文 BM25 → 明确个人条件适配
+  → 模型共情及选择知识 → 依据/单问题检查 → 确定性呈现知识步骤
+用户反馈 → /api/healing/chat → 独立历史、执行状态、效果、已校验的表达简化及调整
+```
+
+治愈 Agent 不访问或写入数据库，不把陪伴消息加入筛查历史，也不调用评估 Agent。
+适配层明确区分持久化评估、当前进程中最多最近 20 条用户消息和调用方明确提供的背景。
+新风险沿用现有求助话术，不自动发送教师或家长通知。
+接口、状态切换、知识覆盖和验证记录见 [治愈 Agent 交接](healing_agent.md)。
 
 ## 当前边界
 

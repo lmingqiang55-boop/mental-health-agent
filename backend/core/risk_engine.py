@@ -1,12 +1,13 @@
 """风险识别引擎（A 模块）。
 
 框架阶段为规则式 Demo，不是临床风险评估：
-1. 文本关键词匹配，带简单否定词窗口，避免「我不想自杀」误判。
+1. 文本关键词匹配，只检查修饰对应信号的否定表述，避免「我不想自杀」误判。
 2. 多模态信号（效价、能量、停顿等）作为辅助调整。
 真实模型/量表接入时保持 ``assess_risk`` 接口。
 """
 
 from backend.core.multimodal_fusion import FusedTurn
+from backend.core.text_signals import predicate_is_negated
 from backend.models.enums import RiskLevel
 from backend.models.states import RiskResult
 
@@ -18,8 +19,6 @@ MEDIUM_SIGNALS = (
     "绝望", "活着没意思", "撑不下去", "崩溃", "没有希望", "没意义",
     "hopeless",
 )
-NEGATORS = ("不", "没有", "没", "别", "从未", "从来没", "不会")
-NEGATION_WINDOW = 4  # 关键词前 N 个字符内出现否定词则视为否定
 
 
 def _has_signal(text: str, signals: tuple[str, ...]) -> str | None:
@@ -28,8 +27,7 @@ def _has_signal(text: str, signals: tuple[str, ...]) -> str | None:
     for signal in signals:
         idx = lowered.find(signal)
         while idx != -1:
-            window = lowered[max(0, idx - NEGATION_WINDOW):idx]
-            if not any(neg in window for neg in NEGATORS):
+            if not predicate_is_negated(lowered, idx):
                 return signal
             idx = lowered.find(signal, idx + 1)
     return None
@@ -64,6 +62,7 @@ def assess_risk(fused: FusedTurn) -> RiskResult:
     if medium_hit:
         result = RiskResult(
             risk_level=RiskLevel.MEDIUM, risk_score=0.5,
+            requires_intervention=False,
             risk_reasons=["检测到值得进一步关注的表述"],
             key_evidence=[medium_hit],
         )
@@ -76,6 +75,7 @@ def assess_risk(fused: FusedTurn) -> RiskResult:
     if len(multimodal_concerns) >= 2:
         return RiskResult(
             risk_level=RiskLevel.MEDIUM, risk_score=0.4,
+            requires_intervention=False,
             risk_reasons=["多模态状态显示多项偏低，建议进一步关注"],
             key_evidence=multimodal_concerns,
         )
@@ -84,4 +84,5 @@ def assess_risk(fused: FusedTurn) -> RiskResult:
     if multimodal_concerns:
         score = 0.2
     return RiskResult(risk_level=RiskLevel.LOW, risk_score=score,
+                      requires_intervention=False,
                       key_evidence=multimodal_concerns)

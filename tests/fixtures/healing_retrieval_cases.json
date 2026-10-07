@@ -1,0 +1,18 @@
+[
+  {"id":"primary-pressure-trigger","query":"作业压力大，想知道什么时候最紧张","scene":"study_stress","background":{"school_stage":"primary"},"expected_methods":["stress_triggers","explore_anxiety_together"]},
+  {"id":"middle-exam-body","query":"考试紧张，身体紧绷，想做呼吸放松","scene":"study_stress","background":{"school_stage":"middle"},"expected_methods":["belly_breathing"]},
+  {"id":"high-anxiety-senses","query":"考试时心慌，想关注看到的东西和听到的声音","scene":"study_stress","background":{"school_stage":"high"},"expected_methods":["senses_grounding"]},
+  {"id":"middle-worry-context","query":"考前焦虑，想说出发生什么和自己的感受","scene":"study_stress","background":{"school_stage":"middle"},"expected_methods":["explore_anxiety_together","stress_triggers"]},
+  {"id":"primary-low-mood-expression","query":"心情低落，不想说话，想用画画或日记表达","scene":"low_mood","background":{"school_stage":"primary"},"expected_methods":["creative_expression"]},
+  {"id":"high-low-mood-activities","query":"心情低落，想做喜欢的事情或者听音乐","scene":"low_mood","background":{"school_stage":"high"},"expected_methods":["positive_habits"]},
+  {"id":"teen-sleep-phone","query":"晚上在床上玩手机，睡不着","scene":"sleep","background":{"age":15,"school_stage":"middle"},"expected_methods":["sleep_habits"]},
+  {"id":"teen-sleep-caffeine","query":"下午喝咖啡之后晚上失眠","scene":"sleep","background":{"age":17,"school_stage":"high"},"expected_methods":["sleep_habits"]},
+  {"id":"primary-sleep-schedule","query":"小学生晚上睡不好，想固定睡觉时间","scene":"sleep","background":{"age":9,"school_stage":"primary"},"expected_methods":["consistent_sleep_schedule"]},
+  {"id":"unknown-age","query":"考试焦虑","scene":"study_stress","background":{},"expected_methods":[]},
+  {"id":"middle-relationships","query":"和同学发生冲突，想和成人一起找解决办法","scene":"relationships","background":{"school_stage":"middle"},"expected_methods":["brainstorm_conflict_solutions"]},
+  {"id":"high-relationships","query":"和同学意见不同，想讨论各自的解决办法","scene":"relationships","background":{"age":16,"school_stage":"high"},"expected_methods":["brainstorm_conflict_solutions"]},
+  {"id":"primary-relationships","query":"和朋友吵架，想弄明白为什么发生冲突","scene":"relationships","background":{"age":9,"school_stage":"primary"},"expected_methods":["identify_conflict_source"]},
+  {"id":"middle-low-mood-expression","query":"心情低落，想写日记表达","scene":"low_mood","background":{"age":12,"school_stage":"middle"},"expected_methods":["creative_expression"]},
+  {"id":"sleep-age-unknown","query":"中学生在床上看手机失眠","scene":"sleep","background":{"school_stage":"middle"},"expected_methods":[]},
+  {"id":"no-adult-support","query":"考试呼吸放松","scene":"study_stress","background":{"school_stage":"middle","adult_support_available":false},"expected_methods":[]}
+]

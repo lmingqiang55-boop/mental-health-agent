@@ -18,6 +18,11 @@ openai==3.23.0
 python-dotenv==1.2.4
 python-multipart==0.0.32
 
+# Grounded Chinese psychological-support knowledge retrieval and offline HTML parsing.
+jieba==0.42.1
+rank-bm25==0.2.2
+beautifulsoup4==4.14.3
+
 # Real camera emotion backend; installed for every team member.
 emotiefflib==1.1.1
 opencv-python==4.14.0.94

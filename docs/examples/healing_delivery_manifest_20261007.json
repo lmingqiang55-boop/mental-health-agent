@@ -1,0 +1,976 @@
+{
+  "date": "2026-10-07",
+  "git_base": "dfeb795cd494d434e15ab206ec1d796403ead2bb",
+  "git_committed_or_pushed_this_turn": false,
+  "version_identity": "SHA256 of local uncommitted source, tests, knowledge, scripts, docs and frontend; .env/student data excluded",
+  "changed_baseline_files_this_turn": [
+    "backend/healing/agent.py",
+    "backend/healing/conversation.py",
+    "backend/healing/interaction.py",
+    "tests/test_healing_conversation.py",
+    "docs/healing_agent.md",
+    "../治愈Agent规划.md"
+  ],
+  "new_delivery_files_this_turn": [
+    "scripts/run_healing_acceptance.py",
+    "scripts/validate_healing_experience.py",
+    "docs/healing_final_acceptance_20261007.md",
+    "docs/healing_delivery_20261007.md",
+    "docs/examples/healing_final_acceptance_20261007.json",
+    "docs/examples/healing_delivery_manifest_20261007.json"
+  ],
+  "normal_database_unchanged": true,
+  "knowledge_frontend_evaluation_business_unchanged": true,
+  "files": [
+    {
+      "path": ".env.example",
+      "sha256": "ab7dd305d7df02e188a067c7257181f4496adbae2fdb0884ba9cd758a2b94ce9",
+      "bytes": 2186
+    },
+    {
+      "path": "backend/__init__.py",
+      "sha256": "7760a747aa3fcf5ea15ae0a15bbf570fc59939ab0c80e47347ce2ac75885ff81",
+      "bytes": 45
+    },
+    {
+      "path": "backend/agents/__init__.py",
+      "sha256": "9cfd2b36fafe762e53b03407a72f67c63ef42f2107de1070521e827cc773fcad",
+      "bytes": 237
+    },
+    {
+      "path": "backend/agents/dialogue_agent.py",
+      "sha256": "cffd73a6c08c119dd0f2fbc9a684c84b68840c9ff4256fa0057f420951db1984",
+      "bytes": 3107
+    },
+    {
+      "path": "backend/api/__init__.py",
+      "sha256": "99c222846379a443fed34fe19f932fd907a7ec8e600c35b0ce479fc7f7a40dd6",
+      "bytes": 20
+    },
+    {
+      "path": "backend/api/assessment.py",
+      "sha256": "a9a8ea7c458b4d37c62486a7c9abcda9f04ec63aff6cfee71ecbc6d884aa3325",
+      "bytes": 8572
+    },
+    {
+      "path": "backend/api/audio.py",
+      "sha256": "8561fea94a825fc1b575b659bb66076601028c1dbcef36ad7d0e967151ed6c7d",
+      "bytes": 3854
+    },
+    {
+      "path": "backend/api/chat.py",
+      "sha256": "53e817a0b535edfa088f4d22abcdfc0bd8a34124f0d18e29db41461a974c6090",
+      "bytes": 5470
+    },
+    {
+      "path": "backend/api/communication.py",
+      "sha256": "8475b092e91359700bba885852ad8d5a83e730d9a63e61f531d721f7ee2ad2ef",
+      "bytes": 1186
+    },
+    {
+      "path": "backend/api/errors.py",
+      "sha256": "e5bb9b32662d8f47442908565865aac54d95ee1c8bab213b74a92b5346db8a2a",
+      "bytes": 217
+    },
+    {
+      "path": "backend/api/healing.py",
+      "sha256": "a8eec5cd06d3d23e510f48e57d5acaa97845b68c8799e53b6fa61e423d2c8454",
+      "bytes": 9742
+    },
+    {
+      "path": "backend/api/history.py",
+      "sha256": "df12932141d2a447da9ef2f6469beed9619a4d689dde5f4b5d683a15056b4e88",
+      "bytes": 693
+    },
+    {
+      "path": "backend/api/session.py",
+      "sha256": "a4a2a531d1b2c0c822999a45452cac46b0175dd35c88a84aeaeff2384952be18",
+      "bytes": 2300
+    },
+    {
+      "path": "backend/api/teacher.py",
+      "sha256": "cf3dbb5b206da94c4fbf568b28be6ebee5d6b7276ba69bae73e329b550a63b52",
+      "bytes": 4543
+    },
+    {
+      "path": "backend/api/tts.py",
+      "sha256": "9230533f7b9eeb1260fcd7e5bf9c2298ce2f93ade4d7118d8a4470ff64cae64f",
+      "bytes": 2868
+    },
+    {
+      "path": "backend/api/vision.py",
+      "sha256": "b274cc629b3f068d94eaada3657a6e78e6c756c5dda8de42728f9a8dfaf235a6",
+      "bytes": 10012
+    },
+    {
+      "path": "backend/audio/__init__.py",
+      "sha256": "0a53646b5f49a2dd5169ace95460b427f448b708cbfda9c34460817ffd801dab",
+      "bytes": 32
+    },
+    {
+      "path": "backend/audio/analyzer.py",
+      "sha256": "2bc51770b1abcffaee872e355c2755f221970162906d2e12ab142859d4804040",
+      "bytes": 1696
+    },
+    {
+      "path": "backend/audio/config.py",
+      "sha256": "b170efc10b86177d4bb3d6c0058c9bc2df6e69db683ba158987cdd0a1e465c89",
+      "bytes": 2679
+    },
+    {
+      "path": "backend/audio/decoder.py",
+      "sha256": "f0c08ee527416cb253217c3a71ab9e4bea334a0813ccf0b4cc23174566cecd20",
+      "bytes": 4267
+    },
+    {
+      "path": "backend/audio/errors.py",
+      "sha256": "f3c0b11bcbe26f1b2ba2b33a4c1ff4449deaa3e2249c75094fd456b13aa6bb61",
+      "bytes": 333
+    },
+    {
+      "path": "backend/audio/tokenizer.py",
+      "sha256": "53936549debf249170bfea9ffa3a084ff5619e946d03ee68cb27b37453a7b78a",
+      "bytes": 932
+    },
+    {
+      "path": "backend/audio/transcriber.py",
+      "sha256": "c4c5761d604e3382105a133de473d95e5f4322595838d1d18b0d46e5e4e2d7c6",
+      "bytes": 8185
+    },
+    {
+      "path": "backend/audio/tts.py",
+      "sha256": "b5a56df53d22485ebd26d293054066d818d72dc5619fa3810b3be4b6142a5640",
+      "bytes": 4254
+    },
+    {
+      "path": "backend/audio/upload.py",
+      "sha256": "0907c129098210dda979cbedffd31d4b0272f16216f3714e69c43a9ebdacb6c9",
+      "bytes": 4795
+    },
+    {
+      "path": "backend/core/__init__.py",
+      "sha256": "46bb9b822ac7e345b5678b18b333ba48469b71f287642ded8aaa21b96ee22097",
+      "bytes": 26
+    },
+    {
+      "path": "backend/core/communication.py",
+      "sha256": "86fa02a13da482f6d9b251f8ad1ac012a6d776d28d0ba7367d6bb0fccbc55d9d",
+      "bytes": 1762
+    },
+    {
+      "path": "backend/core/dialogue_manager.py",
+      "sha256": "38755cafaf7ba95553196af29cbc8ee0dc7cde030b0d1688cd558f96a4890a3b",
+      "bytes": 4593
+    },
+    {
+      "path": "backend/core/evaluation_engine.py",
+      "sha256": "482be9b95b9683da12138936ee6aaa1a441d1234989ac80bc28495b2cd8aecba",
+      "bytes": 4874
+    },
+    {
+      "path": "backend/core/healing_adapter.py",
+      "sha256": "f50302217bcfc09f370696122ddaf49526eb33923654a57892247485a5a43bd3",
+      "bytes": 4565
+    },
+    {
+      "path": "backend/core/memory_store.py",
+      "sha256": "601704efb73679ef5406de9dee79f887a5f1e1359c9f9caf3e1c4b3f40ec45da",
+      "bytes": 6935
+    },
+    {
+      "path": "backend/core/multimodal_fusion.py",
+      "sha256": "adec35f240c65a644781807e5ce061b8cf819c65493b245ea7c28cd7c99a3f17",
+      "bytes": 4279
+    },
+    {
+      "path": "backend/core/report_builder.py",
+      "sha256": "551c496346263c9285071ad2ee5e77d505f49cb997ac1b956913278dc29dc400",
+      "bytes": 7582
+    },
+    {
+      "path": "backend/core/risk_engine.py",
+      "sha256": "09faa53ba071f775c0f015658a24fef32456004ef4f943d83b49f5a294091944",
+      "bytes": 3627
+    },
+    {
+      "path": "backend/core/session_manager.py",
+      "sha256": "a9bb1704b89c2fec88d257b507cda16b0fcde721856e6d27830dfc7f5e3b9972",
+      "bytes": 4512
+    },
+    {
+      "path": "backend/core/text_signals.py",
+      "sha256": "e1baf2afdc80265d3f801cfb95f0827260f3b4161edefdd7743fb79dddb028c2",
+      "bytes": 1608
+    },
+    {
+      "path": "backend/healing/__init__.py",
+      "sha256": "9821505398143245ad508466038caadf369ddc5e663b84dba935916665556538",
+      "bytes": 70
+    },
+    {
+      "path": "backend/healing/adult_support.py",
+      "sha256": "a4a79ef1f2369857c366850beebc04c44533d06dff9be221152a85d9709a4792",
+      "bytes": 6440
+    },
+    {
+      "path": "backend/healing/agent.py",
+      "sha256": "a88bc69aca1da9f0deb4ceb4338657c6eb393e8edc92a808ecdcb7d566982f10",
+      "bytes": 54922
+    },
+    {
+      "path": "backend/healing/client.py",
+      "sha256": "3eecaa9f11ea9a13f9bc1ebe73575fe6657a6d6d6df182c19c0009b2b2111b56",
+      "bytes": 3556
+    },
+    {
+      "path": "backend/healing/conversation.py",
+      "sha256": "9de2bce49b627add097b2a628f9683be9b65034d3196dec351db316a320b48f2",
+      "bytes": 3223
+    },
+    {
+      "path": "backend/healing/execution.py",
+      "sha256": "4ab9d875fc71609e7bce7a3bff108485ae78a0f66d64c23e2071c852e1d82185",
+      "bytes": 16534
+    },
+    {
+      "path": "backend/healing/interaction.py",
+      "sha256": "b0015c6a96f96008c6a59c01b8262f00141ed7f1b342209b13dcb88df64bdd49",
+      "bytes": 8699
+    },
+    {
+      "path": "backend/healing/knowledge.py",
+      "sha256": "0678e26ac3659bedd94caf524800eee039af606c42bee9e1239b56b9b7463884",
+      "bytes": 6105
+    },
+    {
+      "path": "backend/healing/retriever.py",
+      "sha256": "4141324c0329d30e38edcb23ad621cd5154002b4674b113b15c4ad2bf8d747ca",
+      "bytes": 7094
+    },
+    {
+      "path": "backend/healing/safety.py",
+      "sha256": "8ad17fce846feaa5f8c449f605ea83d6eb93dfbea0bcf45b12a777fd684375af",
+      "bytes": 6593
+    },
+    {
+      "path": "backend/healing/store.py",
+      "sha256": "43c8fe3d2498db694eda816c9b4fd587bf1e0680885b369134d53fc26c97cb32",
+      "bytes": 1512
+    },
+    {
+      "path": "backend/healing/suitability.py",
+      "sha256": "79fd49084f14ea42c3360fabb59dc4dbe05e55f834729de63914ba05c30252cd",
+      "bytes": 6786
+    },
+    {
+      "path": "backend/llm/__init__.py",
+      "sha256": "b9ae50d6e4f8fdba6308753f715a55fac1f6866e033426bf9b7f5f4ea7c1c869",
+      "bytes": 622
+    },
+    {
+      "path": "backend/llm/client.py",
+      "sha256": "a1043dcb77cf72cdc6635ecf09cb93b5c43d2d813c6ac3d0a33f8a201ad23ae3",
+      "bytes": 1746
+    },
+    {
+      "path": "backend/llm/config.py",
+      "sha256": "4802039932da9f042e757fad1c148d5ed68ccb3b68386d3c1d151904fa5fddc2",
+      "bytes": 7827
+    },
+    {
+      "path": "backend/llm/deepseek_client.py",
+      "sha256": "7bc24b1543b26298099692a81bcca7ecbbceaa9ced7c986c687c8508c8cf4667",
+      "bytes": 5109
+    },
+    {
+      "path": "backend/llm/prompts.py",
+      "sha256": "d66a34f53c412104b7fd6878214fdcc5046a0b54ca7c905b0d7feb9856c2c4ce",
+      "bytes": 555
+    },
+    {
+      "path": "backend/main.py",
+      "sha256": "5aa6c9dcfaddecdd2e5a661e0e123b415245b1714889bf2154d47263dce9b910",
+      "bytes": 2507
+    },
+    {
+      "path": "backend/models/__init__.py",
+      "sha256": "4689c6905f0ece54c1b6a7e15acdcccbc2bf933af8147aa4f291bb71cb97e572",
+      "bytes": 2429
+    },
+    {
+      "path": "backend/models/assessment.py",
+      "sha256": "ae37d876088087ef99cd3c5a0f4fdf4d8e07c55ccbad46eefe48b8da543aaad6",
+      "bytes": 756
+    },
+    {
+      "path": "backend/models/dialogue.py",
+      "sha256": "3cf1ac0fa73be2bbd3c6f8bda27d5af2efc4308afaadd825ae1efa63a324da78",
+      "bytes": 6024
+    },
+    {
+      "path": "backend/models/enums.py",
+      "sha256": "3d354c8404505f22affd227c729e2b40081dbd6ae1e38f346f1b8c51c87c911e",
+      "bytes": 1055
+    },
+    {
+      "path": "backend/models/evaluation.py",
+      "sha256": "a76ebbdfe39238b5d784c4619db21067b91cbb89b6a5e9daad88ebf83109440a",
+      "bytes": 2120
+    },
+    {
+      "path": "backend/models/healing.py",
+      "sha256": "8570cf6a3cca8ab3dc93a1efc040a6d259db46491d383058c4ed1e6f15a7c574",
+      "bytes": 11805
+    },
+    {
+      "path": "backend/models/requests.py",
+      "sha256": "2372a5a14a54ff96237083f20de4fef9a7ee9be8276a4a30a09960c93b6f5dd0",
+      "bytes": 4059
+    },
+    {
+      "path": "backend/models/responses.py",
+      "sha256": "f6c275800f004ff555e86bc5bdada022e67debfd38eebf3b3eccd883e067e627",
+      "bytes": 2069
+    },
+    {
+      "path": "backend/models/states.py",
+      "sha256": "3a8aa4bfb1e62906676b64cb607e5934076411a28a09f7647fd53df9c44d858d",
+      "bytes": 9419
+    },
+    {
+      "path": "backend/policy/__init__.py",
+      "sha256": "f2c31dd575745d20170a9ab820fc9320c33ae33254397c110923c15395dbc3bd",
+      "bytes": 47
+    },
+    {
+      "path": "backend/policy/client.py",
+      "sha256": "d49aae32677605c306483409d4fa8f397e3d09b8a08bc6830ba0d48efb63b7bb",
+      "bytes": 4702
+    },
+    {
+      "path": "backend/policy/prompt.py",
+      "sha256": "4e79a9eadf16e734d57dd5307b31473a5e62f3556742cc66b7312a4cc22500f3",
+      "bytes": 1081
+    },
+    {
+      "path": "backend/policy/reply.py",
+      "sha256": "820558bb3e4d5ec63ab8d82f10bad5e7a1ba157fdc285b1a284cd34babacb19a",
+      "bytes": 1687
+    },
+    {
+      "path": "backend/prompts/__init__.py",
+      "sha256": "85ae7106519a1ffc9aa4217dd266a50052af49d41823d4194e6de47f564925e2",
+      "bytes": 406
+    },
+    {
+      "path": "backend/prompts/dialogue_prompt.py",
+      "sha256": "4544cacbb0aaea7cecad0b80185a9ad6ff44c2ac657864fc1fd4518a1febb2f1",
+      "bytes": 10575
+    },
+    {
+      "path": "backend/rag/__init__.py",
+      "sha256": "bf7ffdc345290d19f04982b3023d03ff64a60a58680d923666522017c3ca6b56",
+      "bytes": 41
+    },
+    {
+      "path": "backend/rag/knowledge/demo_knowledge.md",
+      "sha256": "a7c963d7861b315548d7f92d821a226f26104d1b9e51776b3268eab7ecf038b0",
+      "bytes": 770
+    },
+    {
+      "path": "backend/rag/knowledge/healing.jsonl",
+      "sha256": "97684bd2592e3ac8ef15ce21c025c10c5b459216e9119f498584caecc49f86f1",
+      "bytes": 340345
+    },
+    {
+      "path": "backend/rag/knowledge/healing_sources.json",
+      "sha256": "1ae5bd7d411a347453fdc36fe5110f85408ed23cfbc5366adf642c653ba24b44",
+      "bytes": 36907
+    },
+    {
+      "path": "backend/rag/retriever.py",
+      "sha256": "20fb48d176a48a63cce8e023134b45ac7c6cea9900481095b852e5a8432b6cb2",
+      "bytes": 2367
+    },
+    {
+      "path": "backend/vision/__init__.py",
+      "sha256": "ff5c77b032a9a287bfab7802f6608b9245a6f9d5087eed4b4cc8f5d40def9fc9",
+      "bytes": 33
+    },
+    {
+      "path": "backend/vision/aggregation.py",
+      "sha256": "76bd647dcde3e5509d31f309bf0fe46866c02738771d9e6f01783d73528aecf8",
+      "bytes": 1045
+    },
+    {
+      "path": "backend/vision/detector.py",
+      "sha256": "279462714de9692e9237ff35a053cb213530aeaea46b134acf05a9498816a5bc",
+      "bytes": 8051
+    },
+    {
+      "path": "docs/api_spec.md",
+      "sha256": "54fdb7c9b1ac915de541b766c29d70a6fe2f9455c54b9b7a7825bf959d495315",
+      "bytes": 26315
+    },
+    {
+      "path": "docs/architecture.md",
+      "sha256": "6447c53c1f30b823268c40a1193e6d02e9816ecb2f28b621e522b4eabe24137e",
+      "bytes": 5861
+    },
+    {
+      "path": "docs/assessment_output_page_handoff.md",
+      "sha256": "18724e2a5e6ea50cc6be37d8b52f0b767ea3c3f2a84317d8980c372fb759a4f1",
+      "bytes": 9964
+    },
+    {
+      "path": "docs/assets/target_architecture.png",
+      "sha256": "4e4ed1d3bd0f6467d170e832c2eb5c98a3e602c17d9c1529b2c8792ab1dd66fb",
+      "bytes": 1713715
+    },
+    {
+      "path": "docs/environment.md",
+      "sha256": "a7eb0c4219cfedf9ea9966cca049da598385d47490c3225133c12f8b22e4a288",
+      "bytes": 4725
+    },
+    {
+      "path": "docs/examples/assessment_response.json",
+      "sha256": "a472b9b7e19e1c8ce7991aea9b14aa220dabb9bf3abb039b43360ebf8184f5f1",
+      "bytes": 2951
+    },
+    {
+      "path": "docs/examples/healing_adult_support_20261006.json",
+      "sha256": "30f4fa33bfc5e8f352b26be3bd5f1d3bbd9db45173b5dfd37defc9de36c503b0",
+      "bytes": 502966
+    },
+    {
+      "path": "docs/examples/healing_conversation_fix_20261006.json",
+      "sha256": "0e747d600f582c5117f1f2deeaeef2f92b75ccf3d2b08a94eb4068826cadb2d1",
+      "bytes": 87004
+    },
+    {
+      "path": "docs/examples/healing_current_replays.json",
+      "sha256": "f7f21d224acec0ffcc675b0785a964eb2b79e3f39b3cbe8a06386c2546cb17ec",
+      "bytes": 1809806
+    },
+    {
+      "path": "docs/examples/healing_expansion_replays.json",
+      "sha256": "c25d05cf2fe233125c2466031575b258b7928bf5371d89aaa02bb52c6b3432c7",
+      "bytes": 646473
+    },
+    {
+      "path": "docs/examples/healing_feedback_acceptance_20261006.json",
+      "sha256": "bb8f5215cfa9288359c9d58b66638cc0421c430c6544b6ab4e7f7ea07b516c97",
+      "bytes": 3677891
+    },
+    {
+      "path": "docs/examples/healing_final_acceptance_20261007.json",
+      "sha256": "f60c69665f10fd304145973499745bb11d3e59f296ce3e48f746ee3719a675e1",
+      "bytes": 10942621
+    },
+    {
+      "path": "docs/examples/healing_replays.json",
+      "sha256": "41262740dcf473ff5343d96b2e4c8a2714ad5f6f3b82aa7c862365926bc38371",
+      "bytes": 371945
+    },
+    {
+      "path": "docs/healing_adult_support_20261006.md",
+      "sha256": "84ee2d96e82ad88485fa23c3f25072cdea02db3918279bc9b9c957e441a3448c",
+      "bytes": 7236
+    },
+    {
+      "path": "docs/healing_agent.md",
+      "sha256": "5385427f55a237d744149ab774b510e38ae91625e8f41703d5eb49f3913c1d1d",
+      "bytes": 36291
+    },
+    {
+      "path": "docs/healing_conversation_fix_20261006.md",
+      "sha256": "6ffa6c3cc342287d14f9e5e4eb79893d2be616cfe05a7e93e90c632142162e97",
+      "bytes": 4253
+    },
+    {
+      "path": "docs/healing_delivery_20261007.md",
+      "sha256": "db0068ee1705008cf930a4d76ee53299a00185ec49743d1b8387d199fccc6d96",
+      "bytes": 5782
+    },
+    {
+      "path": "docs/healing_feedback_acceptance_20261006.md",
+      "sha256": "b823b8587474cabb0883e2a27d54ec606bb42b02f0a944c12e3764fdaafaf72e",
+      "bytes": 6687
+    },
+    {
+      "path": "docs/healing_final_acceptance_20261007.md",
+      "sha256": "937ff5f32948b6994745453b39c8c3175602e68e2d3837ee55c715eef23a29b3",
+      "bytes": 9692
+    },
+    {
+      "path": "docs/healing_knowledge_expansion.md",
+      "sha256": "d9efdba94f1c7a1e79fc4ef0a907f30545bf18b6babb38ec858a5d0e216cd6ca",
+      "bytes": 9089
+    },
+    {
+      "path": "docs/healing_knowledge_review.md",
+      "sha256": "2a1d48861fff8a39d6de3a1f78a3164b4fda4331d0b17e2f17ac80b0b894a1f5",
+      "bytes": 6110
+    },
+    {
+      "path": "docs/healing_prepared_feedback_20261006.md",
+      "sha256": "54ae05b0e8ba2912c004b78e59f6b9535446fa6e52bfb04a6e6907c00c76e4db",
+      "bytes": 4441
+    },
+    {
+      "path": "docs/healing_risk_refresh_20261006.md",
+      "sha256": "5710c8ad253791c07faaed95e09b8ffe07cf7930c6ba42f942a0f78b8825dc4f",
+      "bytes": 6270
+    },
+    {
+      "path": "docs/healing_sources_and_licenses.md",
+      "sha256": "bba60a668f3326980aaf1bac975a2b4e7827e91f5440dab4467015df1c881762",
+      "bytes": 6863
+    },
+    {
+      "path": "docs/healing_validation.md",
+      "sha256": "3a1ac2289a7ca9a7ce6535d3de0b8dc1d89077e645aeb7efe39a33ec04c6ec3a",
+      "bytes": 26798
+    },
+    {
+      "path": "docs/healing_validation_20261006.md",
+      "sha256": "d24f61614d8a792bbcb1abd9c4c01cd6cfdccb74ff1b9610995720e9dd408115",
+      "bytes": 9086
+    },
+    {
+      "path": "docs/prelaunch_audit_2026-10-01.md",
+      "sha256": "d20dd266b8e982c004f42a1cac8562006bc715ee17d9bc27f03eed008e8ea1a8",
+      "bytes": 6336
+    },
+    {
+      "path": "docs/research/个性化问答检测抑郁_调研与技术方案.md",
+      "sha256": "18a7e31cb8395461c2e812d58af8887fafcd0841aafbb727547356d23f80f0d3",
+      "bytes": 42604
+    },
+    {
+      "path": "docs/research/心理诊断对话数据集清单.md",
+      "sha256": "3bbcdcb85fafc57f9298e91efb91b0dca95c08773b71a057d59fbe4ae92f3cf6",
+      "bytes": 8024
+    },
+    {
+      "path": "docs/research/抑郁筛查金标准量表_学术调研报告.md",
+      "sha256": "5e1621ae90e33c7d959a8c767b98e44a4046a2b1e4e7a514409d94f34e6eeabe",
+      "bytes": 33021
+    },
+    {
+      "path": "docs/research/系统技术实现方案_MABIS.md",
+      "sha256": "0e785ef0f260df2edbc6e2bf56cff0c3754455a43b45f622eaf6d89b1bf11f4b",
+      "bytes": 25781
+    },
+    {
+      "path": "docs/research/调研报告_对话式抑郁检测与自适应提问.md",
+      "sha256": "78f2bf6a8060a0c17fad0d53af68bcecad42da2e3cf2b7eae9a8447a36ad6bb9",
+      "bytes": 31451
+    },
+    {
+      "path": "docs/research/调研第3路_LLM筛查与多模态抑郁检测.md",
+      "sha256": "91e31cc75fe59608397d96c19327424a763018b43ab2215ce68eb7a1501b9436",
+      "bytes": 31074
+    },
+    {
+      "path": "docs/research/调研路线4_现有不足与伦理有效性.md",
+      "sha256": "4e3e52e513c2f22e32b86bf4efb524a954e289af2dd2e13afe7af80ae7354e71",
+      "bytes": 29541
+    },
+    {
+      "path": "docs/speech_recognition.md",
+      "sha256": "11d46c268a812dbce83e0d3e663a5c9c4d6659710ab67bc039e4112f9a0fb62f",
+      "bytes": 15360
+    },
+    {
+      "path": "docs/speech_validation_2026-10-02.md",
+      "sha256": "960ed0d6373ab4f4ce87247d43a8eb9b09e84bb4275c703e8466716eb2bc8cb0",
+      "bytes": 19382
+    },
+    {
+      "path": "docs/vision_alignment.md",
+      "sha256": "7cc9c040d36dddc6dabc93afc7a77d15548d10f23c7b3f75bfada0b1925d607c",
+      "bytes": 8233
+    },
+    {
+      "path": "docs/三人协作与接口分工_v3.md",
+      "sha256": "a9b790cf12a38ae377a6f0d87ad5660782b5066fb9fb9a3330c55fe7ab1a545d",
+      "bytes": 3269
+    },
+    {
+      "path": "environment.yml",
+      "sha256": "7912db6dcd4708a53aec9044e183d1bb171acf26feaa736f4cb42c0c90d0ce37",
+      "bytes": 152
+    },
+    {
+      "path": "evaluation_agent/__init__.py",
+      "sha256": "a11637b26dd000f5a0eff8aeae42e5921d9abc29fb288b453f8a56eade3d7e5a",
+      "bytes": 6687
+    },
+    {
+      "path": "evaluation_agent/base.py",
+      "sha256": "7837724c6c09db9199da1b9b67d80d969822ca136b7aa1bce1954e1a1de9ebc8",
+      "bytes": 6107
+    },
+    {
+      "path": "evaluation_agent/demographics.py",
+      "sha256": "90412e2364003eae02ba58fac23e51463da7ecb1acb63afce86d33f64fdb0602",
+      "bytes": 1151
+    },
+    {
+      "path": "evaluation_agent/inputs.py",
+      "sha256": "7d581eefb05012f6537ade0d8286376a9d2fab7f8ee0f78540ac319f32c67f9d",
+      "bytes": 7370
+    },
+    {
+      "path": "evaluation_agent/llm_client.py",
+      "sha256": "66d9f4aa7efd4b03738043f64dc4f2adf0248e4b86853eb225df8eea65e3954e",
+      "bytes": 48131
+    },
+    {
+      "path": "evaluation_agent/multimodal.py",
+      "sha256": "29e66c0c5f038f8184e58696b67fbb74237c1bd4f2e3f9f6ed5cf9ba0ca8b83a",
+      "bytes": 4510
+    },
+    {
+      "path": "evaluation_agent/normalization.py",
+      "sha256": "2962c277fd17866f3ddd71466f8b133ef15caff99f35d0f93eec24e46c23edc5",
+      "bytes": 13207
+    },
+    {
+      "path": "evaluation_agent/opening.py",
+      "sha256": "73a733bea121c7103f9234d5029683a064b3bc441822d1aa1a06ef0997ea5086",
+      "bytes": 199
+    },
+    {
+      "path": "evaluation_agent/prompt.py",
+      "sha256": "8d43aa991d4aa3568c23eccf377763c15e073df64059c6b62e0863216837c039",
+      "bytes": 18121
+    },
+    {
+      "path": "evaluation_agent/raw_assessment.py",
+      "sha256": "42dd4203c47b55029f2dbb880ac6580d6b71f7cfe443f40eabf1adc4a35a6e0b",
+      "bytes": 16574
+    },
+    {
+      "path": "evaluation_agent/rubric.py",
+      "sha256": "bbda4eea7f6cf0240e40e50f98e0cdb2e570f6d797a6cfbd316de302da24bbf8",
+      "bytes": 13942
+    },
+    {
+      "path": "evaluation_agent/schemas.py",
+      "sha256": "47dbe08aef470b1c11527adac9d2dc776bcc8e51c66703d57524e773dba4403e",
+      "bytes": 28920
+    },
+    {
+      "path": "evaluation_agent/scoring.py",
+      "sha256": "5b99b884b9ebe26a5b22d77e0c31a4fd3e77aafae4f984ee16b605d4c566ad8d",
+      "bytes": 12302
+    },
+    {
+      "path": "evaluation_agent/service.py",
+      "sha256": "21bc53a95e0d48f10fa4b044c3f233b2d8fdec9f6ca6812ca1600e9950db980f",
+      "bytes": 9045
+    },
+    {
+      "path": "frontend/src/api/client.js",
+      "sha256": "9b9aa7b9db92b70ed073a013dc1fe687e17c9f48365241507ad987a7adc2eff5",
+      "bytes": 3740
+    },
+    {
+      "path": "frontend/src/api/client.test.js",
+      "sha256": "80b7a01731d108178bf91e2c0743a7ef183f3861493b281a0af3845c2b381866",
+      "bytes": 2246
+    },
+    {
+      "path": "frontend/src/App.jsx",
+      "sha256": "f8dd81f5f9cbbc8df9a17f08af70bf3b6eaf0a2ebf1b2fcea3b3738f9c437859",
+      "bytes": 697
+    },
+    {
+      "path": "frontend/src/components/AssessmentResultView.jsx",
+      "sha256": "81d52795fac3beb052b30b69ecf86c2abfc9c4841321d9ec14de473cd068f667",
+      "bytes": 1841
+    },
+    {
+      "path": "frontend/src/components/DeviceStatus.jsx",
+      "sha256": "89a0ee3cb940821c971f24debfa57603934c313780f4d60024239d5c0c2ad88c",
+      "bytes": 1097
+    },
+    {
+      "path": "frontend/src/main.jsx",
+      "sha256": "11ded3fdaa3d3ca25f2bd674cd586f72632b941581ef26f4047cd49133762661",
+      "bytes": 188
+    },
+    {
+      "path": "frontend/src/media/capture.js",
+      "sha256": "ac3c5a175fc22ea6d6e9efddbe24d0e4f7e3426eb93a14ff9e6878be66f81322",
+      "bytes": 10702
+    },
+    {
+      "path": "frontend/src/media/capture.test.js",
+      "sha256": "8c158d94dc21c362bfbc28854cf4565afeec14d55440bb9c092d9ae867433825",
+      "bytes": 10032
+    },
+    {
+      "path": "frontend/src/pages/StudentPage.jsx",
+      "sha256": "0d18762d02f5d62338b3bd320a06771b99de4e80d4629208f5ae4f5be90ae0d4",
+      "bytes": 16737
+    },
+    {
+      "path": "frontend/src/pages/TeacherPage.jsx",
+      "sha256": "385770ba7910ab04e63973fcd192af0d48826619c0ac1cf93a8dd72f3eba894e",
+      "bytes": 6895
+    },
+    {
+      "path": "frontend/src/style.css",
+      "sha256": "b6404d790469bf9d9ba457a1fb028e8e8b6194ac7413be8ac810b7106bc319dd",
+      "bytes": 6890
+    },
+    {
+      "path": "pytest.ini",
+      "sha256": "ddfcf6e0017476e9b9e8e55559c80e166c21f4f1ac242c7468dc85ad9dc69e52",
+      "bytes": 29
+    },
+    {
+      "path": "README.md",
+      "sha256": "52dcfbcf547829cd96076f5c97aa7337b6a8aaa7d95412c9a618ca32c37f4f19",
+      "bytes": 4659
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "c4bf95338df618e61a345ebf812769572e288f07e582490b52e935e96c49bfe0",
+      "bytes": 1020
+    },
+    {
+      "path": "scripts/adapt_healing_wording.py",
+      "sha256": "9035a0bbd219aad582a7b15ddbdb23b4872d1075c3851ef33ae60eb75ec2fc06",
+      "bytes": 10239
+    },
+    {
+      "path": "scripts/benchmark_asr.py",
+      "sha256": "f1132bf00eca6d5cf2c0b63f5f42daf6630b8f6f223c9521d6a49416105e4f64",
+      "bytes": 3250
+    },
+    {
+      "path": "scripts/benchmark_healing.py",
+      "sha256": "037ecbce26a4599eb67a9a25acdf43d661f9cfab4db82c0cf1b3df6e69f12052",
+      "bytes": 14152
+    },
+    {
+      "path": "scripts/benchmark_whisper.py",
+      "sha256": "fd52d42f3e6324ac75044a854ee1840e1f728f54447fe19ad4b8d424c55f0c92",
+      "bytes": 4674
+    },
+    {
+      "path": "scripts/build_healing_knowledge.py",
+      "sha256": "974f86673f52e12eedb67f9eedd92a3e22344835461b02e07443bc81218ef76e",
+      "bytes": 26877
+    },
+    {
+      "path": "scripts/check_healing_grounding.py",
+      "sha256": "38b6d196acca1e4f9c65a200354c930ac8a86d81ad3b306a049ded97f5510378",
+      "bytes": 6195
+    },
+    {
+      "path": "scripts/check_healing_narrative.py",
+      "sha256": "e4c4298ee24cb1cefbb8ed05574d822cfecda6f19cb4d2eba366a25cf8480271",
+      "bytes": 3836
+    },
+    {
+      "path": "scripts/compare_healing_extraction.py",
+      "sha256": "a72e2114da44d9949921369c589edd65a949b40d149a71c7cb8f2259667fb4ae",
+      "bytes": 9493
+    },
+    {
+      "path": "scripts/deduplicate_healing_knowledge.py",
+      "sha256": "c14af5bf180a97cb3dc71ee3525df02c8af111e33d09254b8615b118f773e1e5",
+      "bytes": 4892
+    },
+    {
+      "path": "scripts/healing_validation_runtime.py",
+      "sha256": "b5a06051d6b22b839970f3e98fba9c8d5fec0b372ac6f701b1754fdf2b9b855a",
+      "bytes": 5726
+    },
+    {
+      "path": "scripts/revalidate_healing_knowledge.py",
+      "sha256": "4d0cc679976213446424617d79414437286124ce9ee5d65aa1c1b88dee03b670",
+      "bytes": 2715
+    },
+    {
+      "path": "scripts/run_healing_acceptance.py",
+      "sha256": "2f2eea243fb14c72313e6b4f4c0c161ebeaf731d9ae570bbc7c82b15d0508de7",
+      "bytes": 1742
+    },
+    {
+      "path": "scripts/smoke_deepseek_dialogue.py",
+      "sha256": "02db2241c4acffd991943d4156e3b6bb6bed79ff42c4bdab99a919a7bc625596",
+      "bytes": 3000
+    },
+    {
+      "path": "scripts/smoke_healing.py",
+      "sha256": "68a2ebee3d45948a1a6b6f9f677a9adcb996b0393dffa92480b914aecf40695c",
+      "bytes": 6599
+    },
+    {
+      "path": "scripts/validate_healing_current.py",
+      "sha256": "5e8a7b0a92ce5b077393ef1039312543584cb34f75c99283f1de2110736564f5",
+      "bytes": 19446
+    },
+    {
+      "path": "scripts/validate_healing_experience.py",
+      "sha256": "fbfc3e5c91748af7fa14ef3c59dad338430aa4248830b1abf9dbdb906b93491b",
+      "bytes": 12852
+    },
+    {
+      "path": "scripts/validate_healing_interactions.py",
+      "sha256": "4da9161717dd7c6d2aaab8589d56e9db8e89d9377524248aa4906cd48e80bac5",
+      "bytes": 6024
+    },
+    {
+      "path": "scripts/validate_healing_scenarios.py",
+      "sha256": "52ec7afa199de21a23d2570c8217aa5b4c8752a506a298b5c34278f20460c4a3",
+      "bytes": 7805
+    },
+    {
+      "path": "scripts/verify_dialogue_agent.py",
+      "sha256": "e0025471187b370a24532010c247da72d99cf2b3aab2305753c3919dc3cdc5b0",
+      "bytes": 12186
+    },
+    {
+      "path": "scripts/verify_dialogue_prompt.py",
+      "sha256": "0d5ae7b2d3a8a9743ae24653a7929a6a60cf32cf7bef2c8545f175022964bd0c",
+      "bytes": 14178
+    },
+    {
+      "path": "scripts/verify_dialogue_schema.py",
+      "sha256": "9667dcbba1af896eb06c5dd6d22e1103f1ce664c1b9add0fedc34763eb32aebf",
+      "bytes": 11903
+    },
+    {
+      "path": "tests/conftest.py",
+      "sha256": "e48ddbda21e61498fd42f8ba00fab8416014b57d41224e20e92fc5165deac65a",
+      "bytes": 2332
+    },
+    {
+      "path": "tests/fixtures/healing_expanded_retrieval_cases.json",
+      "sha256": "26d26c69c2581a36b8e180116ba943c089a7e67f25f15a3987085a02046e503b",
+      "bytes": 10307
+    },
+    {
+      "path": "tests/fixtures/healing_grounding_counterexamples.json",
+      "sha256": "3e326e0b09e2f9f1de60c5db67ac878ef8d3dcacaa6ccecc74d97483652b6eb8",
+      "bytes": 1876
+    },
+    {
+      "path": "tests/fixtures/healing_retrieval_cases.json",
+      "sha256": "916ac1040665d90e2729104f0ac8b90472802190c7363566cedd1d371b822fa8",
+      "bytes": 3085
+    },
+    {
+      "path": "tests/fixtures/healing_support_cases.json",
+      "sha256": "14f00e4792a8924374ba01982f4e23851451b1f68ffff0601ef06a6163bc6ac9",
+      "bytes": 1818
+    },
+    {
+      "path": "tests/test_assessment_memory.py",
+      "sha256": "6cbbdda989f2656568739ae56a20a2baa3ccaff6836bd26405b2c85e69114ed3",
+      "bytes": 3332
+    },
+    {
+      "path": "tests/test_assessment_opening.py",
+      "sha256": "a0d9efae3aa91b218eaaa776d1cf75e6700195bfd3f82dfee3473706e18ccc6b",
+      "bytes": 2144
+    },
+    {
+      "path": "tests/test_audio_config.py",
+      "sha256": "a04b60bb926939a547ef3479da750797a2efd00b8e5e21edb18ee9cb09d18f5d",
+      "bytes": 2210
+    },
+    {
+      "path": "tests/test_audio_transcription.py",
+      "sha256": "3fb08ce5cedffa23613e5bcb7f2b01d89e0b33c7a0f332aca10340808c9a79a9",
+      "bytes": 23677
+    },
+    {
+      "path": "tests/test_chat.py",
+      "sha256": "01570f8b9e3d05c129cfa18b25739742b91419bd40d560ea819820c0db4d866a",
+      "bytes": 11890
+    },
+    {
+      "path": "tests/test_conversation_data_flow.py",
+      "sha256": "e07f68cf7d0b72f671b18f30de659ed734f9f48ad80a5b201e389ba3b4c97469",
+      "bytes": 7685
+    },
+    {
+      "path": "tests/test_evaluation_integration.py",
+      "sha256": "03bdefabdec32411fdc9bd3b86c3f7a7ae277c81bf958e240feeef21e064aafb",
+      "bytes": 6426
+    },
+    {
+      "path": "tests/test_healing.py",
+      "sha256": "e1f19fe17cb65773db173ef053c36bbff372110ea480c983a2fd4171cfe11028",
+      "bytes": 102323
+    },
+    {
+      "path": "tests/test_healing_acceptance.py",
+      "sha256": "25345297b6bb75f4fc719d2a6c93e98dca83742c85019ffaee450e911b025ca9",
+      "bytes": 9967
+    },
+    {
+      "path": "tests/test_healing_adult_support.py",
+      "sha256": "6c7d30fcb482e59acf53ea1bad37347d99b117ab5a5b9c21c70d34cb415ebc6e",
+      "bytes": 14030
+    },
+    {
+      "path": "tests/test_healing_conversation.py",
+      "sha256": "4b821bf7044f83b569c6fc73032ea297cd36a02b6147b0308a691b67a496f76f",
+      "bytes": 20960
+    },
+    {
+      "path": "tests/test_healing_feedback.py",
+      "sha256": "66f4e0723ed66945d55f67da51aa5dbc21f0f51464802fd14cf14ce013060729",
+      "bytes": 15297
+    },
+    {
+      "path": "tests/test_healing_wording.py",
+      "sha256": "4bbf91146addf585f4dba81f8bc097824ea16dc9d675a262c45b8965c00edef3",
+      "bytes": 6950
+    },
+    {
+      "path": "tests/test_minor_prompt.py",
+      "sha256": "0e5d7097776d6e15257216eeed10d648f790489f4bb2f038f9c21c45bef200a8",
+      "bytes": 1061
+    },
+    {
+      "path": "tests/test_policy_integration.py",
+      "sha256": "7a1a02071a10c84109ef3be1731fb2329e2075510a944f429d7b3490cd6e0925",
+      "bytes": 5379
+    },
+    {
+      "path": "tests/test_session.py",
+      "sha256": "fa6ddd84491fe5288b96320c99597528ad7e9fcfd1a3b9bf7c109450b07ebfb9",
+      "bytes": 3429
+    },
+    {
+      "path": "tests/test_speech_flow.py",
+      "sha256": "591e1f1c08dc623b1e5589a80ff9412baf819c9518ad64a8dd50e70091c9d576",
+      "bytes": 9097
+    },
+    {
+      "path": "tests/test_tts.py",
+      "sha256": "a624380e47c72117580c41d6fb3615c363b49eca8da347b77b3fe4d76d050fb5",
+      "bytes": 3960
+    },
+    {
+      "path": "tests/test_vision_alignment.py",
+      "sha256": "2dececcfba86b9a0bb58db8342c9aa2cb0a3914fedc5d52fc3e1eaee89e30508",
+      "bytes": 13504
+    },
+    {
+      "path": "../治愈Agent规划.md",
+      "sha256": "d6209b4c13519d125fc530b1a1e896bfa4ccd4a44f690f70c5e9164864723736",
+      "bytes": 166799
+    }
+  ]
+}

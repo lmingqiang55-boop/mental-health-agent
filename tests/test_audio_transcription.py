@@ -19,6 +19,7 @@ from backend.audio.decoder import decode_audio
 from backend.audio.transcriber import AudioError, TranscriptionService, clean_transcript
 from backend.core.session_manager import session_manager
 from backend.main import app
+from evaluation_agent.opening import OPENING_QUESTION
 
 client = TestClient(app)
 
@@ -86,7 +87,9 @@ def test_upload_downmix_resample_returns_metadata_without_chat(service):
     assert waveform.dtype == np.float32 and waveform.shape == (8000,)
     assert np.max(np.abs(waveform[-100:])) > 0.1  # resampler tail was flushed
     session = client.get(f"/api/session/{body['session_id']}").json()
-    assert session["turn_count"] == 0 and session["conversation_history"] == []
+    assert session["turn_count"] == 0 and len(session["conversation_history"]) == 1
+    assert session["conversation_history"][0]["role"] == "assistant"
+    assert session["conversation_history"][0]["content"] == OPENING_QUESTION
     assert session["latest_audio_state"] is None
 
 
@@ -250,8 +253,10 @@ def test_transcribe_then_chat_then_assess(service, policy_stub, evaluation_stub)
     assert client.post("/api/chat", json=response).json()["turn_count"] == 1
     assert client.post("/api/assessment", json={"session_id": response["session_id"]}).status_code == 200
     history = client.get(f"/api/session/{response['session_id']}").json()["conversation_history"]
-    assert history[0]["speech"] == response["speech"]
-    assert evaluation_stub.inputs[0].dialogue_history[0].content == "没有。"
+    assert history[0]["content"] == OPENING_QUESTION and history[0]["speech"] is None
+    assert history[1]["role"] == "user" and history[1]["speech"] == response["speech"]
+    assert evaluation_stub.inputs[0].dialogue_history[0].content == OPENING_QUESTION
+    assert evaluation_stub.inputs[0].dialogue_history[1].content == "没有。"
 
 
 def test_timeout_does_not_release_running_model_slot():

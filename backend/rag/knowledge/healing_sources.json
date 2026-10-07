@@ -1,0 +1,542 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {
+      "source_id": "unicef-stress",
+      "title": "UNICEF: What is stress?",
+      "url": "https://www.unicef.org/parenting/mental-health/what-is-stress",
+      "allowed_start": "Ways to help your child cope",
+      "allowed_end": "When to seek professional help",
+      "audience_context": "Stress in children and adolescents",
+      "scenes": [
+        "study_stress",
+        "sleep"
+      ],
+      "allowed_topics": "压力触发因素、睡眠健康习惯、成人陪伴下支持；保留执行者。请单独抽取Support healthy habits中的夜间屏幕和卧室设备习惯作为睡眠方法，不把6至12岁睡眠时长继承到其他方法。数值年龄只用于对应睡眠建议，不继承给其他方法。",
+      "excluded_topics": "诊断、药物、治疗、成人角色示范任务",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; public_redistribution_not_authorized",
+      "license_url": "https://www.unicef.org/legal"
+    },
+    {
+      "source_id": "unicef-anxiety",
+      "title": "UNICEF: What is anxiety?",
+      "url": "https://www.unicef.org/parenting/mental-health/what-is-anxiety",
+      "allowed_start": "Ways to help your child cope",
+      "allowed_end": "When to seek professional help",
+      "audience_context": "Anxiety in children and adolescents",
+      "allowed_topics": "共同探索紧张感、关注当下、感官练习；保留成人引导。",
+      "excluded_topics": "诊断、症状规则、治疗、专业访谈、药物",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; public_redistribution_not_authorized",
+      "license_url": "https://www.unicef.org/legal"
+    },
+    {
+      "source_id": "unicef-depression",
+      "title": "UNICEF: What is depression?",
+      "url": "https://www.unicef.org/parenting/mental-health/what-is-depression",
+      "allowed_start": "Ways to help your child cope",
+      "allowed_end": "When to seek professional help",
+      "audience_context": "Depression in children and adolescents",
+      "allowed_topics": "在成人支持下的表达、喜欢的日常活动、规律生活。",
+      "excluded_topics": "诊断、症状规则、药物、治疗、家长调查他人和现实照护任务",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; public_redistribution_not_authorized",
+      "license_url": "https://www.unicef.org/legal"
+    },
+    {
+      "source_id": "anding-school",
+      "title": "北京安定医院：开学后，孩子反复说身体难受，却查不出问题……",
+      "url": "https://bjad.com.cn/Html/News/Articles/5055.html",
+      "allowed_start": "第一步：先承认孩子的不舒服",
+      "allowed_end": "孩子出现这些情况",
+      "audience_context": "儿童青少年的情绪识别和表达能力",
+      "allowed_topics": "成人陪伴下把困扰说具体、小任务；所有身体不适相关内容必须保留必要医学检查条件。",
+      "excluded_topics": "躯体化诊断、家长接送或带孩子熟悉学校任务、实际治疗",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "open_redistribution_license_unconfirmed"
+    },
+    {
+      "source_id": "beijing-exam",
+      "title": "北京考试报：心有山海，前行必有曙光",
+      "url": "https://bjksb.bjeea.cn/html/ksb/zhongyaoxinwen/2023/0626/83972.html",
+      "allowed_start": "如何应对考试焦虑",
+      "allowed_end": "中医舒缓小锦囊",
+      "audience_context": "中考彻底就完了",
+      "allowed_topics": "接纳中考紧张、梳理担忧、考前状态调整，适用学段只按原文。",
+      "excluded_topics": "学科辅导、试题讲解、诊断、治疗、相邻其他文章",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "open_redistribution_license_unconfirmed"
+    },
+    {
+      "source_id": "childmind-conflict",
+      "title": "Child Mind Institute: Teaching Kids How to Deal With Conflict",
+      "url": "https://childmind.org/article/teaching-kids-how-to-deal-with-conflict/",
+      "allowed_start": "Pinpoint the source of the conflict",
+      "allowed_end": "Model what you want to see",
+      "audience_context": "Older kids starting in grade school and middle school",
+      "extra_context": [
+        "older kids and teenagers"
+      ],
+      "allowed_topics": "成人指导下识别普通冲突的原因、共同讨论方案、感受表达与准备沟通；只用于普通同伴矛盾。保留先冷静后处理冲突、低龄需要成人指导的条件。不继承另一个技能的具体学段。",
+      "excluded_topics": "成人榜样任务、把低龄成人指导删除、用于欺凌威胁、暴力",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "public_reader_normalized_excerpt",
+      "license_status": "restricted_reuse; public_redistribution_not_authorized",
+      "license_url": "https://childmind.org/terms/"
+    },
+    {
+      "source_id": "nemours-kids-sleep",
+      "title": "Nemours KidsHealth: What Sleep Is and Why All Kids Need It (for Kids)",
+      "url": "https://kidshealth.org/en/kids/not-tired.html",
+      "allowed_start": "How Can I Sleep Better?",
+      "allowed_end": "Medically reviewed",
+      "audience_context": "For most kids, sleeping comes pretty naturally.",
+      "scenes": [
+        "sleep"
+      ],
+      "allowed_topics": "面向儿童读者的日常睡眠习惯，限固定睡觉起床时间、平静睡前活动、屏幕与咖啡因。保留持续睡不着或担忧影响睡眠时告诉家长的求助提示。不补数值年龄，不给药物、睡眠限制或诊断。",
+      "excluded_topics": "相邻导航、广告、学习辅导、治疗、药物、睡眠限制、刺激控制、只用床睡觉的训练、以症状作诊断",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "pku-sleep",
+      "title": "北大六院：一文带你全面了解青少年失眠",
+      "url": "https://www.pkuh6.cn/Html/News/Articles/4977.html",
+      "allowed_start": "坚持良好的睡眠习惯",
+      "allowed_end": "青少年失眠的现象并不少见",
+      "audience_context": "一文带你全面了解青少年失眠",
+      "extra_context": [
+        "初高中"
+      ],
+      "allowed_topics": "电子产品、咖啡因、规律睡眠习惯，仅日常支持部分。年龄不能来自来信案例或研究样本。",
+      "excluded_topics": "睡眠限制、卧床时间控制、刺激控制、完整 CBT-I、诊断、治疗流程",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "open_redistribution_license_unconfirmed"
+    },
+    {
+      "source_id": "nemours-teens-emotional-awareness",
+      "title": "5 Ways to Know Your Feelings Better (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/emotional-awareness.html",
+      "allowed_start": "Here are 5 ways to practice being more aware of your emotions:",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-stressful-feelings",
+      "title": "Dealing With Difficult Emotions (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/stressful-feelings.html",
+      "allowed_start": "Step 1: Identify the Emotion",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-stress-situations",
+      "title": "Coping With Stress (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/stress-situations.html",
+      "allowed_start": "How Can I Build Skills to Handle Stress?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "study_stress"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-stress-tips",
+      "title": "10 Ways to Manage Everyday Stress (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/stress-tips.html",
+      "allowed_start": "1. Balance work and play.",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "study_stress"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-test-anxiety",
+      "title": "Test Anxiety (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/test-anxiety.html",
+      "allowed_start": "How Can I Overcome Test Anxiety?",
+      "allowed_end": "Smiling Breath",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "study_stress"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-tips-sleep",
+      "title": "5 Ideas for Better Sleep (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/tips-sleep.html",
+      "allowed_start": "How can you get the sleep you need? Here are some ideas:",
+      "allowed_end": "Smiling Breath",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "sleep"
+      ],
+      "allowed_topics": "固定睡前安排、睡前关闭电子设备、日间与晚间咖啡因、白天活动。保留原文时间数量、避免临睡前运动和经常睡眠困难时找医生的提示。不抽确定睡得好的自我保证、音频步骤或治疗。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-tips-disagree",
+      "title": "5 Ways to (Respectfully) Disagree (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/tips-disagree.html",
+      "allowed_start": "Don't make it personal.",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-lonely-help",
+      "title": "How Can I Feel Less Lonely? (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/lonely-help.html",
+      "allowed_start": "How Can I Feel Less Lonely?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-self-esteem",
+      "title": "How Can I Improve My Self-Esteem? (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/self-esteem.html",
+      "allowed_start": "What if My Self-Esteem Is Low?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-emotional-reactions",
+      "title": "Managing Your Emotional Reactions (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/emotional-reactions.html",
+      "allowed_start": "It's Friday afternoon, last period. The weekend trip you planned with a friend starts in exactly 4 hours. You've been catching up on studying and chores all wee",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-mindful-exercises",
+      "title": "Mindfulness Exercises (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/mindful-exercises.html",
+      "allowed_start": "Being\nmindful\nmeans being fully present in what you’re doing at any moment. It helps people do better in just about every part of life. Practicing mindfulness a",
+      "allowed_end": "5. Mindful Driving",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "study_stress",
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-rejection",
+      "title": "Rejection and How to Handle It (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/rejection.html",
+      "allowed_start": "Life is about going for things. And when we do, rejection is always a possibility.\nBig or Small, Rejection Affects Us All\nRejection doesn't have to be about the",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-shy-tips",
+      "title": "5 Ways to Shake Shyness (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/shy-tips.html",
+      "allowed_start": "Having a shy style isn't necessarily a problem. It's perfectly OK to take time to warm up to new people and situations. But shyness blocks some people from bein",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-teens-positive-emotions",
+      "title": "3 Ways to Increase Positive Emotions (for Teens) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/teens/positive-emotions.html",
+      "allowed_start": "Track Your Positive Emotions",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Teens)",
+      "audience_hint": "adolescents",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-depression",
+      "title": "What to Do When You Feel Sad (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/depression.html",
+      "allowed_start": "When you're in a sad mood, it can seem like it will last forever. But most of the time, sad feelings don't last very long.\nEveryone feels sad sometimes. It’s go",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-5-steps",
+      "title": "What to Do When You Feel Stressed (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/5-steps.html",
+      "allowed_start": "Talk about a problem.",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "study_stress"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-talk-feelings",
+      "title": "Talking About Your Feelings (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/talk-feelings.html",
+      "allowed_start": "Talking About Your Feelings",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-worry-less",
+      "title": "How Can I Worry Less? (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/worry-less.html",
+      "allowed_start": "If you’ve got a worry on your mind, you’re not alone. Most kids worry at times. Worrying is a way of thinking ahead about what might happen. It’s like a questio",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "study_stress"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-test-anxiety",
+      "title": "Stressed About a Test? How to Cope (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/test-anxiety.html",
+      "allowed_start": "What Are the Best Ways to Cope?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "study_stress"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-anger",
+      "title": "Taking Charge of Anger (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/anger.html",
+      "allowed_start": "What Should I Do If I Get Angry?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-feel-lonely",
+      "title": "What to Do When You Feel Lonely (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/feel-lonely.html",
+      "allowed_start": "What Can I Do if I Feel Lonely?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "relationships"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    },
+    {
+      "source_id": "nemours-kids-self-esteem",
+      "title": "Feeling Good About Yourself (Self-Esteem) (for Kids) | Nemours KidsHealth",
+      "url": "https://kidshealth.org/en/kids/self-esteem.html",
+      "allowed_start": "What Helps Your Self-Esteem and Self-Confidence?",
+      "allowed_end": "Medically reviewed by:",
+      "audience_context": "(for Kids)",
+      "audience_hint": "children",
+      "scenes": [
+        "low_mood"
+      ],
+      "allowed_topics": "原文中面向读者的日常情绪、压力、普通同伴关系或睡眠支持。每条保留完整动作、顺序、数量及必要条件；只继承文章明确读者对象。求助条件可保留，但不复制美国专用热线。",
+      "excluded_topics": "导航、媒体播放器标题与音频未提供的步骤、广告、大学和恋爱情境、学科辅导、诊断、药物、治疗、睡眠限制、刺激控制、用于欺凌威胁的普通冲突方案、美国专用热线号码、疗效保证",
+      "rights_reviewed": "2026-10-05",
+      "capture_method": "http_html_normalized_text",
+      "license_status": "restricted_reuse; edited_online_content_not_authorized",
+      "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
+    }
+  ],
+  "rights_note": "按用户选择继续内部竞赛原型；范围选择不等于网站授权。公开可读不等于开放许可。原始网页不随代码分发，知识保留短依据和中文概述。UNICEF、Child Mind、Nemours 的公开再分发未获本项目许可，其余来源开放许可未确认。公开发布前取得许可或替换资料，逐项记录见 docs/healing_sources_and_licenses.md。",
+  "interaction_sources": [
+    {
+      "age_group": "6-10",
+      "url": "https://www.unicef.org/parenting/mental-health/conversation-starters-6-10-years",
+      "purpose": "communication_only; does_not_widen_method_age"
+    },
+    {
+      "age_group": "11-13",
+      "url": "https://www.unicef.org/parenting/mental-health/conversation-starters-11-13-years",
+      "purpose": "communication_only; does_not_widen_method_age"
+    },
+    {
+      "age_group": "14-18",
+      "url": "https://www.unicef.org/parenting/mental-health/conversation-starters-14-18-years",
+      "purpose": "communication_only; does_not_widen_method_age"
+    }
+  ]
+}

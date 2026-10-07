@@ -49,3 +49,5 @@ class EvaluationRecord(BaseModel):
     counselor_notes: list[CounselorNote] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_now)
     archived: bool = False
+    risk_input_fields: list[str] | None = Field(default=None,
+        description="Risk fields supplied before serialization; null for legacy records")

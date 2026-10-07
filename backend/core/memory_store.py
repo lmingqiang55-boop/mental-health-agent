@@ -1,5 +1,6 @@
 """Persist the three most recent assessment results for each anonymous student."""
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -68,6 +69,7 @@ class MemoryStore:
                 record_id=str(uuid4()),
                 student_ref=student_ref,
                 result=result,
+                risk_input_fields=sorted(result.risk.model_fields_set),
                 follow_up_status=(
                     FollowUpStatus.PENDING
                     if result.risk.requires_intervention else FollowUpStatus.NONE
@@ -107,6 +109,18 @@ class MemoryStore:
                 WHERE student_ref = ? ORDER BY sequence
             """, (student_ref,)).fetchall()
             return [self._record(row) for row in rows]
+
+    def list_payloads_by_student(self, student_ref: str) -> list[dict]:
+        """Read serialized records before defaults hide missing input fields.
+
+        Adapters may inspect provenance/completeness without changing records.
+        """
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM assessment_records WHERE student_ref = ? ORDER BY sequence",
+                (student_ref,),
+            ).fetchall()
+            return [json.loads(row[0]) for row in rows]
 
     def latest_for_student(self, student_ref: str) -> EvaluationRecord | None:
         with self._lock, self._connection() as connection:

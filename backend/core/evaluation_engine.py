@@ -56,7 +56,9 @@ def risk_from_input(input_data: EvaluationInput, initial: RiskResult) -> RiskRes
             RISK_ORDER[candidate.risk_level], candidate.risk_score
         ) > (
             RISK_ORDER[best.risk_level], best.risk_score
-        ):
+        ) or (not {"risk_level", "risk_score", "requires_intervention"} <= best.model_fields_set
+              and (RISK_ORDER[candidate.risk_level], candidate.risk_score) ==
+              (RISK_ORDER[best.risk_level], best.risk_score)):
             best = candidate
     return best
 

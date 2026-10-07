@@ -9,8 +9,12 @@
 - **语音与视觉**：SenseVoice 转写完整录音，CosyVoice 提供助手回复的语音合成接口；EmotiEffLib 分析表情，并按录音区间聚合视觉状态。
 - **综合评估**：生成五维心理状态画像、关注指数、关注等级和建议，独立识别危机风险。
 - **结果与历史**：展示评估报告，使用 SQLite 保存每位学生最近三次完整评估结果。
+- **治愈 Agent 后端**：读取真实评估记录和可选背景，检索适用知识生成支持报告，独立维护陪伴、反馈和暂停进度；前端入口由页面负责方对接。
 
 项目用于研究与演示，演示使用虚构数据；筛查结果不作为临床诊断。
+
+治愈 Agent 后端已按团队竞赛受控自演范围完成，版本范围、验证结果及已知边界见
+[治愈 Agent 完成里程碑](docs/healing_completion_20261007.md)。
 
 ## 技术栈
 
@@ -112,4 +116,7 @@ npm --prefix frontend run build
 - [语音识别说明](docs/speech_recognition.md)
 - [摄像头与录音对接](docs/vision_alignment.md)
 - [评估结果页面交接](docs/assessment_output_page_handoff.md)
+- [治愈 Agent 后端与前端接口交接](docs/healing_agent.md)
+- [治愈 Agent 竞赛演示版完成里程碑](docs/healing_completion_20261007.md)
+- [治愈资料与软件许可记录](docs/healing_sources_and_licenses.md)
 - [真实用户上线前审查](docs/prelaunch_audit_2026-10-01.md)

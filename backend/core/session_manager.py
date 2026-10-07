@@ -11,6 +11,7 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from threading import RLock
+from typing import TypeVar
 from uuid import uuid4
 
 from evaluation_agent.opening import OPENING_QUESTION
@@ -20,6 +21,7 @@ from backend.models.states import Message, SessionState
 
 SESSION_TTL = timedelta(hours=2)
 MAX_SESSIONS = 1000
+ReadResult = TypeVar("ReadResult")
 
 
 class SessionManager:
@@ -46,12 +48,22 @@ class SessionManager:
             return session.model_copy(deep=True)
 
     def get_session(self, session_id: str) -> SessionState | None:
+        return self.read_session(session_id, lambda session: session)
+
+    def read_session(
+        self, session_id: str, reader: Callable[[SessionState], ReadResult],
+    ) -> ReadResult | None:
+        """在同一把锁内读取副本并消费最新状态，不更新会话或延长 TTL。
+
+        reader 必须是短时同步操作，不得等待模型或网络。用于将依赖最新风险的
+        陪伴响应与 session 写入串行化，避免检查后、提交前又发生风险更新。
+        """
         with self._lock:
             session = self._sessions.get(session_id)
-            if session and self._is_expired(session):
+            if session is None or self._is_expired(session):
                 self._sessions.pop(session_id, None)
                 return None
-            return session.model_copy(deep=True) if session else None
+            return reader(session.model_copy(deep=True))
 
     def modify_session(
         self, session_id: str,
