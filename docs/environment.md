@@ -60,8 +60,9 @@ if (-not (Test-Path -LiteralPath .env)) {
 | 配置 | 作用 |
 | --- | --- |
 | `DEEPSEEK_API_KEY` | DeepSeek 综合评估所需的真实密钥 |
-| `POLICY_API_BASE_URL` | 决策模型客户端要连的**本机**地址，默认 `http://127.0.0.1:8001`；只接受回环地址 |
-| `POLICY_API_KEY` | 决策模型服务需要认证时填写；本项目共享方式为免认证，留空 |
+| `POLICY_API_BASE_URL` | 本机 Ollama 地址，默认 `http://127.0.0.1:11434`；只接受回环地址 |
+| `POLICY_API_MODEL` | 本机导入的训练模型，默认 `policy-qwen3-8b:latest` |
+| `POLICY_API_KEY` | 本机 Ollama 无须密钥，留空 |
 | `ASR_PROVIDER=sensevoice` | 启用真实语音转写 |
 | `ASR_DEVICE=cuda:0` | 使用 NVIDIA GPU 进行语音推理 |
 | `VISION_PROVIDER=emotiefflib` | 启用真实表情分析 |
@@ -73,11 +74,11 @@ if (-not (Test-Path -LiteralPath .env)) {
 `VISION_PROVIDER=mock` 的默认值；复制后需要按实际用途配置。
 其余参数及含义见 `.env.example`，真实密钥只保存到本地 `.env`。
 
-决策模型服务**不需要每个队友各自搭建**。队长用 `python scripts/policy_tunnel.py host`
-共享后，队友执行 `python scripts/start_dev.py --core-only` 会自动在局域网发现它，
-并在本机 `127.0.0.1:8001` 起一个转发监听——所以 `POLICY_API_BASE_URL` 保持默认即可，
-不必改成局域网 IP（客户端也只接受回环地址）。脚本会自动探测并覆盖 `POLICY_API_MODEL`；
-手动配置时真模型名是 `policy-qwen3-8b`，`.env.example` 默认的 `policy-model` 是占位符。
+每位队友从 QQ 接收训练模型 ZIP，首次执行
+`python scripts/start_dev.py --model-package "ZIP路径" --skip-install`。
+脚本校验模型 SHA-256、导入本机 Ollama，启动后端时自动使用本机地址和模型名；
+后续只需运行 `python scripts/start_dev.py --skip-install`。
+找不到训练模型时启动失败，不会改用关键词占位服务。
 详见 [队友本地运行指南](队友本地运行指南.md)。
 
 综合评估还使用 `DEEPSEEK_API_STYLE`、`DEEPSEEK_MAX_OUTPUT_TOKENS`、

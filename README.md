@@ -55,15 +55,18 @@ DASHSCOPE_API_KEY=你的百炼密钥
 DASHSCOPE_WORKSPACE_ID=你的业务空间ID
 ```
 
-对话还需要启动小组训练的决策模型服务，默认地址为 `http://127.0.0.1:8001`；
-地址不同时修改 `.env` 中的 `POLICY_API_BASE_URL`。
-完整配置见 [环境配置与验证](docs/environment.md)。真实密钥只保存在本地 `.env`。
+决策模型由每位队友的本机 Ollama 运行。先安装 [Ollama](https://ollama.com/download/windows)，
+把通过 QQ 收到的 `policy-qwen3-8b-local-deploy.zip` 放在本机任意目录，然后在项目根目录执行：
 
-> **队友不用自己起这个服务，也不用下载模型权重。** 一条命令即可跑通：
-> `python scripts/start_dev.py --core-only` —— 它会自动补齐 `.env`、安装依赖、
-> 在局域网里发现队长共享的模型（找不到则退回内置占位服务），并接到 `127.0.0.1:8001`。
-> 队长侧共享：`python scripts/policy_tunnel.py host`。
-> 调用样例、端口对应关系与已知问题见 [队友本地运行指南](docs/队友本地运行指南.md)。
+```powershell
+conda activate mental-health-agent
+python scripts/start_dev.py --model-package "D:\下载\policy-qwen3-8b-local-deploy.zip" --skip-install
+```
+
+脚本会核验 GGUF、导入 `policy-qwen3-8b:latest` 并启动后端。以后直接运行
+`python scripts/start_dev.py --skip-install`。模型不可用时会明确报错。
+完整步骤见 [队友本地运行指南](docs/队友本地运行指南.md)，配置见
+[环境配置与验证](docs/environment.md)。真实密钥只保存在本地 `.env`。
 
 语音合成接口默认使用 `cosyvoice-v3-flash` 的 `longyingtao_v3` 预置音色；
 未配置时文字对话仍可使用。前端播放由页面开发者接入；音频不进入评估记录。
@@ -72,7 +75,7 @@ DASHSCOPE_WORKSPACE_ID=你的业务空间ID
 
 ```powershell
 conda activate mental-health-agent
-python -m uvicorn backend.main:app --reload
+python scripts/start_dev.py --skip-install
 ```
 
 后端地址：<http://127.0.0.1:8000> · API 文档：<http://127.0.0.1:8000/docs>

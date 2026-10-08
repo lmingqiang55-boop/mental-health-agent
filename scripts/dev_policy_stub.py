@@ -18,9 +18,9 @@
     python scripts/dev_policy_stub.py
     python scripts/dev_policy_stub.py --port 8001
 
-    （通常不用手动跑：python scripts/start_dev.py 会在需要时自动拉起它。）
+    此服务只能显式手动启动；start_dev.py 不会自动使用它。
 
-配套配置：`.env` 保持 `.env.example` 的默认值即可，不用改
+单独联调时，手动在本地 `.env` 中设置：
     POLICY_API_BASE_URL=http://127.0.0.1:8001
     POLICY_API_MODEL=policy-model      # 本服务不校验模型名
 """
@@ -138,7 +138,7 @@ class StubHandler(BaseHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser(description="决策模型占位服务（开发用，非训练模型）")
     parser.add_argument("--port", type=int, default=8001,
-                        help="监听端口，默认 8001（与 .env.example 的 POLICY_API_BASE_URL 一致）")
+                        help="监听端口，默认 8001；仅供显式使用的占位服务")
     args = parser.parse_args()
 
     banner = (

@@ -63,11 +63,11 @@ class HttpPolicyClient:
         client: httpx.Client | None = None,
     ) -> None:
         load_dotenv(DEFAULT_ENV_FILE, override=False)
-        self.base_url = (base_url or os.getenv("POLICY_API_BASE_URL", "http://127.0.0.1:8001")).rstrip("/")
+        self.base_url = (base_url or os.getenv("POLICY_API_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
         endpoint = urlsplit(self.base_url)
         if endpoint.scheme != "http" or endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError("POLICY_API_BASE_URL must be a local loopback HTTP endpoint")
-        self.model = model or os.getenv("POLICY_API_MODEL", "policy-model")
+        self.model = model or os.getenv("POLICY_API_MODEL", "policy-qwen3-8b:latest")
         try:
             self.timeout = float(timeout if timeout is not None else os.getenv("POLICY_API_TIMEOUT", "30"))
         except ValueError as exc:
