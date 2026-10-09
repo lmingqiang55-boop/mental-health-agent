@@ -1,9 +1,4 @@
-"""Reply generation boundary.
-
-本包同时包含两条并存的实现：
-- ``client.py``：远程既有的同步 ``LLMClient`` 抽象 + Mock 降级（LLM_PROVIDER 体系）；
-- ``deepseek_client.py`` / ``config.py``：Dialogue Agent 使用的异步 DeepSeek 客户端。
-"""
+"""Dialogue Agent 的 DeepSeek 客户端与配置。"""
 
 from backend.llm.config import (
     DeepSeekConfig,

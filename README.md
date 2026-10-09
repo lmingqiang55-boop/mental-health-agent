@@ -5,7 +5,7 @@
 
 ## 主要功能
 
-- **多轮对话**：以固定的年龄、年级及开放式开场问题开始，由训练的决策模型选择后续对话动作。
+- **多轮对话**：以固定的年龄、年级及开放式开场问题开始；训练的决策模型选择动作，对话 Agent 结合上下文生成回复。
 - **语音与视觉**：SenseVoice 转写完整录音，CosyVoice 提供助手回复的语音合成接口；EmotiEffLib 分析表情，并按录音区间聚合视觉状态。
 - **综合评估**：生成五维心理状态画像、关注指数、关注等级和建议，独立识别危机风险。
 - **结果与历史**：展示评估报告，使用 SQLite 保存每位学生最近三次完整评估结果。
@@ -43,7 +43,7 @@ npm --prefix frontend ci
 ```
 
 首次运行将 `.env.example` 复制为 `.env`；已有 `.env` 时保留原文件。
-填写用于综合评估的 DeepSeek 密钥，并启用语音和视觉：
+填写用于对话生成及综合评估的 DeepSeek 密钥，并启用语音和视觉：
 
 ```dotenv
 DEEPSEEK_API_KEY=你的密钥
@@ -65,6 +65,8 @@ python scripts/start_dev.py --model-package "D:\下载\policy-qwen3-8b-local-dep
 
 脚本会核验 GGUF、导入 `policy-qwen3-8b:latest` 并启动后端。以后直接运行
 `python scripts/start_dev.py --skip-install`。模型不可用时会明确报错。
+普通对话还需在 `.env` 配置 `DEEPSEEK_API_KEY`；未配置或生成服务不可用时，
+`/api/chat` 返回 `503 DIALOGUE_UNAVAILABLE`，不会改用固定提问。
 完整步骤见 [队友本地运行指南](docs/队友本地运行指南.md)，配置见
 [环境配置与验证](docs/environment.md)。真实密钥只保存在本地 `.env`。
 

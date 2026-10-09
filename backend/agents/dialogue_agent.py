@@ -85,4 +85,21 @@ class DialogueAgent:
         if not reply:
             raise DialogueAgentError("Dialogue Agent generated an empty reply.")
 
+        previous_replies = {message.content.strip()
+                            for message in request.conversation_history
+                            if message.role == "assistant"}
+        if reply in previous_replies:
+            retry_prompt = (
+                user_prompt + "\n\n【重写要求】上一版回复与历史中已说过的话完全相同。"
+                "请严格保持上游 decision 不变，针对用户刚才的新信息换一种具体追问，"
+                "不要重复历史中的任何一句助手回复。"
+            )
+            self.last_user_prompt = retry_prompt
+            reply = (await self.llm_client.generate(
+                system_prompt=DIALOGUE_AGENT_SYSTEM_PROMPT,
+                user_prompt=retry_prompt,
+            ) or "").strip()
+            if not reply or reply in previous_replies:
+                raise DialogueAgentError("Dialogue Agent repeated an earlier reply.")
+
         return DialogueAgentResponse(reply=reply)

@@ -59,7 +59,7 @@ if (-not (Test-Path -LiteralPath .env)) {
 
 | 配置 | 作用 |
 | --- | --- |
-| `DEEPSEEK_API_KEY` | DeepSeek 综合评估所需的真实密钥 |
+| `DEEPSEEK_API_KEY` | 对话 Agent、综合评估和治愈 Agent 共用的真实密钥 |
 | `POLICY_API_BASE_URL` | 本机 Ollama 地址，默认 `http://127.0.0.1:11434`；只接受回环地址 |
 | `POLICY_API_MODEL` | 本机导入的训练模型，默认 `policy-qwen3-8b:latest` |
 | `POLICY_API_KEY` | 本机 Ollama 无须密钥，留空 |
@@ -79,6 +79,8 @@ if (-not (Test-Path -LiteralPath .env)) {
 脚本校验模型 SHA-256、导入本机 Ollama，启动后端时自动使用本机地址和模型名；
 后续只需运行 `python scripts/start_dev.py --skip-install`。
 找不到训练模型时启动失败，不会改用关键词占位服务。
+对话 Agent 也需要 `DEEPSEEK_API_KEY`；缺少密钥或生成服务不可用时，
+`POST /api/chat` 返回 `503 DIALOGUE_UNAVAILABLE`，不会改用固定话术。
 详见 [队友本地运行指南](队友本地运行指南.md)。
 
 综合评估还使用 `DEEPSEEK_API_STYLE`、`DEEPSEEK_MAX_OUTPUT_TOKENS`、
