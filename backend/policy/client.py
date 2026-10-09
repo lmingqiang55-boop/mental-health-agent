@@ -75,7 +75,9 @@ class HttpPolicyClient:
         if self.timeout <= 0:
             raise ValueError("POLICY_API_TIMEOUT must be a positive number")
         key = api_key or os.getenv("POLICY_API_KEY")
-        self.client = client or httpx.Client(timeout=self.timeout)
+        # The policy endpoint is restricted to loopback; system HTTP proxies can
+        # otherwise intercept 127.0.0.1 and return a misleading 502.
+        self.client = client or httpx.Client(timeout=self.timeout, trust_env=False)
         self.headers = {"Authorization": f"Bearer {key}"} if key else {}
 
     def predict(self, conversation_history: list[Message]) -> PolicyDecision:

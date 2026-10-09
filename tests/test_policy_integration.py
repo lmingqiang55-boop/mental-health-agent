@@ -1,4 +1,6 @@
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import httpx
 import pytest
@@ -7,7 +9,8 @@ from fastapi.testclient import TestClient
 from backend.api import chat
 from backend.core.dialogue_manager import DialogueManager
 from backend.main import app
-from backend.models.states import SessionState
+from backend.models.enums import MessageRole
+from backend.models.states import Message, SessionState
 from backend.policy.client import (
     DialogueAction,
     HttpPolicyClient,
@@ -25,6 +28,37 @@ def test_policy_output_contract_and_local_endpoint() -> None:
         parse_policy_content('{"actions":["未知动作"]}')
     with pytest.raises(ValueError, match="local loopback"):
         HttpPolicyClient(base_url="https://policy.example")
+
+
+def test_local_policy_ignores_system_http_proxy(monkeypatch) -> None:
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.dumps({"choices": [{"message": {
+                "content": '{"actions":["睡眠"]}'
+            }}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format, *args):
+            pass
+
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")
+    monkeypatch.setenv("NO_PROXY", "")
+    with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            policy = HttpPolicyClient(base_url=f"http://127.0.0.1:{server.server_port}")
+            decision = policy.predict([Message(role=MessageRole.USER, content="睡不着")])
+            assert decision.actions == [DialogueAction.SLEEP]
+        finally:
+            policy.client.close()
+            server.shutdown()
+            thread.join()
 
 
 def test_policy_actions_drive_chat_and_receive_current_turn(monkeypatch) -> None:
