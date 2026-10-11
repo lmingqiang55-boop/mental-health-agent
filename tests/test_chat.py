@@ -145,7 +145,9 @@ def test_vision_merge_does_not_reset_other_fields() -> None:
     assert state["engagement"] == 0.7
 
 
-def test_vision_frame_endpoint_uses_detector_and_discards_raw_frame() -> None:
+def test_vision_frame_endpoint_uses_detector_and_discards_raw_frame(monkeypatch) -> None:
+    from backend.vision import detector as detection
+    monkeypatch.setattr(detection, '_detector', MockVisionDetector())
     session_id = new_session()
     image = BytesIO()
     Image.new("RGB", (32, 32), color=(120, 140, 160)).save(image, format="JPEG")
@@ -270,10 +272,10 @@ def test_negation_does_not_trigger_high_risk() -> None:
     assert response.json()["risk"]["risk_level"] != "high"
 
 
-def test_chat_never_finishes_on_its_own_and_assessment_is_explicit(
+def test_short_chat_does_not_auto_assess_and_manual_assessment_is_explicit(
     evaluation_stub,
 ) -> None:
-    """对话没有结束信号：聊天不生成评估结果，只由 /api/assessment 触发。"""
+    """短对话仍可继续；聊天收尾与生成报告是两个独立动作。"""
     session_id = new_session()
     for text in ("我想说说最近的情况", "晚上常常睡不着", "和室友关系也一般"):
         assert client.post("/api/chat", json={

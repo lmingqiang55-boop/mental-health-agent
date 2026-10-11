@@ -1,6 +1,6 @@
 // 摄像头/麦克风设备状态与后端视觉分析可用性。
 
-export default function DeviceStatus({ visionEnabled, audioEnabled, cameraError }) {
+export default function DeviceStatus({ visionEnabled, audioEnabled, cameraError, visionStatus, visionResult }) {
   return (
     <section className="card device-status">
       <h3>设备状态</h3>
@@ -19,7 +19,13 @@ export default function DeviceStatus({ visionEnabled, audioEnabled, cameraError 
         </span>
       </div>
       <p className="device-hint">
-        {cameraError ? '摄像头分析暂不可用，仍可继续筛查。' : '视觉结果按发言区间绑定；未采集到的指标不会填成零。'}
+        {cameraError ? '摄像头分析暂不可用，仍可继续筛查。' :
+          visionStatus?.provider === 'mock' ? '表情识别处于模拟模式，摄像头预览不会触发表情回应。' :
+          visionStatus?.state === 'unavailable' ? '暂时无法确认表情识别是否可用。' :
+          !visionEnabled ? '开启摄像头后，可在画面可靠时结合表情交流。' :
+          visionResult?.face_detected === false ? '当前画面未识别到人脸，请调整光线和位置。' :
+          visionResult?.face_detected ? '已识别人脸；表情稳定时会偶尔结合画面交流。' :
+          '摄像头已开启，正在等待有效识别结果。'}
       </p>
     </section>
   )

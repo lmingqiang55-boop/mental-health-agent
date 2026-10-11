@@ -153,11 +153,15 @@ def main() -> None:
     parser.add_argument("--skip-install", action="store_true", help="缺依赖时不自动安装")
     parser.add_argument("--core-only", action="store_true",
                         help="装依赖时跳过 torch/funasr/opencv 等重包（只跑对话与决策链路）")
+    parser.add_argument("--vision-provider", choices=["emotiefflib", "mock"],
+                        help="明确选择真实摄像头识别或模拟模式，覆盖已有 .env")
     args = parser.parse_args()
 
     children: list = []
     try:
         ensure_env()
+        if args.vision_provider:
+            os.environ["VISION_PROVIDER"] = args.vision_provider
         ensure_deps(args.skip_install, args.core_only)
         ensure_ollama_running(children)
         if args.model_package is not None:
@@ -175,6 +179,11 @@ def main() -> None:
         print(f"  模型名    {MODEL_ID}")
         print(f"  后端      http://127.0.0.1:{args.backend_port}")
         print(f"  API 文档  http://127.0.0.1:{args.backend_port}/docs")
+        vision = http_json(f"http://127.0.0.1:{args.backend_port}/api/vision/status")
+        if vision:
+            print(f"  摄像头识别  {vision['provider']} · {vision['state']}")
+            if vision["provider"] == "mock":
+                print("  当前为模拟模式，不触发表情观察；真实识别请用 --vision-provider emotiefflib")
         print("  前端      cd frontend; npm run dev   →  http://localhost:5173")
         print("  停止      Ctrl+C（一次全停）")
         print("=" * 68 + "\n", flush=True)

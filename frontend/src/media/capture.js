@@ -134,8 +134,11 @@ export class CaptureController {
         }, { signal: job.abort.signal })
       }),
       cancelled,
-    ]).then(() => {
-      if (!job.abort.signal.aborted && epoch === this.cameraEpoch && sessionId === this.sessionId) this.hooks.cameraError?.('')
+    ]).then(data => {
+      if (!job.abort.signal.aborted && epoch === this.cameraEpoch && sessionId === this.sessionId) {
+        this.hooks.cameraError?.('')
+        if (data?.vision_state) this.hooks.visionResult?.(data.vision_state)
+      }
     }).catch(error => {
       if ((job.timedOut || error.name !== 'AbortError') && epoch === this.cameraEpoch && sessionId === this.sessionId) {
         this.hooks.cameraError?.(job.timedOut ? '画面分析请求超时，后续采样会自动继续。' : error.message)

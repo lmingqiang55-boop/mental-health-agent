@@ -12,6 +12,7 @@ class RiskLevel(str, Enum):
 class SessionStage(str, Enum):
     EXPLORATION = "exploration"       # 实时对话闭环
     CRISIS = "crisis"                 # 危机干预模式
+    ASSESSMENT_READY = "assessment_ready"  # 已收尾，等待用户生成结果
     ASSESSMENT = "assessment"         # 多模态综合评估中
     COMPLETED = "completed"           # 评估完成
 

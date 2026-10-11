@@ -21,11 +21,16 @@ from backend.models.requests import (
 from backend.models.responses import StateUpsertResponse, VisionFrameResponse, VisionSegmentResponse
 from backend.models.states import SessionState, VisionFrameObservation, VisionSegment
 from backend.vision.aggregation import aggregate_frames
-from backend.vision.detector import get_detector
+from backend.vision.detector import describe_vision_status, get_detector
 
 router = APIRouter(prefix="/api", tags=["vision"])
 MAX_FRAME_PIXELS = 1920 * 1080
 MAX_FRAME_OBSERVATIONS = 512
+
+
+@router.get("/vision/status")
+def vision_status() -> dict:
+    return describe_vision_status()
 
 
 @router.post("/vision", response_model=StateUpsertResponse)
@@ -121,7 +126,10 @@ def analyze_vision_frame(request: VisionFrameRequest) -> VisionFrameResponse:
     digest = hashlib.sha256(frame).hexdigest()
     existing = _existing_frame(session, request, digest)
     try:
-        state = existing.state if existing else get_detector().analyze_frame(frame)
+        detector = None if existing else get_detector()
+        state = existing.state if existing else detector.analyze_frame(frame)
+        source = existing.source if existing else (
+            "mock" if getattr(detector, "is_simulated", True) else "real")
     except (ImportError, OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail={
             "code": "VISION_UNAVAILABLE", "message": str(exc)
@@ -145,7 +153,8 @@ def analyze_vision_frame(request: VisionFrameRequest) -> VisionFrameResponse:
         if request.frame_id is not None:
             session.vision_frames.append(VisionFrameObservation(
                 frame_id=request.frame_id, capture_id=request.capture_id,
-                captured_at_ms=request.captured_at_ms, image_digest=digest, state=state))
+                captured_at_ms=request.captured_at_ms, image_digest=digest,
+                state=state, source=source))
             session.vision_frames.sort(key=lambda item: item.captured_at_ms)
             session.vision_frames = session.vision_frames[-MAX_FRAME_OBSERVATIONS:]
 
@@ -181,7 +190,10 @@ def freeze_segment(request: VisionSegmentRequest) -> VisionSegmentResponse:
         segment = VisionSegment(
             capture_id=request.capture_id, start_ms=request.start_ms, end_ms=request.end_ms,
             vision_snapshot=aggregate_frames(frames), frame_count=len(frames),
-            valid_frame_count=sum(state.face_detected for state in frames))
+            valid_frame_count=sum(state.face_detected for state in frames),
+            dialogue_frames=[item for item in session.vision_frames
+                             if item.capture_id == request.capture_id
+                             and request.end_ms - 5000 <= item.captured_at_ms < request.end_ms])
         session.vision_segments[request.utterance_id] = segment
         result["value"] = segment
 

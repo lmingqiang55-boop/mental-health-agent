@@ -10,6 +10,7 @@ from backend.models.states import (
     AudioState,
     ConsentRecord,
     RiskResult,
+    ScreeningProgress,
     SessionState,
     SpeechMetadata,
     VisionSegment,
@@ -24,12 +25,22 @@ class CreateSessionResponse(BaseModel):
     status: str = "created"
 
 
+class VisualFeedback(BaseModel):
+    """Integration diagnostics; the frontend need not show them to students."""
+    reason: str = "not_requested"
+    emotion: str | None = None
+
+
 class DialogueResponsePayload(BaseModel):
     """对话 Agent 给系统负责人的标准输出。"""
     reply: str
     next_strategy: str
     current_stage: str
     risk: RiskResult
+    assessment_ready: bool = False
+    completion_reason: str | None = None
+    screening_progress: ScreeningProgress = Field(default_factory=ScreeningProgress)
+    visual_feedback: VisualFeedback = Field(default_factory=VisualFeedback)
 
 
 class ChatResponse(DialogueResponsePayload):

@@ -22,18 +22,19 @@ from backend.vision.aggregation import aggregate_frames
 
 
 def _visual_session(label="sad", confidence=0.95, *, face=True):
-    session = SessionState(session_id="visual-test")
+    session = SessionState(session_id="visual-test", active_vision_capture_id="camera")
     frames = [VisionState(face_detected=face, emotion=label,
                           emotion_confidence=confidence) for _ in range(3)]
     snapshot = aggregate_frames(frames)
     session.vision_frames = [VisionFrameObservation(
         frame_id=f"frame-{index}", capture_id="camera",
-        captured_at_ms=index * 100, image_digest="test", state=frame,
+        captured_at_ms=index * 100, image_digest="test", state=frame, source="real",
     ) for index, frame in enumerate(frames)]
     session.vision_segments["turn"] = VisionSegment(
         capture_id="camera", start_ms=0, end_ms=300,
         vision_snapshot=snapshot, frame_count=3,
         valid_frame_count=sum(frame.face_detected for frame in frames),
+        dialogue_frames=session.vision_frames,
     )
     return session, snapshot
 
@@ -47,19 +48,15 @@ def _resolve_synchronous_stub(coroutine):
     raise AssertionError("Stub unexpectedly suspended")
 
 
-def test_visual_observation_needs_reliable_real_frames(monkeypatch):
+def test_visual_observation_needs_reliable_real_frames():
     session, snapshot = _visual_session()
-    monkeypatch.setattr("backend.core.visual_acknowledgment.real_vision_detector_active",
-                        lambda: True)
     assert choose_visual_acknowledgment(session, "turn", snapshot) is None
     session.turn_count = 2
     assert choose_visual_acknowledgment(session, "turn", snapshot) == "sad"
 
-    monkeypatch.setattr("backend.core.visual_acknowledgment.real_vision_detector_active",
-                        lambda: False)
+    session.vision_segments["turn"].dialogue_frames[0].source = "mock"
     assert choose_visual_acknowledgment(session, "turn", snapshot) is None
-    monkeypatch.setattr("backend.core.visual_acknowledgment.real_vision_detector_active",
-                        lambda: True)
+    session.vision_segments["turn"].dialogue_frames[0].source = "real"
     assert choose_visual_acknowledgment(session, "missing", snapshot) is None
     assert choose_visual_acknowledgment(session, "turn", None) is None
     for weak_session, weak_snapshot in (
@@ -68,9 +65,7 @@ def test_visual_observation_needs_reliable_real_frames(monkeypatch):
 
 
 @pytest.mark.parametrize("label", ["happy", "sad", "fearful", "angry"])
-def test_four_supported_emotions_and_turn_cooldown(monkeypatch, label):
-    monkeypatch.setattr("backend.core.visual_acknowledgment.real_vision_detector_active",
-                        lambda: True)
+def test_four_supported_emotions_and_turn_cooldown(label):
     session, snapshot = _visual_session(label=label)
     session.turn_count = 2
     assert choose_visual_acknowledgment(session, "turn", snapshot) == label
@@ -101,8 +96,6 @@ def test_prompt_asks_agent_to_integrate_each_cue_naturally(label, zh):
 
 
 def test_dialogue_manager_says_the_qualified_observation(monkeypatch):
-    monkeypatch.setattr("backend.core.visual_acknowledgment.real_vision_detector_active",
-                        lambda: True)
     monkeypatch.setattr("backend.core.dialogue_manager.asyncio.run", _resolve_synchronous_stub)
     session, snapshot = _visual_session()
     session.turn_count = 2
@@ -134,8 +127,6 @@ def test_dialogue_manager_says_the_qualified_observation(monkeypatch):
 
 def test_chat_route_passes_frozen_turn_to_visual_frequency_gate(
         monkeypatch, policy_stub, dialogue_stub):
-    monkeypatch.setattr("backend.core.visual_acknowledgment.real_vision_detector_active",
-                        lambda: True)
     monkeypatch.setattr("backend.core.dialogue_manager.asyncio.run", _resolve_synchronous_stub)
     policy_stub(("情绪",))
     session_id = session_manager.create_session().session_id
@@ -147,6 +138,7 @@ def test_chat_route_passes_frozen_turn_to_visual_frequency_gate(
     def add_frozen_vision(session):
         session.vision_frames = visual_session.vision_frames
         session.vision_segments = visual_session.vision_segments
+        session.active_vision_capture_id = "camera"
 
     session_manager.modify_session(session_id, add_frozen_vision)
     response = chat.chat(ChatRequest(

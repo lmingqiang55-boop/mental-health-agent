@@ -70,13 +70,14 @@ DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue 
    - 不得出现“我检测到你的 valence 是 -0.5”这类表达。
 
 【执行 decision 的方式】
-8. 如果 decision 包含“共情安慰”这类动作：回复中应先做简短自然的回应或共情，
-   然后再执行其他 action。
-9. 如果 decision 要求切换话题：必须先自然承接上一句话，再平滑进入新话题，不允许生硬换题。
-   反例（不要这样）：“你的食欲怎么样？”
-   正例：“听起来最近睡眠确实让你有些困扰。除了睡眠之外，我也想了解一下最近吃饭的情况，食欲有没有什么变化？”
+8. 如果 decision 包含“共情安慰”：针对明确的痛苦简短回应即可，
+   不需要每次用“嗯”“听起来”“听你这么说”开头，也不需要复述用户的话来证明你听见了。
+9. 切换话题时让问题与上下文相关；需要时用一句简短过渡，
+   同一话题的追问可以直接问，不必每次重复上一句话再承接。
 10. 如果 decision 要求继续当前话题：根据 conversation_history 判断已经问过什么，
     不要重复同一个问题，应围绕当前 topic 进行新的、合理的追问。
+    用户已经明确回答的内容不再换个说法问一遍；只补充尚缺的时间、频率或生活影响。
+    用户短答“是”“没有”“一个月”“每天”时，直接推进，不逐字复述或反复确认。
 11. 默认每一轮只提出一个主要问题，避免一次连续问三四个问题。
 
 【表达风格】
@@ -87,6 +88,8 @@ DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue 
 15. 最终只生成真正要对用户说的下一句话。
 16. 不做医学诊断，不说“你就是抑郁症”“你已经患有重度抑郁”这类结论性判断。
 17. 当用户表达明显痛苦时，语言应更加温和，不要机械跳题；但依然必须服从最终 decision。
+18. finish_screening=true 时只做简短收尾并提示可以生成本次对话的初步结果；
+    不再提问、不引入新话题、不宣称已经完成诊断或所有信息已完整。
 """
 
 
@@ -188,6 +191,8 @@ def _format_decision(decision: DialogueDecision) -> str:
         f"actions：{actions_text}\n"
         f"topic：{topic_text}\n"
         f"reason：{reason_text}"
+        + (f"\n话题交流记录：{_dump_json(decision.extra['topic_turns'])}"
+           if 'topic_turns' in decision.extra else "")
     )
 
 
@@ -225,9 +230,17 @@ def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
         "【用户记忆】\n" + _format_memory(request.user_memory),
         "【当前用户输入】\n" + _format_current_input(request.current_user_input),
         "【上游最终决策】\n" + _format_decision(request.decision),
+        "【本轮表达要求】\n" + (
+            "本轮只收尾，不提出任何问题；提示可点击‘生成结果’，不自行生成评估。"
+            if request.finish_screening else
+            "用户是简短回答，请直接推进尚未了解的信息，不复述这句回答，不套共情前缀。"
+            if len(request.current_user_input.text.strip()) <= 12 else
+            "根据实际需要回应或提问；不要每一轮先复述再提问，避免重复最近回复的开头。"
+        ),
         "【本轮视觉观察】\n" + (
             f"可靠画面提供的外观线索：{VISUAL_OBSERVATION_NAMES[request.visual_observation]}。"
             "请把这项线索自然融入执行 decision 的完整回复，例如用‘你看起来……’带出当前问题；"
+            "主要问题仍必须围绕 decision.topic，不要转而追问表情或另一个情绪话题。"
             "整句由你根据上下文组织，不要套固定开头。语气保持试探，不把表情当作用户内心感受或诊断，"
             "不要提摄像头、检测器或数值。"
             if request.visual_observation else "本轮没有可口头提及的视觉观察。"
