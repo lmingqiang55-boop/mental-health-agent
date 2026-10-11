@@ -2,7 +2,7 @@
 
 路由层只做编排：
 1. 原子地完成「加用户消息 → DialogueManager 决策 → 加助手消息」。
-2. 决策模型不可用时返回 503 POLICY_UNAVAILABLE，本轮不落库。
+2. 决策模型或对话生成服务不可用时返回 503，本轮不落库。
 
 对话没有自动结束信号：决策模型的 11 个动作里没有「结束评估」，因此聊天不再
 自动触发最终评估。会话级多模态汇总与综合评估由 ``POST /api/assessment``
@@ -12,7 +12,7 @@
 from fastapi import APIRouter, HTTPException
 
 from backend.api.errors import session_not_found
-from backend.core.dialogue_manager import DialogueManager
+from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable
 from backend.core.session_manager import session_manager
 from backend.models.enums import MessageRole
 from backend.models.requests import ChatRequest
@@ -51,6 +51,11 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=503, detail={
             "code": "POLICY_UNAVAILABLE",
             "message": "决策模型暂时不可用，请稍后重试。",
+        }) from exc
+    except DialogueUnavailable as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "DIALOGUE_UNAVAILABLE",
+            "message": "对话生成服务暂时不可用，请稍后重试。",
         }) from exc
     if updated is None:
         raise session_not_found()

@@ -9,9 +9,31 @@ import json
 import httpx
 import pytest
 
+from backend.models.dialogue import DialogueAgentResponse
 from backend.policy.client import HttpPolicyClient
 
 DEFAULT_ACTIONS = ("共情安慰", "情绪")
+
+
+@pytest.fixture(autouse=True)
+def dialogue_stub(monkeypatch):
+    """API 测试离线运行，同时保留真实的对话 Agent 接线。"""
+    from backend.api import chat
+
+    class Stub:
+        def __init__(self):
+            self.requests = []
+
+        async def generate_reply(self, request):
+            self.requests.append(request)
+            topic = request.decision.topic or "现在的感受"
+            return DialogueAgentResponse(
+                reply=f"听起来你说的是「{request.current_user_input.text}」。我们继续聊聊{topic}。"
+            )
+
+    stub = Stub()
+    monkeypatch.setattr(chat.dialogue_manager, "_dialogue_agent", stub)
+    return stub
 
 
 def build_policy_client(actions=DEFAULT_ACTIONS, *, status_code: int = 200,

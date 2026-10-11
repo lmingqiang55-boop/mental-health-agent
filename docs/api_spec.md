@@ -197,7 +197,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 ```json
 {
   "session_id": "b4fc1bdd-...",
-  "reply": "听起来这段时间对你并不容易。最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "reply": "你说最近没什么精神，晚上休息得怎么样？",
   "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": { "risk_level": "low", "risk_score": 0.1, ... },

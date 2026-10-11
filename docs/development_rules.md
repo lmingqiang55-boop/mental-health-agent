@@ -76,7 +76,7 @@ A 不负责页面。A 最终只给 C：
 
 ```json
 {
-  "reply": "最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "reply": "你说这几天睡不着，通常是入睡困难还是夜里会醒？",
   "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": {
@@ -207,7 +207,7 @@ frontend/ 中与视觉采集联调无关的页面、组件和样式
 
 ```json
 {
-  "reply": "最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "reply": "你说这几天睡不着，通常是入睡困难还是夜里会醒？",
   "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": {

@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -5,8 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api import chat
+from backend.agents.dialogue_agent import DialogueAgent
 from backend.core.dialogue_manager import DialogueManager
+from backend.llm.config import DeepSeekConfigError
 from backend.main import app
+from backend.models.dialogue import DialogueAgentRequest
 from backend.models.states import SessionState
 from backend.policy.client import (
     DialogueAction,
@@ -55,6 +59,63 @@ def test_policy_actions_drive_chat_and_receive_current_turn(monkeypatch) -> None
     assert prompts[1].endswith(
         f"用户：我最近睡不好\n助手：{first.json()['reply']}\n用户：经常凌晨醒"
     )
+
+
+def test_same_policy_action_uses_new_user_input_and_prior_reply(policy_stub, dialogue_stub) -> None:
+    policy_stub(("共情安慰", "睡眠"))
+    client = TestClient(app)
+    session_id = client.post("/api/session").json()["session_id"]
+
+    first = client.post("/api/chat", json={"session_id": session_id, "text": "最近睡不好"})
+    second = client.post("/api/chat", json={"session_id": session_id, "text": "经常凌晨醒"})
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["reply"] != second.json()["reply"]
+    assert dialogue_stub.requests[1].conversation_history[-1].content == first.json()["reply"]
+    assert dialogue_stub.requests[1].current_user_input.text == "经常凌晨醒"
+    assert "最近睡不好" in first.json()["reply"]
+    assert "经常凌晨醒" in second.json()["reply"]
+
+
+def test_dialogue_agent_rewrites_exact_prior_reply() -> None:
+    class Client:
+        def __init__(self):
+            self.calls = 0
+
+        async def generate(self, **kwargs):
+            self.calls += 1
+            return ("最近睡眠怎么样？" if self.calls == 1
+                    else "你说睡不着，是从什么时候开始的？")
+
+    request = DialogueAgentRequest.model_validate({
+        "conversation_history": [{"role": "assistant", "content": "最近睡眠怎么样？"}],
+        "decision": {"actions": ["睡眠"], "topic": "睡眠"},
+        "current_user_input": {"text": "睡不着"},
+    })
+    llm = Client()
+    reply = asyncio.run(DialogueAgent(llm).generate_reply(request)).reply
+
+    assert llm.calls == 2
+    assert reply == "你说睡不着，是从什么时候开始的？"
+
+
+def test_missing_dialogue_config_returns_503_without_saving_turn(monkeypatch, policy_stub) -> None:
+    policy_stub(("睡眠",))
+    monkeypatch.setattr(chat.dialogue_manager, "_dialogue_agent", None)
+
+    def missing_config():
+        raise DeepSeekConfigError("missing key")
+
+    monkeypatch.setattr("backend.core.dialogue_manager.load_deepseek_config", missing_config)
+    client = TestClient(app)
+    session_id = client.post("/api/session").json()["session_id"]
+    response = client.post("/api/chat", json={"session_id": session_id, "text": "睡不着"})
+    session = client.get(f"/api/session/{session_id}").json()
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "DIALOGUE_UNAVAILABLE"
+    assert session["turn_count"] == 0
+    assert session["conversation_history"] == []
 
 
 def test_crisis_preempts_policy(monkeypatch) -> None:
