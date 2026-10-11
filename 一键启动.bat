@@ -13,8 +13,16 @@ REM   等各端口就绪后，自动打开学生端 + 管理端网页
 REM ============================================================
 
 set "ROOT=%~dp0"
-set "PY=E:\app\Anaconda\envs\mental-health-agent\python.exe"
+REM ---- 定位 Python 解释器：优先环境变量 AIC_PYTHON，其次常见 conda 路径，最后 PATH 中的 python ----
+set "PY=%AIC_PYTHON%"
+if not defined PY if exist "%USERPROFILE%\anaconda3\envs\mental-health-agent\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\mental-health-agent\python.exe"
+if not defined PY if exist "%USERPROFILE%\miniconda3\envs\mental-health-agent\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\mental-health-agent\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\anaconda3\envs\mental-health-agent\python.exe" set "PY=%LOCALAPPDATA%\anaconda3\envs\mental-health-agent\python.exe"
+if not defined PY if exist "%LOCALAPPDATA%\miniconda3\envs\mental-health-agent\python.exe" set "PY=%LOCALAPPDATA%\miniconda3\envs\mental-health-agent\python.exe"
+if not defined PY if exist "%ROOT%.venv\Scripts\python.exe" set "PY=%ROOT%.venv\Scripts\python.exe"
+if not defined PY for /f "delims=" %%i in ('where python 2^>nul') do if not defined PY set "PY=%%i"
 set "OLLAMA=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
+if not exist "%OLLAMA%" if exist "%ProgramFiles%\Ollama\ollama.exe" set "OLLAMA=%ProgramFiles%\Ollama\ollama.exe"
 
 echo ============================================================
 echo   心晴 - 一键启动
@@ -24,7 +32,7 @@ echo.
 if not exist "%PY%" (
   echo [错误] 找不到 Python 解释器：
   echo        %PY%
-  echo        请把本脚本里的 PY 变量改成正确的 conda 环境 python.exe 路径。
+  echo        请设置环境变量 AIC_PYTHON 指向 conda 环境的 python.exe，或把它加入系统 PATH
   echo.
   pause
   exit /b 1
