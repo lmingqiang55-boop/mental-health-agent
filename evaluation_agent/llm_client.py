@@ -125,6 +125,7 @@ DEFAULT_STRUCTURED_OUTPUT = "json_schema"
 #: 因此不作为默认值。
 DEFAULT_REASONING_EFFORT = "high"
 
+ENV_EVALUATION_API_KEY = "DEEPSEEK_EVALUATION_API_KEY"
 ENV_API_KEY = "DEEPSEEK_API_KEY"
 ENV_BASE_URL = "DEEPSEEK_BASE_URL"
 ENV_MODEL = "DEEPSEEK_MODEL"
@@ -460,7 +461,7 @@ class LLMConfig(StrictSchemaBase):
             load_env_file(env_file)
 
         raw: dict[str, Any] = {
-            "api_key": _env_value(ENV_API_KEY),
+            "api_key": _env_value(ENV_EVALUATION_API_KEY) or _env_value(ENV_API_KEY),
             "base_url": _env_value(ENV_BASE_URL, DEFAULT_BASE_URL),
             "model": _env_value(ENV_MODEL, DEFAULT_MODEL),
             "api_style": _env_value(ENV_API_STYLE, DEFAULT_API_STYLE),
@@ -474,7 +475,7 @@ class LLMConfig(StrictSchemaBase):
 
         if not raw["api_key"]:
             raise LLMConfigurationError(
-                f"未配置 {ENV_API_KEY}。请设置环境变量，"
+                f"未配置 {ENV_EVALUATION_API_KEY}（或兜底 {ENV_API_KEY}）。请设置环境变量，"
                 f"或在 {DEFAULT_ENV_FILE} 中填写（参考 .env.example）。"
                 "注意：不要把真实 Key 提交到仓库。"
             )
@@ -486,7 +487,7 @@ class LLMConfig(StrictSchemaBase):
             raise LLMConfigurationError(_summarize_validation_error(exc)) from exc
 
         if not config.api_key_present:
-            raise LLMConfigurationError(f"{ENV_API_KEY} 为空字符串，视为未配置。")
+            raise LLMConfigurationError(f"{ENV_EVALUATION_API_KEY} 为空字符串，视为未配置。")
         return config
 
 
@@ -991,7 +992,7 @@ class EvaluationLLMClient:
 
         if status in (401, 403):
             raise LLMAuthenticationError(
-                f"认证失败（HTTP {status}）：{message}。请检查 {ENV_API_KEY} 是否有效。",
+                f"认证失败（HTTP {status}）：{message}。请检查 {ENV_EVALUATION_API_KEY} 是否有效。",
                 status_code=status,
             )
 

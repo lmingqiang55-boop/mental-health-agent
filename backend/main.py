@@ -5,19 +5,28 @@
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
+# CORS_ORIGINS 在导入期即被读取，因此必须先把 backend/.env 载入进程环境，
+# 否则写在 .env 里的白名单不会生效（其它模块都是在函数内延迟 load_dotenv）。
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 
 from backend.api import (
     assessment,
     audio,
     chat,
     communication,
+    counseling,
+    heal_journal,
     history,
     healing,
+    profile,
     session,
     teacher,
     tts,
@@ -40,7 +49,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="多模态心理状态筛查 Demo", version="0.3.0", lifespan=lifespan)
 
-_default_origins = "http://localhost:5173,http://127.0.0.1:5173"
+_default_origins = (
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:5174,http://127.0.0.1:5174"
+)
 allowed_origins = [
     o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",")
     if o.strip()
@@ -84,5 +96,10 @@ app.include_router(tts.router)
 app.include_router(assessment.router)
 app.include_router(history.router)
 app.include_router(healing.router)
+app.include_router(heal_journal.router)
+app.include_router(counseling.router)
+app.include_router(counseling.icbt_router)
 app.include_router(teacher.router)
 app.include_router(communication.router)
+app.include_router(profile.router)
+app.include_router(profile.contacts_router)

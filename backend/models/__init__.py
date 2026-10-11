@@ -14,6 +14,7 @@ from backend.models.dialogue import (
     DialogueVisual,
 )
 from backend.models.evaluation import EvaluationRecord, EvaluationResult
+from backend.models.heal import FocusSession, HabitRecord, HealContent, MoodEntry
 from backend.models.enums import (
     ConsentStatus,
     FollowUpStatus,
@@ -26,6 +27,9 @@ from backend.models.requests import (
     AudioUpsertRequest,
     ChatRequest,
     ConsentRequest,
+    FocusLogRequest,
+    HabitCheckinRequest,
+    SaveMoodRequest,
     SendCommunicationRequest,
     TriggerAssessmentRequest,
     VisionUpsertRequest,
@@ -39,7 +43,15 @@ from backend.models.responses import (
     DialogueResponsePayload,
     ErrorDetail,
     ErrorResponse,
+    FocusListResponse,
+    FocusLogResponse,
+    GrowthResponse,
+    HabitCheckinResponse,
+    HabitListResponse,
+    HealContentsResponse,
     HistoryListResponse,
+    MoodListResponse,
+    SaveMoodResponse,
     SendCommunicationResponse,
     StateUpsertResponse,
 )
@@ -66,14 +78,20 @@ __all__ = [
     # assessment
     "CommunicationMessage", "CounselorNote",
     "EvaluationRecord", "EvaluationResult",
+    # heal journal
+    "MoodEntry", "HabitRecord", "FocusSession", "HealContent",
     # requests
     "AudioUpsertRequest", "ChatRequest", "ConsentRequest",
+    "SaveMoodRequest", "HabitCheckinRequest", "FocusLogRequest",
     "SendCommunicationRequest", "TriggerAssessmentRequest",
     "VisionUpsertRequest",
     # responses
     "AssessmentResponse", "ChatResponse", "CommunicationListResponse",
     "ConsentResponse", "CreateSessionResponse", "DialogueResponsePayload",
     "ErrorDetail", "ErrorResponse", "HistoryListResponse",
+    "SaveMoodResponse", "MoodListResponse", "HabitCheckinResponse",
+    "HabitListResponse", "FocusLogResponse", "FocusListResponse",
+    "HealContentsResponse", "GrowthResponse",
     "SendCommunicationResponse", "StateUpsertResponse",
     # dialogue agent schemas
     "DialogueVisual", "DialogueHistoryMessage", "DialogueUserMemory",

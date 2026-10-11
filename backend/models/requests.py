@@ -1,5 +1,7 @@
 """API 请求体模型。路由层只做校验和转发，不在这里写业务逻辑。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from evaluation_agent.inputs import EvaluationInput
@@ -104,3 +106,54 @@ class SendCommunicationRequest(BaseModel):
     counselor_ref: str | None = None
     direction: str = Field(description="student_to_counselor / counselor_to_student")
     content: str = Field(min_length=1, max_length=2000)
+
+
+# ---------------------------------------------------------------------------
+# 治愈小工具（心情 / 微光打卡 / 专注）
+# ---------------------------------------------------------------------------
+
+class SaveMoodRequest(BaseModel):
+    """提交当日心情日记；重复提交覆盖当天记录。"""
+    student_ref: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    mood: int = Field(ge=1, le=5)
+    weather: str | None = Field(default=None, max_length=20)
+    color: str | None = Field(default=None, max_length=20)
+    tags: list[str] = Field(default_factory=list)
+    note: str | None = Field(default=None, max_length=200)
+    voice_text: str | None = Field(default=None, max_length=200)
+
+
+class HabitCheckinRequest(BaseModel):
+    """提交一天的微光打卡（items 为该日已完成的微行动 id）。"""
+    student_ref: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    items: list[str] = Field(default_factory=list, max_length=20)
+
+
+class FocusLogRequest(BaseModel):
+    """记录一次专注学习会话。"""
+    student_ref: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    minutes: int = Field(ge=1, le=180)
+    mood_before: int | None = Field(default=None, ge=1, le=5)
+    mood_after: int | None = Field(default=None, ge=1, le=5)
+
+
+# ---------------------------------------------------------------------------
+# 学生档案 / 紧急联系人
+# ---------------------------------------------------------------------------
+
+class SaveProfileRequest(BaseModel):
+    """提交/更新学生档案（昵称 / 学校阶段 / 班级）；同一 student_ref 覆盖保存。"""
+    student_ref: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    nickname: str = Field(default="", max_length=20)
+    school_stage: Literal["primary", "middle", "high"] | None = None
+    class_name: str = Field(default="", max_length=40)
+
+
+class AddContactRequest(BaseModel):
+    """新增一名紧急联系人。"""
+    student_ref: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=20)
+    relation: str = Field(default="", max_length=20)
+    phone: str = Field(min_length=3, max_length=20, pattern=r"^[\d\-+\s]{3,20}$")
