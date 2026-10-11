@@ -39,7 +39,6 @@ export const api = {
     }),
 
   // Vision / Audio
-  visionStatus: () => request('/api/vision/status'),
   submitVision: (sessionId, state) =>
     request('/api/vision', {
       method: 'POST',

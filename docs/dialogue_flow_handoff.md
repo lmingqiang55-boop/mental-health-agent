@@ -1,5 +1,41 @@
 # 对话修复与独立前端接线（2026-10-11）
 
+本次交付后端接口及返回说明，页面由队友独立实现。
+
+## 聊天返回字段
+
+`POST /api/chat` 保留 `session_id`、`reply`、`next_strategy`、`current_stage`、
+`risk`、`turn_count`，增加以下字段：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `assessment_ready` | boolean | 本轮是否收尾；`true` 表示停止普通追问、可生成结果 |
+| `completion_reason` | string 或 null | `topic_coverage` / `turn_limit` / `user_requested`；普通对话为 null |
+| `screening_progress` | object | 话题交流次数、待回答话题及结束原因；不是量表得分 |
+| `visual_feedback` | object | `reason` 表示触发或跳过原因，`emotion` 为四类线索或 null |
+
+普通对话且视觉观察已触发时，关键返回示例（其他原有字段省略）：
+
+```json
+{
+  "reply": "你看起来有点难过，最近是很难入睡，还是半夜容易醒？",
+  "next_strategy": "睡眠",
+  "current_stage": "exploration",
+  "assessment_ready": false,
+  "completion_reason": null,
+  "screening_progress": {
+    "pending_topic": "睡眠",
+    "topic_turns": {"情绪": 2},
+    "end_reason": null
+  },
+  "visual_feedback": {"reason": "mentioned", "emotion": "sad"}
+}
+```
+
+`reply` 由 Agent 自然生成，示例不是固定话术。没有可靠画面时仍返回普通回复，
+例如 `visual_feedback={"reason":"no_face","emotion":null}`。
+收尾返回示例见下文；收尾轮的 `visual_feedback.reason` 为 `closing`。
+
 ## 摄像头表述
 
 开启摄像头预览不代表后端已收到真实识别结果。先读取 `GET /api/vision/status`，

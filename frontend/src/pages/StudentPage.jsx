@@ -19,8 +19,6 @@ export default function StudentPage() {
   const [cameraError, setCameraError] = useState('')
   const [recordState, setRecordState] = useState('idle')
   const [audioStatus, setAudioStatus] = useState(null)
-  const [visionStatus, setVisionStatus] = useState(null)
-  const [visionResult, setVisionResult] = useState(null)
   const [retryJob, setRetryJob] = useState(null)
   const [busy, setBusy] = useState(false)
   const [sendingChat, setSendingChat] = useState(false)
@@ -40,14 +38,12 @@ export default function StudentPage() {
   if (!mediaRef.current) {
     mediaRef.current = new CaptureController(api, {
       camera: setCameraState, cameraError: setCameraError, recording: setRecordState,
-      visionResult: setVisionResult,
       recordingError: message => { setError(message); pendingRef.current = false; setBusy(false) },
       limit: () => stopSpeechRef.current?.(),
     })
   }
   const visionOn = cameraState === 'on'
   const recording = recordState === 'recording' || recordState === 'preparing'
-  const chatClosed = stage === 'assessment_ready' || stage === 'completed'
 
   const createSession = useCallback(async () => {
     const flow = ++flowRef.current
@@ -61,7 +57,6 @@ export default function StudentPage() {
     setBusy(true); setSendingChat(false); setError('')
     setMessages([]); setInput(''); setTurnCount(0); setResult(null)
     setStage('exploration'); setRisk('low')
-    setVisionResult(null)
     try {
       if (!studentRefRef.current) {
         try { studentRefRef.current = localStorage.getItem(STUDENT_REF_KEY) } catch { /* storage may be unavailable */ }
@@ -83,9 +78,6 @@ export default function StudentPage() {
     createSession()
     let mounted = true
     api.audioStatus().then(data => { if (mounted) setAudioStatus(data) }).catch(() => {})
-    api.visionStatus().then(data => { if (mounted) setVisionStatus(data) }).catch(() => {
-      if (mounted) setVisionStatus({ state: 'unavailable' })
-    })
     const cancelOnBlur = () => {
       if (gestureRef.current && !gestureRef.current.released) stopSpeechRef.current?.(true)
     }
@@ -153,17 +145,11 @@ export default function StudentPage() {
       setMessages(prev => [...prev, { role: 'user', content: job.text },
         { role: 'assistant', content: data.reply }])
       setTurnCount(data.turn_count); setStage(data.current_stage); setRisk(data.risk.risk_level)
-      if (data.assessment_ready) mediaRef.current.stopCamera()
       setResult(null); setInput(''); typingStartRef.current = null
       rememberRetry(null)
     } catch (e) {
       abort.abort()
       if (flow !== flowRef.current || e.name === 'AbortError') return
-      if (e.code === 'SCREENING_FINISHED') {
-        setStage('assessment_ready'); mediaRef.current.stopCamera()
-        rememberRetry(null); setError(e.message)
-        return
-      }
       job.uncertain = job.stage === 'chat' && e.status == null
       rememberRetry(job)
       setError(e.status === 404 ? '会话已过期，请点击重新开始。' :
@@ -176,7 +162,7 @@ export default function StudentPage() {
   async function send(e) {
     e.preventDefault()
     const text = input.trim()
-    if (!text || !sessionId || pendingRef.current || retryRef.current || chatClosed) return
+    if (!text || !sessionId || pendingRef.current || retryRef.current) return
     const end = performance.now()
     const start = Math.max(0, end - 60_000, typingStartRef.current ?? end - 2000)
     const job = { kind: 'text', sessionId, text, utteranceId: crypto.randomUUID(),
@@ -187,7 +173,7 @@ export default function StudentPage() {
   }
 
   async function beginSpeech() {
-    if (!sessionId || pendingRef.current || retryRef.current || chatClosed) return
+    if (!sessionId || pendingRef.current || retryRef.current) return
     const gesture = { flow: flowRef.current, released: false }
     gestureRef.current = gesture
     pendingRef.current = true
@@ -247,7 +233,6 @@ export default function StudentPage() {
       const data = await api.triggerAssessment(sessionId)
       if (flow !== flowRef.current) return
       setResult(data.result)
-      mediaRef.current.stopCamera()
       const session = await api.getSession(sessionId)
       if (flow === flowRef.current) setStage(session.current_stage)
     } catch (e) { if (flow === flowRef.current) setError(e.message) }
@@ -257,7 +242,7 @@ export default function StudentPage() {
   }
 
   function toggleVision() {
-    if (pendingRef.current || retryRef.current || chatClosed) return
+    if (pendingRef.current || retryRef.current) return
     typingStartRef.current = null
     setCameraError('')
     if (cameraState !== 'off') mediaRef.current.stopCamera()
@@ -274,11 +259,11 @@ export default function StudentPage() {
           <p>通过简短对话记录近期状态 · 框架演示版</p>
         </div>
         <div className="header-actions">
-          <button type="button" className="secondary" onClick={toggleVision} disabled={busy || !sessionId || !!retryJob || chatClosed}>
+          <button type="button" className="secondary" onClick={toggleVision} disabled={busy || !sessionId || !!retryJob}>
             {cameraState === 'opening' ? '取消开启摄像头' : visionOn ? '关闭摄像头' : '开启摄像头'}
           </button>
           <button type="button" className={`speech-button ${recording ? 'recording' : 'secondary'}`}
-            disabled={!sessionId || !!retryJob || (busy && !recording) || cameraState === 'opening' || chatClosed}
+            disabled={!sessionId || !!retryJob || (busy && !recording) || cameraState === 'opening'}
             onPointerDown={e => {
               if (e.button !== 0) return
               e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); beginSpeech()
@@ -319,9 +304,6 @@ export default function StudentPage() {
             <div ref={endRef} />
           </div>
           {error && <p className="error" role="alert">{error}</p>}
-          {stage === 'assessment_ready' && <p role="status" className="device-hint">
-            本次对话已收尾。点击「生成初步结果」查看本次已聊内容的结果。
-          </p>}
           {retryJob && <div className="retry-input">
             <p>{retryJob.text || '本次录音尚未成功转写。'}</p>
             <button type="button" disabled={busy} onClick={() => executeJob(retryRef.current)}>
@@ -337,8 +319,8 @@ export default function StudentPage() {
                 setInput(e.target.value)
               }}
                 placeholder="例如：最近总是觉得压力很大、睡不好"
-                maxLength={4000} disabled={!sessionId || busy || !!retryJob || cameraState === 'opening' || chatClosed} />
-              <button type="submit" disabled={!input.trim() || !sessionId || busy || !!retryJob || cameraState === 'opening' || chatClosed}>
+                maxLength={4000} disabled={!sessionId || busy || !!retryJob || cameraState === 'opening'} />
+              <button type="submit" disabled={!input.trim() || !sessionId || busy || !!retryJob || cameraState === 'opening'}>
                 {busy ? '处理中…' : '发送'}
               </button>
             </div>
@@ -352,14 +334,13 @@ export default function StudentPage() {
             <h3>会话状态</h3>
             <dl>
               <dt>回合数</dt><dd>{turnCount}</dd>
-              <dt>当前阶段</dt><dd>{{ exploration: '对话中', crisis: '现实支持优先',
-                assessment_ready: '等待生成结果', assessment: '生成结果中', completed: '已完成' }[stage] || stage}</dd>
+              <dt>当前阶段</dt><dd>{stage}</dd>
               <dt>风险等级</dt>
               <dd className={`risk-text risk-${risk}`}>
                 {risk === 'low' ? '低' : risk === 'medium' ? '中' : '高'}
               </dd>
             </dl>
-            <p className="device-hint">主要话题聊过后会主动收尾，也可随时点击「生成初步结果」。</p>
+            <p className="device-hint">对话没有自动结束条件，确认聊完后点「生成初步结果」。</p>
           </section>
           <section className="card camera-preview">
             <h3>摄像头预览</h3>
@@ -369,7 +350,7 @@ export default function StudentPage() {
             <p className="device-hint">采集帧按本次发言的时间区间聚合，不保存原始画面；没有有效画面时保持缺测。</p>
           </section>
           <DeviceStatus visionEnabled={visionOn} audioEnabled={recordState === 'recording'}
-            cameraError={cameraError} visionStatus={visionStatus} visionResult={visionResult} />
+            cameraError={cameraError} />
         </aside>
       </div>
 
