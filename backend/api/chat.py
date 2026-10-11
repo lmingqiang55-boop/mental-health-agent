@@ -69,7 +69,8 @@ def chat(request: ChatRequest) -> ChatResponse:
             vision_snapshot=request.vision_snapshot,
             utterance_id=request.utterance_id, speech=request.speech,
         ))
-        kwargs = {"vision_snapshot": request.vision_snapshot}
+        kwargs = {"vision_snapshot": request.vision_snapshot,
+                  "utterance_id": request.utterance_id}
         if request.speech is not None or "vision_snapshot" in request.model_fields_set:
             kwargs["use_latest_states"] = False
         payload = dialogue_manager.process_turn(text, session, **kwargs)

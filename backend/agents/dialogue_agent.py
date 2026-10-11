@@ -88,11 +88,22 @@ class DialogueAgent:
         previous_replies = {message.content.strip()
                             for message in request.conversation_history
                             if message.role == "assistant"}
-        if reply in previous_replies:
+        visual_phrases = ("看起来", "看上去", "表情", "神情", "脸上", "显得")
+        repeated = reply in previous_replies
+        missed_visual = (request.visual_observation is not None
+                         and not any(phrase in reply for phrase in visual_phrases))
+        if repeated or missed_visual:
+            requirements = []
+            if repeated:
+                requirements.append(
+                    "上一版回复与历史中已说过的话完全相同。请针对用户刚才的新信息换一种具体追问。")
+            if missed_visual:
+                requirements.append(
+                    "上一版没有自然提及本轮允许的外观线索。请把它融入完整句子，"
+                    "例如用‘你看起来……’承接当前话题，不要在句首机械拼接固定短语。")
             retry_prompt = (
-                user_prompt + "\n\n【重写要求】上一版回复与历史中已说过的话完全相同。"
-                "请严格保持上游 decision 不变，针对用户刚才的新信息换一种具体追问，"
-                "不要重复历史中的任何一句助手回复。"
+                user_prompt + "\n\n【重写要求】" + "".join(requirements)
+                + "保持上游 decision 不变，不要重复历史中的助手回复。"
             )
             self.last_user_prompt = retry_prompt
             reply = (await self.llm_client.generate(

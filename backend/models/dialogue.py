@@ -142,6 +142,9 @@ class DialogueAgentRequest(BaseModel):
     current_user_input: DialogueCurrentUserInput = Field(
         ..., description="用户当前最新的一句话"
     )
+    visual_observation: Optional[Literal["happy", "sad", "fearful", "angry"]] = Field(
+        default=None, description="本轮允许自然提及的一项可靠视觉线索；为空则不主动提及外观"
+    )
     extra: Dict[str, Any] = Field(
         default_factory=dict, description="扩展位：请求级别未来字段"
     )

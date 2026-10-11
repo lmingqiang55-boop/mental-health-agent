@@ -5,6 +5,9 @@ import asyncio
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.core.multimodal_fusion import fuse_turn
 from backend.core.risk_engine import assess_risk
+from backend.core.visual_acknowledgment import (
+    VisualAcknowledgment, choose_visual_acknowledgment,
+)
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.llm.prompts import QUESTIONS
@@ -40,7 +43,8 @@ class DialogueManager:
 
     def process_turn(self, user_text: str, session: SessionState,
                      vision_snapshot: VisionState | None = None,
-                     *, use_latest_states: bool = True) -> DialogueResponsePayload:
+                     *, use_latest_states: bool = True,
+                     utterance_id: str | None = None) -> DialogueResponsePayload:
         latest = session.latest_vision_state if use_latest_states else None
         if latest is not None:
             # Only recent, timezone-aware observations can inform a legacy text turn.
@@ -66,7 +70,12 @@ class DialogueManager:
             return self._reply(session, "crisis_support", risk)
 
         decision = self._decide(session)
-        reply = self._generate_reply(session, user_text, current_vision, decision)
+        visual_ack = choose_visual_acknowledgment(
+            session, utterance_id, current_vision)
+        reply = self._generate_reply(
+            session, user_text, current_vision, decision, visual_ack)
+        if visual_ack is not None:
+            session.last_visual_observation_turn = session.turn_count
         return DialogueResponsePayload(
             reply=reply,
             next_strategy=decision.actions[-1].value,
@@ -88,7 +97,8 @@ class DialogueManager:
 
     def _generate_reply(self, session: SessionState, user_text: str,
                         current_vision: VisionState | None,
-                        decision: PolicyDecision) -> str:
+                        decision: PolicyDecision,
+                        visual_ack: VisualAcknowledgment | None) -> str:
         """Pass the selected actions to the dialogue Agent; never use canned questions."""
         history = session.conversation_history
         if (history and history[-1].role == MessageRole.USER
@@ -109,6 +119,7 @@ class DialogueManager:
             current_user_input=DialogueCurrentUserInput(
                 text=user_text, visual=_dialogue_visual(current_vision),
             ),
+            visual_observation=visual_ack,
         )
         if self._dialogue_agent is not None:
             try:
