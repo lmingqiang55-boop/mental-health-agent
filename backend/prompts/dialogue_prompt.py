@@ -36,6 +36,10 @@ __all__ = [
     "build_dialogue_user_prompt",
 ]
 
+VISUAL_OBSERVATION_NAMES = {
+    "happy": "开心", "sad": "难过", "fearful": "紧张", "angry": "烦躁",
+}
+
 
 DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue Agent（对话生成 Agent）。
 
@@ -61,7 +65,8 @@ DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue 
 7. visual（视觉标签）：仅用于辅助理解用户当前表达状态，可以影响语气、共情程度、
    措辞的柔和程度、以及问句的表达方式。但必须遵守：
    - 不得把视觉标签作为医学诊断依据；
-   - 不得把视觉标签直接说给用户听；
+   - 只有本轮明确给出 visual_observation 时，才可以自然提及用户看起来的状态；
+   - 没有 visual_observation 时，不要根据原始视觉标签自行描述用户的表情；
    - 不得出现“我检测到你的 valence 是 -0.5”这类表达。
 
 【执行 decision 的方式】
@@ -220,6 +225,13 @@ def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
         "【用户记忆】\n" + _format_memory(request.user_memory),
         "【当前用户输入】\n" + _format_current_input(request.current_user_input),
         "【上游最终决策】\n" + _format_decision(request.decision),
+        "【本轮视觉观察】\n" + (
+            f"可靠画面提供的外观线索：{VISUAL_OBSERVATION_NAMES[request.visual_observation]}。"
+            "请把这项线索自然融入执行 decision 的完整回复，例如用‘你看起来……’带出当前问题；"
+            "整句由你根据上下文组织，不要套固定开头。语气保持试探，不把表情当作用户内心感受或诊断，"
+            "不要提摄像头、检测器或数值。"
+            if request.visual_observation else "本轮没有可口头提及的视觉观察。"
+        ),
         (
             "【任务】\n"
             "请严格按照上游最终决策，结合其他上下文生成下一句回复。\n"

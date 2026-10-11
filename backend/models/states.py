@@ -178,6 +178,8 @@ class SessionState(BaseModel):
                                     description="匿名/假名学生标识，非实名")
     conversation_history: list[Message] = Field(default_factory=list)
     turn_count: int = 0
+    # Internal cooldown for optional facial observations in generated replies.
+    last_visual_observation_turn: int | None = Field(default=None, exclude=True)
     # Excluded from the session API; no raw audio or upload data is cached.
     chat_receipts: dict[str, ChatReceipt] = Field(default_factory=dict, exclude=True, repr=False)
     current_stage: SessionStage = SessionStage.EXPLORATION

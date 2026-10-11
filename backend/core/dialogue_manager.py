@@ -5,7 +5,9 @@ import asyncio
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.core.multimodal_fusion import fuse_turn
 from backend.core.risk_engine import assess_risk
-from backend.core.visual_acknowledgment import ACKNOWLEDGMENTS, choose_visual_acknowledgment
+from backend.core.visual_acknowledgment import (
+    VisualAcknowledgment, choose_visual_acknowledgment,
+)
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.llm.prompts import QUESTIONS
@@ -70,9 +72,10 @@ class DialogueManager:
         decision = self._decide(session)
         visual_ack = choose_visual_acknowledgment(
             session, utterance_id, current_vision)
-        reply = self._generate_reply(session, user_text, current_vision, decision)
-        if visual_ack is not None and "你看起来" not in reply:
-            reply = f"{ACKNOWLEDGMENTS[visual_ack]}{reply}"
+        reply = self._generate_reply(
+            session, user_text, current_vision, decision, visual_ack)
+        if visual_ack is not None:
+            session.last_visual_observation_turn = session.turn_count
         return DialogueResponsePayload(
             reply=reply,
             next_strategy=decision.actions[-1].value,
@@ -94,7 +97,8 @@ class DialogueManager:
 
     def _generate_reply(self, session: SessionState, user_text: str,
                         current_vision: VisionState | None,
-                        decision: PolicyDecision) -> str:
+                        decision: PolicyDecision,
+                        visual_ack: VisualAcknowledgment | None) -> str:
         """Pass the selected actions to the dialogue Agent; never use canned questions."""
         history = session.conversation_history
         if (history and history[-1].role == MessageRole.USER
@@ -115,6 +119,7 @@ class DialogueManager:
             current_user_input=DialogueCurrentUserInput(
                 text=user_text, visual=_dialogue_visual(current_vision),
             ),
+            visual_observation=visual_ack,
         )
         if self._dialogue_agent is not None:
             try:

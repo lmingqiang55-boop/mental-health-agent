@@ -6,11 +6,10 @@ from typing import Literal
 from backend.models.states import SessionState, VisionState
 from backend.vision.detector import real_vision_detector_active
 
-VisualAcknowledgment = Literal["sad", "happy"]
+VisualAcknowledgment = Literal["happy", "sad", "fearful", "angry"]
 
-ACKNOWLEDGMENTS: dict[VisualAcknowledgment, str] = {
-    "sad": "你看起来好像有点不开心。",
-    "happy": "你看起来挺开心的。",
+VISUAL_LABELS: dict[VisualAcknowledgment, str] = {
+    "happy": "开心", "sad": "难过", "fearful": "紧张", "angry": "烦躁",
 }
 
 
@@ -40,7 +39,7 @@ def choose_visual_acknowledgment(
               if item.capture_id == segment.capture_id
               and segment.start_ms <= item.captured_at_ms < segment.end_ms]
     eligible = [frame for frame in frames
-                if frame.face_detected and frame.emotion in ACKNOWLEDGMENTS
+                if frame.face_detected and frame.emotion in VISUAL_LABELS
                 and frame.emotion_confidence is not None
                 and frame.emotion_confidence >= 0.8]
     if len(eligible) < 3 or len(eligible) / segment.frame_count < 0.7:
@@ -49,16 +48,11 @@ def choose_visual_acknowledgment(
     if count / segment.frame_count < 0.7:
         return None
 
-    # Begin after three assistant messages; then require three intervening replies.
-    replies_since_observation = 0
-    for item in reversed(session.conversation_history):
-        if item.role.value != "assistant":
-            continue
-        if "你看起来" in item.content:
-            if replies_since_observation < 3:
-                return None
-            break
-        replies_since_observation += 1
-    if replies_since_observation < 3:
+    # The opening plus two generated replies precede the first opportunity.
+    # An explicit turn marker also works when the Agent varies its wording.
+    if session.turn_count < 2:
+        return None
+    if (session.last_visual_observation_turn is not None
+            and session.turn_count - session.last_visual_observation_turn < 4):
         return None
     return label
