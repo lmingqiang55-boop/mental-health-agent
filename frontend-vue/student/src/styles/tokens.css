@@ -1,0 +1,97 @@
+/**
+ * 心晴 · 学生端设计令牌
+ * 方案 A · 温暖治愈：暖阳橙主色 / 16–24px 大圆角 / 软阴影 / 系统黑体。
+ * 依据：关键页面视觉稿（暖阳橙 #FF8A5C，呼吸/涟漪/仪表动效，暂无夜间模式）。
+ * 纪律：页面禁止硬编码色值/字号/间距；一律走变量。
+ * 注：变量名保留 --xq-border-pixel / --xq-shadow-pixel 等历史命名，
+ *     但取值已全部替换为柔和风格，全站自动生效。
+ */
+
+:root {
+  /* ---- 主色（暖阳橙）---- */
+  --xq-primary: #ff8a5c;
+  --xq-primary-deep: #ee6f3c;
+  --xq-primary-soft: #ffeee2;
+
+  /* ---- 辅助（杏子黄）---- */
+  --xq-secondary: #ffc46b;
+  --xq-secondary-deep: #e8a33d;
+  --xq-secondary-soft: #fff3dc;
+
+  /* ---- 背景 / 表面 ---- */
+  --xq-bg: #fff7ef; /* 暖阳米白 */
+  --xq-bg-pixel: #ffefe1;
+  --xq-surface: #ffffff;
+  --xq-surface-2: #fbf2e8;
+
+  /* ---- 文本 ---- */
+  --xq-text: #3e2f26; /* 暖棕黑 */
+  --xq-text-2: #9b8578;
+  --xq-text-disabled: #d8c6b8;
+  --xq-text-invert: #ffffff;
+
+  /* ---- 语义 ---- */
+  --xq-success: #6fbf8f;
+  --xq-warning: #f2b84b;
+  --xq-danger: #e86a5e;
+  --xq-hotline: #ff6b4a; /* 求助/热线专用 */
+  --xq-star: #ffb84d;
+
+  /* ---- 关注等级（报告用；越大越需关注）---- */
+  --xq-level-low: #6fbf8f;
+  --xq-level-mild: #ffc46b;
+  --xq-level-moderate: #ff9e5c;
+  --xq-level-high: #e86a5e;
+
+  /* ---- 字体（系统黑体；font-pixel 为标题位，统一回归系统字体并加粗）---- */
+  --xq-font-pixel: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, -apple-system,
+    'Helvetica Neue', sans-serif;
+  --xq-font-base: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, -apple-system,
+    'Helvetica Neue', sans-serif;
+
+  /* ---- 字号 ---- */
+  --xq-fs-xs: 12px;
+  --xq-fs-sm: 13px;
+  --xq-fs-base: 15px;
+  --xq-fs-lg: 17px;
+  --xq-fs-xl: 20px;
+  --xq-fs-2xl: 24px;
+  --xq-fs-3xl: 30px;
+
+  /* ---- 间距 ---- */
+  --xq-sp-1: 4px;
+  --xq-sp-2: 8px;
+  --xq-sp-3: 12px;
+  --xq-sp-4: 16px;
+  --xq-sp-5: 20px;
+  --xq-sp-6: 24px;
+  --xq-sp-8: 32px;
+  --xq-sp-10: 40px;
+
+  /* ---- 圆角（温暖治愈：大圆角）---- */
+  --xq-radius-s: 10px;
+  --xq-radius-m: 16px;
+  --xq-radius-l: 24px;
+  --xq-radius-pixel: 14px; /* 历史命名：按钮/小件统一圆角 */
+
+  /* ---- 描边（极浅暖边，近似无边框卡片）---- */
+  --xq-border-pixel: 1.5px solid #f6e7d7;
+  --xq-border-pixel-thin: 1px solid #f8ecdf;
+
+  /* ---- 软阴影（暖橙基调）---- */
+  --xq-shadow-pixel-sm: 0 2px 10px rgba(214, 150, 108, 0.1);
+  --xq-shadow-pixel: 0 8px 24px rgba(214, 150, 108, 0.14);
+  --xq-shadow-pixel-lg: 0 16px 40px rgba(214, 150, 108, 0.2);
+
+  /* ---- 布局 ---- */
+  --xq-maxw: 1080px;
+  --xq-tabbar-h: 60px;
+  --xq-topnav-h: 62px;
+
+  /* ---- 动效 ---- */
+  --xq-dur-fast: 160ms;
+  --xq-dur-base: 260ms;
+  --xq-dur-slow: 480ms;
+  --xq-ease-pixel: cubic-bezier(0.4, 0, 0.2, 1); /* 历史命名：统一为平滑缓动 */
+  --xq-ease-base: cubic-bezier(0.4, 0, 0.2, 1);
+}

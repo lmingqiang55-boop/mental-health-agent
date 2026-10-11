@@ -1,0 +1,125 @@
+/**
+ * 温暖治愈 · 共享动效：光晕呼吸、录音涟漪、三点等待、淡入上移。
+ * 类名保留历史命名（xq-*），取值已全部替换为柔和动效。
+ */
+
+/* ---- 柔光闪烁（星点）---- */
+@keyframes xq-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.xq-star {
+  display: inline-block;
+  color: var(--xq-star);
+  animation: xq-twinkle 2.8s var(--xq-ease-base) infinite;
+}
+
+/* ---- 轻轻浮动 ---- */
+@keyframes xq-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.xq-bounce {
+  animation: xq-bounce 2.2s ease-in-out infinite;
+}
+
+/* ---- 光晕呼吸（首页氛围）---- */
+@keyframes xq-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
+.xq-breathe {
+  animation: xq-breathe 4.8s ease-in-out infinite;
+}
+
+/* ---- 录音/聆听涟漪（麦克风扩散）---- */
+@keyframes xq-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 138, 92, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(255, 138, 92, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 138, 92, 0);
+  }
+}
+.xq-pulse {
+  animation: xq-pulse 1.6s ease-out infinite;
+}
+
+/* ---- 三点等待 ---- */
+@keyframes xq-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+.xq-dots span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--xq-text-2);
+  animation: xq-dot 1.2s infinite;
+}
+.xq-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.xq-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ---- 淡入上移 ---- */
+@keyframes xq-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.xq-fade-up {
+  animation: xq-fade-up var(--xq-dur-base) var(--xq-ease-base) both;
+}
+
+/* ---- 仪表入场（报告分值盘）---- */
+@keyframes xq-gauge-in {
+  from {
+    transform: rotate(-120deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(0deg);
+    opacity: 1;
+  }
+}
+.xq-gauge-in {
+  animation: xq-gauge-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
