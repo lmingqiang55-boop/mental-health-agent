@@ -15,6 +15,9 @@ from threading import RLock
 from abc import ABC, abstractmethod
 from typing import Any
 
+from dotenv import load_dotenv
+
+from backend.llm.config import DEFAULT_ENV_FILE
 from backend.models.states import VisionState
 
 
@@ -174,11 +177,18 @@ _detector: VisionDetector | None = None
 _detector_lock = RLock()
 
 
+def real_vision_detector_active() -> bool:
+    """Report the detector that actually produced frames, not only env settings."""
+    with _detector_lock:
+        return isinstance(_detector, EmotiEffLibVisionDetector)
+
+
 def get_detector() -> VisionDetector:
     """按 ``VISION_PROVIDER`` 返回检测器，默认是 Mock。"""
     global _detector
     with _detector_lock:
         if _detector is None:
+            load_dotenv(DEFAULT_ENV_FILE, override=False)
             provider = os.getenv("VISION_PROVIDER", "mock").strip().lower()
             if provider == "emotiefflib":
                 _detector = EmotiEffLibVisionDetector(

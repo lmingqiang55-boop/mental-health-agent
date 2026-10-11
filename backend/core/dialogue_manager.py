@@ -5,6 +5,7 @@ import asyncio
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.core.multimodal_fusion import fuse_turn
 from backend.core.risk_engine import assess_risk
+from backend.core.visual_acknowledgment import ACKNOWLEDGMENTS, choose_visual_acknowledgment
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.llm.prompts import QUESTIONS
@@ -40,7 +41,8 @@ class DialogueManager:
 
     def process_turn(self, user_text: str, session: SessionState,
                      vision_snapshot: VisionState | None = None,
-                     *, use_latest_states: bool = True) -> DialogueResponsePayload:
+                     *, use_latest_states: bool = True,
+                     utterance_id: str | None = None) -> DialogueResponsePayload:
         latest = session.latest_vision_state if use_latest_states else None
         if latest is not None:
             # Only recent, timezone-aware observations can inform a legacy text turn.
@@ -66,7 +68,11 @@ class DialogueManager:
             return self._reply(session, "crisis_support", risk)
 
         decision = self._decide(session)
+        visual_ack = choose_visual_acknowledgment(
+            session, utterance_id, current_vision)
         reply = self._generate_reply(session, user_text, current_vision, decision)
+        if visual_ack is not None and "你看起来" not in reply:
+            reply = f"{ACKNOWLEDGMENTS[visual_ack]}{reply}"
         return DialogueResponsePayload(
             reply=reply,
             next_strategy=decision.actions[-1].value,
