@@ -23,6 +23,8 @@ decision 由上游（决策 Agent + 话题次数约束器）给出，本 Agent �
 from __future__ import annotations
 
 from typing import Any
+from difflib import SequenceMatcher
+import re
 
 from backend.models.dialogue import DialogueAgentRequest, DialogueAgentResponse
 from backend.prompts.dialogue_prompt import (
@@ -35,6 +37,26 @@ __all__ = ["DialogueAgent", "DialogueAgentError"]
 
 class DialogueAgentError(RuntimeError):
     """Dialogue Agent 生成失败（例如模型返回空内容）。"""
+
+
+def _main_question(text: str) -> str:
+    questions = re.findall(r"([^。！？!?]+)[？?]", text)
+    return re.sub(r"[\W_]+", "", questions[-1]) if questions else ""
+
+
+def _near_repeated_question(reply: str, previous: list[str]) -> bool:
+    question = _main_question(reply)
+    return len(question) >= 12 and any(
+        len(old := _main_question(text)) >= 12
+        and SequenceMatcher(None, question, old).ratio() >= 0.88
+        for text in previous[-5:])
+
+
+def _repeated_opening(reply: str, previous: list[str]) -> bool:
+    if len(previous) < 2:
+        return False
+    return any(all(text.strip().startswith(prefix) for text in [*previous[-2:], reply])
+               for prefix in ("听你这么说", "听起来", "嗯，", "嗯,"))
 
 
 class DialogueAgent:
@@ -88,15 +110,26 @@ class DialogueAgent:
         previous_replies = {message.content.strip()
                             for message in request.conversation_history
                             if message.role == "assistant"}
+        recent_replies = [message.content.strip() for message in request.conversation_history
+                          if message.role == "assistant"]
         visual_phrases = ("看起来", "看上去", "表情", "神情", "脸上", "显得")
         repeated = reply in previous_replies
+        repeated_question = _near_repeated_question(reply, recent_replies)
+        mechanical_opening = _repeated_opening(reply, recent_replies)
+        closing_question = request.finish_screening and bool(re.search(r"[？?]", reply))
         missed_visual = (request.visual_observation is not None
                          and not any(phrase in reply for phrase in visual_phrases))
-        if repeated or missed_visual:
+        if repeated or repeated_question or mechanical_opening or closing_question or missed_visual:
             requirements = []
             if repeated:
                 requirements.append(
                     "上一版回复与历史中已说过的话完全相同。请针对用户刚才的新信息换一种具体追问。")
+            if repeated_question:
+                requirements.append("上一版的主要问题与近期已问的问题高度相似。请使用用户已经给出的答案，补问尚缺的信息。")
+            if mechanical_opening:
+                requirements.append("近期已连续使用同一个共情开头。请直接推进，省略套话和对上一句的复述。")
+            if closing_question:
+                requirements.append("这轮已经收尾，请删掉所有问句，不再邀请继续回答，只提示生成结果。")
             if missed_visual:
                 requirements.append(
                     "上一版没有自然提及本轮允许的外观线索。请把它融入完整句子，"
@@ -112,5 +145,9 @@ class DialogueAgent:
             ) or "").strip()
             if not reply or reply in previous_replies:
                 raise DialogueAgentError("Dialogue Agent repeated an earlier reply.")
+            if _near_repeated_question(reply, recent_replies):
+                raise DialogueAgentError("Dialogue Agent repeated an earlier question.")
+            if request.finish_screening and re.search(r"[？?]", reply):
+                raise DialogueAgentError("Dialogue Agent asked a question after closing.")
 
         return DialogueAgentResponse(reply=reply)

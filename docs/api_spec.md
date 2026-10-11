@@ -1,4 +1,20 @@
-# API 数据协议 v0.4（2026-10-03）
+# API 数据协议 v0.5（2026-10-11）
+
+本次新增对话收尾及视觉触发诊断，队友独立前端的接线说明见
+[对话修复接线说明](dialogue_flow_handoff.md)。`/api/chat` 新增 `assessment_ready`、
+`completion_reason`、`screening_progress` 和 `visual_feedback`。当
+`assessment_ready=true` 时停止输入并显示“生成结果”，点击后才调用 `/api/assessment`。
+阶段新增 `assessment_ready`；重复原请求仍返回原响应，新普通聊天返回
+`SCREENING_FINISHED`（409），新增危机表述仍优先返回现实支持。
+
+对话控制器记录话题交流次数，每个普通话题最多两次问答；主要话题都交流过且
+至少 10 轮后收尾，20 轮为总上限，也接受用户明确结束请求。这些是演示会话控制参数，
+不代表 PHQ-9 题目数量、临床充分性或量表评分。训练模型的 11 个动作不增加新类别。
+
+`GET /api/vision/status` 返回配置及已加载检测器状态；`visual_feedback.reason` 解释
+未提及画面的原因。模拟数据和来源未验证的数据不用于口头描述。短回答的口头观察
+可读取冻结时同一摄像头最近 5 秒内的真实帧（末帧距发送不超过 2.5 秒）；
+用于最终评估的 `vision_snapshot` 仍严格只取发言时间区间。
 
 基础地址：`http://127.0.0.1:8000`，交互文档：`/docs`。
 
@@ -17,13 +33,14 @@
 | PUT | `/api/session/{id}/consent` | 更新知情同意 |
 | POST | `/api/chat` | 提交一轮文字对话 |
 | POST | `/api/vision` | 提交句级视觉状态（merge） |
+| GET | `/api/vision/status` | 视觉配置及检测器加载状态 |
 | POST | `/api/vision/frame` | 提交一张摄像头帧并即时分析 |
 | POST | `/api/vision/capture` | 开启/关闭采集，使用递增代次隔离旧请求 |
 | POST | `/api/vision/segment` | 按发言时间区间聚合并冻结视觉快照 |
 | POST | `/api/audio` | 兼容现有实时音频状态；队员 B 的评估交接不需要调用 |
 | POST | `/api/audio/transcribe` | 上传完整录音，返回原文与采集时间；不创建聊天回合 |
 | GET | `/api/audio/status` | 查看 ASR 就绪状态和录音限制 |
-| POST | `/api/assessment` | 触发综合评估（对话没有自动结束信号，这是唯一入口） |
+| POST | `/api/assessment` | 用户点击生成结果后触发综合评估 |
 | GET | `/api/assessment/result/{result_id}` | 获取评估结果 |
 | GET | `/api/history/{student_ref}` | 学生查看历史记录 |
 | GET | `/api/teacher/records` | 老师：所有记录 |
@@ -43,7 +60,7 @@
 
 ```text
 RiskLevel          low | medium | high
-SessionStage       exploration | crisis | assessment | completed
+SessionStage       exploration | crisis | assessment_ready | assessment | completed
 MessageRole        user | assistant | counselor | system
 ConsentStatus      not_provided | granted | withdrawn
 FollowUpStatus     none | pending | in_progress | resolved
@@ -58,7 +75,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 躯体症状 / 食欲 / 社会功能 / 兴趣 / 筛查
 ```
 
-其中没有「结束评估」动作，因此聊天不产生自动结束信号。
+其中没有「结束评估」动作，收尾由模型外的会话控制器负责，并不改动训练动作集合。
 
 ### 评估维度（PsychologicalProfile）
 
@@ -226,7 +243,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 ```json
 {
   "session_id": "b4fc1bdd-...",
-  "reply": "听起来这段时间对你并不容易。最近睡眠怎么样？入睡或早醒有没有困扰你？",
+  "reply": "最近睡觉时，主要是入睡困难还是容易醒？",
   "next_strategy": "睡眠",
   "current_stage": "exploration",
   "risk": { "risk_level": "low", "risk_score": 0.1, ... },
@@ -236,19 +253,21 @@ FollowUpStatus     none | pending | in_progress | resolved
 
 `vision_snapshot` 可选；语音模块提供转写文本，视觉模块完成该句话的对齐后
 填写视觉快照。省略时消息的视觉快照保持为空，不自动取最近一帧。
-`next_strategy` 是决策模型本轮输出的最后一个动作，取值即上面 11 个动作之一
-（危机时为 `crisis_support`），不再是按维度推进的规则策略名。
+`next_strategy` 是经过话题次数约束后的最终动作，普通对话取上面 11 个动作之一，
+危机时为 `crisis_support`，收尾时为 `结束本次筛查`。
 
 约定：
 
-- 每轮会把截至当前用户发言的对话历史发给本机决策模型，由模型决定下一步动作。
+- 普通对话将截至当前用户发言的历史交给本机决策模型，再应用话题次数约束。
+  危机与收尾在此之前处理，不调用策略模型。
 - 每次成功请求保存一条 user + 一条 assistant 消息，`turn_count` +1。
-- 前端只显示 `reply`，不得根据关键词自行决定下一问。
+- 前端显示 `reply`，读取 `assessment_ready` 控制收尾；不得根据关键词自行决定下一问。
 - 决策模型不可用（服务未启动、超时、输出不符合约定）时返回
   `503 POLICY_UNAVAILABLE`，本轮不落库，不会退回规则提问。
 - 检测到高风险时进入 `crisis` 阶段并只给出现实支持话术。
-- 对话没有自动结束信号（模型的 11 个动作里没有「结束评估」），
-  最终评估由 `POST /api/assessment` 显式触发。
+- 主要话题交流完成、达到轮数上限或用户明确要求停止时，返回
+  `assessment_ready=true`，停止追问。最终评估仍由用户点击按钮后
+  `POST /api/assessment` 显式触发。完整响应字段及阈值见本文开头。
 
 ---
 
@@ -363,8 +382,10 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 相同的 `VisionState`，并将原始帧丢弃。帧接口写入检测器返回的完整快照，
 不会把缺失字段与上一帧做 merge；没有检测到人脸时，情绪、VA 和参与度等字段
 会返回 `null`。图片解码后的像素数超过 `1920×1080` 时返回 `422 INVALID_FRAME`。
-默认 provider 为 `mock`；统一 Conda 环境已安装真实视觉模型所需的依赖，
-启用时设置 `VISION_PROVIDER=emotiefflib`。安装方式见 [README](../README.md#本地运行)。
+新配置默认 provider 为 `emotiefflib`，真实检测需要依赖和模型权重；
+既有 `.env` 不会随 Git 更新，请检查 `VISION_PROVIDER` 或使用启动参数
+`--vision-provider emotiefflib`。显式 `mock` 仅用于接线测试，不触发表情描述。
+安装方式见 [README](../README.md#本地运行)。
 
 ---
 

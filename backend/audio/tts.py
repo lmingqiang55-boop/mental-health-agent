@@ -1,4 +1,10 @@
-"""CosyVoice synthesis for one completed assistant turn."""
+"""Speech synthesis for one completed assistant turn.
+
+Two providers are available, selected by the ``TTS_PROVIDER`` env var:
+
+- ``edge`` (default): Microsoft Edge 神经语音（免费、无需 Key，需联网）。
+- ``cosyvoice``: 阿里云百炼 CosyVoice（需 ``DASHSCOPE_API_KEY`` + ``DASHSCOPE_WORKSPACE_ID``）。
+"""
 
 import os
 import re
@@ -104,5 +110,78 @@ class CosyVoiceTTS:
         return urlunsplit(("https", parsed.netloc, parsed.path, parsed.query, ""))
 
 
-def get_tts_service() -> CosyVoiceTTS:
-    return CosyVoiceTTS(TTSConfig.from_env())
+@dataclass(frozen=True)
+class EdgeTTSConfig:
+    """Microsoft Edge 神经语音配置（免费、无需 Key）。"""
+
+    voice: str = "zh-CN-XiaoxiaoNeural"
+    rate: str = "+0%"
+    volume: str = "+0%"
+    pitch: str = "+0Hz"
+    timeout_seconds: float = 30.0
+
+    @property
+    def model(self) -> str:
+        return "edge-tts"
+
+    @property
+    def ready(self) -> bool:
+        try:
+            import edge_tts  # noqa: F401
+        except Exception:
+            return False
+        return True
+
+    @classmethod
+    def from_env(cls) -> "EdgeTTSConfig":
+        load_dotenv(ENV_FILE, override=False)
+        return cls(
+            voice=os.getenv("EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural").strip(),
+            rate=os.getenv("EDGE_TTS_RATE", "+0%").strip(),
+            volume=os.getenv("EDGE_TTS_VOLUME", "+0%").strip(),
+            pitch=os.getenv("EDGE_TTS_PITCH", "+0Hz").strip(),
+            timeout_seconds=float(os.getenv("TTS_TIMEOUT_SECONDS", "30")),
+        )
+
+
+class EdgeTTS:
+    """微软 Edge 神经语音（非流式一次性合成，返回 mp3 字节）。"""
+
+    def __init__(self, config: EdgeTTSConfig) -> None:
+        self.config = config
+
+    async def synthesize(self, text: str) -> bytes:
+        if not self.config.ready:
+            raise TTSError("语音服务尚未配置。")
+        try:
+            import edge_tts
+
+            communicate = edge_tts.Communicate(
+                text,
+                self.config.voice,
+                rate=self.config.rate,
+                volume=self.config.volume,
+                pitch=self.config.pitch,
+            )
+            content = bytearray()
+            async for chunk in communicate.stream():
+                if chunk.get("type") != "audio":
+                    continue
+                content.extend(chunk["data"])
+                if len(content) > MAX_AUDIO_BYTES:
+                    raise TTSError("合成音频过大。")
+            if not content:
+                raise TTSError("语音服务返回了空音频。")
+            return bytes(content)
+        except TTSError:
+            raise
+        except Exception as exc:
+            raise TTSError("语音服务暂时不可用。") from exc
+
+
+def get_tts_service():
+    """按 ``TTS_PROVIDER`` 选择语音服务（默认 edge-tts）。"""
+    provider = os.getenv("TTS_PROVIDER", "edge").strip().lower()
+    if provider == "cosyvoice":
+        return CosyVoiceTTS(TTSConfig.from_env())
+    return EdgeTTS(EdgeTTSConfig.from_env())

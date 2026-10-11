@@ -1,0 +1,138 @@
+/**
+ * 心晴管理端设计规范（源自设计规范定稿）：
+ * - 白底专业仪表盘，纯白侧边栏 + 暖阳橙选中态
+ * - 预警红黄绿分级（红仅用于危机/高风险）
+ * - 卡片圆角 8~12px 轻阴影，系统无衬线 14/16
+ */
+
+:root {
+  /* 主题色：暖阳橙 */
+  --xq-primary: #f0833c;
+  --xq-primary-deep: #e06f1f;
+  --xq-primary-light: #fff1e6;
+  --xq-primary-lighter: #fff8f2;
+
+  /* 预警分级色 */
+  --xq-risk-high: #e5655b;
+  --xq-risk-medium: #f2b84b;
+  --xq-risk-low: #52b788;
+
+  /* 中性色 */
+  --xq-bg: #f6f7f9;
+  --xq-card: #ffffff;
+  --xq-text: #303133;
+  --xq-text-secondary: #909399;
+  --xq-border: #ebeef5;
+
+  --xq-radius: 10px;
+  --xq-shadow: 0 1px 4px rgba(30, 41, 59, 0.06), 0 4px 16px rgba(30, 41, 59, 0.04);
+
+  /* Element Plus 主题变量覆盖 */
+  --el-color-primary: var(--xq-primary);
+  --el-color-primary-light-3: #f4a266;
+  --el-color-primary-light-5: #f8bc8f;
+  --el-color-primary-light-7: #fbd6b8;
+  --el-color-primary-light-8: #fde3d1;
+  --el-color-primary-light-9: var(--xq-primary-light);
+  --el-color-primary-dark-2: var(--xq-primary-deep);
+  --el-color-danger: var(--xq-risk-high);
+  --el-color-warning: var(--xq-risk-medium);
+  --el-color-success: var(--xq-risk-low);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+    'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--xq-text);
+  background: var(--xq-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- 通用页面骨架 ---- */
+.page {
+  padding: 20px 24px;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.page-subtitle {
+  color: var(--xq-text-secondary);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.xq-card {
+  background: var(--xq-card);
+  border-radius: var(--xq-radius);
+  box-shadow: var(--xq-shadow);
+  padding: 18px 20px;
+}
+
+.xq-card + .xq-card { margin-top: 16px; }
+
+/* KPI 卡 */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.kpi-card {
+  background: var(--xq-card);
+  border-radius: var(--xq-radius);
+  box-shadow: var(--xq-shadow);
+  padding: 18px 20px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30, 41, 59, 0.1), 0 8px 24px rgba(30, 41, 59, 0.06);
+}
+
+.kpi-label { color: var(--xq-text-secondary); font-size: 13px; }
+.kpi-value { font-size: 30px; font-weight: 700; margin-top: 6px; line-height: 1.2; }
+.kpi-extra { color: var(--xq-text-secondary); font-size: 12px; margin-top: 6px; }
+
+.kpi-value.is-high { color: var(--xq-risk-high); }
+.kpi-value.is-medium { color: var(--xq-risk-medium); }
+.kpi-value.is-primary { color: var(--xq-primary); }
+
+/* 图表容器 */
+.chart { width: 100%; height: 300px; }
+.chart-sm { width: 100%; height: 240px; }
+
+/* 免责声明（报告相关页面统一展示） */
+.xq-disclaimer {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--xq-primary-lighter);
+  border: 1px solid var(--xq-primary-light);
+  color: #b06a2c;
+  font-size: 12px;
+}
+
+/* 表格内的次要信息 */
+.cell-sub { color: var(--xq-text-secondary); font-size: 12px; }

@@ -10,7 +10,7 @@
 | 视觉输入 | `backend/api/vision.py`、`vision/detector.py`、`vision/aggregation.py` | 采集代次、单帧情绪/VA、带时间帧缓存、逐句区间聚合、冻结快照 |
 | 语音输入 | `backend/audio/`、`api/audio.py` | SenseVoice 整段识别、真实解码重采样、容量限制、录音元数据 |
 | 会话 | `backend/core/session_manager.py` | 原子修改、消息及幂等回执、TTL；进程内存 |
-| 对话 | `backend/core/dialogue_manager.py`、`backend/policy/` | 文本历史驱动策略动作、基础话术、独立规则式风险识别 |
+| 对话 | `backend/core/dialogue_manager.py`、`backend/core/screening_flow.py`、`backend/policy/` | 文本策略、话题次数约束、Dialogue Agent 生成、收尾及独立风险识别 |
 | 综合评估 | `backend/core/evaluation_engine.py`、`evaluation_agent/` | 对话原文及双层视觉输入、11 项评分、五维画像、关注指数 |
 | 报告与记录 | `backend/core/report_builder.py`、`memory_store.py` | 规则模板报告、结果索引及查询；每位匿名用户最近 3 次结果保存在本机 SQLite |
 | 治愈陪伴 | `core/healing_adapter.py`、`healing/`、`api/healing.py` | 从真实记忆适配输入、检索知识、支持报告及反馈；陪伴状态独立保存在进程内存，前端待对接 |
@@ -24,10 +24,10 @@
 录音区间 → /api/vision/segment → 冻结的 vision_snapshot
 两路汇合 → /api/chat → 保存当前消息
                         ├─ fuse_turn → 规则式风险辅助
-                        └─ 文本历史 → 本机决策模型 → 动作 → 基础话术
+                        └─ 文本历史 → 本机决策模型 → 话题次数约束 → Dialogue Agent
 ```
 
-策略模型只读取文本历史，不把视觉指标送入策略提示词。视觉指标用于规则式风险辅助及最终评估。模型不可用返回 `POLICY_UNAVAILABLE`，当前轮不保存，不使用旧六维规则兜底。对话不自动结束，用户明确触发评估。
+策略模型只读取文本历史，不把视觉指标送入策略提示词。视觉指标用于规则式风险辅助及最终评估；同一采集代次最近 5 秒的可靠真实帧可为 Dialogue Agent 提供四类表情线索，首次快照冻结后不再改变该轮线索。句级评估仍只使用发言区间快照。模型不可用返回 `POLICY_UNAVAILABLE`，当前轮不保存。主要话题交流完成或达到轮数上限后进入 `assessment_ready`，用户点击按钮才触发评估。详细阈值与独立前端接线见 [对话交接说明](dialogue_flow_handoff.md)。
 
 文字路径使用本次输入期间的视觉聚合；未开启摄像头时明确传 null，避免借用旧状态。未升级的文字客户端仅可在实时风险计算中借用最近 5 秒的视觉状态，不将单帧保存为逐句证据。
 
@@ -73,6 +73,6 @@
 
 ## 当前边界
 
-本期采用按钮录音，不实现 VAD 或流式 ASR。EmotiEffLib 只提供情绪/VA，未实现眼动、微表情和参与度时间模型；这些字段保持缺测。默认视觉 Mock 仅用于虚构数据演示；真实视觉需安装并配置 `VISION_PROVIDER=emotiefflib`，语音需 `ASR_PROVIDER=sensevoice`。
+本期采用按钮录音，不实现 VAD 或流式 ASR。EmotiEffLib 只提供情绪/VA，未实现眼动、微表情和参与度时间模型；这些字段保持缺测。新配置默认真实视觉 `VISION_PROVIDER=emotiefflib`，需安装依赖和模型权重；显式 Mock 仅用于虚构数据接线测试。语音需 `ASR_PROVIDER=sensevoice`。
 
 会话仍为单进程内存，重启清空；评估结果持久保留最近 3 次，但匿名标识不是身份认证。沟通记录、身份授权、访问审计、专业危机响应与评分效度仍需单独完成。历史审查见 [2026-10-01 记录](prelaunch_audit_2026-10-01.md)。真人发音、摄像头光照/角度、不同浏览器编码器和全链路延迟仍须单独验收。

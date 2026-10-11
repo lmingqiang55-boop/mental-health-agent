@@ -5,8 +5,9 @@ import asyncio
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.core.multimodal_fusion import fuse_turn
 from backend.core.risk_engine import assess_risk
+from backend.core.screening_flow import completion_reason, limit_topic, record_answer
 from backend.core.visual_acknowledgment import (
-    VisualAcknowledgment, choose_visual_acknowledgment,
+    VisualAcknowledgment, select_visual_observation,
 )
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
@@ -26,6 +27,10 @@ from backend.policy.client import (
 )
 class DialogueUnavailable(RuntimeError):
     """The dialogue generation service cannot produce a usable reply."""
+
+
+class ScreeningFinished(RuntimeError):
+    """A closed screening accepts no further ordinary chat turns."""
 
 
 class DialogueManager:
@@ -69,18 +74,41 @@ class DialogueManager:
         if session.crisis_mode:
             return self._reply(session, "crisis_support", risk)
 
-        decision = self._decide(session)
-        visual_ack = choose_visual_acknowledgment(
+        if session.current_stage in (SessionStage.ASSESSMENT_READY, SessionStage.COMPLETED):
+            raise ScreeningFinished("本次筛查已收尾，请生成结果或重新开始。")
+        record_answer(session)
+        ending = completion_reason(session, user_text)
+        if ending is not None:
+            reply = self._generate_reply(
+                session, user_text, current_vision, None, None, closing_reason=ending)
+            session.current_stage = SessionStage.ASSESSMENT_READY
+            session.screening_progress.end_reason = ending
+            return DialogueResponsePayload(
+                reply=reply, next_strategy="结束本次筛查",
+                current_stage=session.current_stage.value, risk=risk,
+                assessment_ready=True, completion_reason=ending,
+                screening_progress=session.screening_progress,
+                visual_feedback={"reason": "closing"},
+            )
+
+        decision = limit_topic(session, self._decide(session))
+        visual = select_visual_observation(
             session, utterance_id, current_vision)
+        visual_ack = visual.emotion
         reply = self._generate_reply(
             session, user_text, current_vision, decision, visual_ack)
         if visual_ack is not None:
             session.last_visual_observation_turn = session.turn_count
+            visual.reason = "mentioned" if any(
+                phrase in reply for phrase in ("看起来", "看上去", "表情", "神情", "脸上", "显得")
+            ) else "generation_omitted"
         return DialogueResponsePayload(
             reply=reply,
             next_strategy=decision.actions[-1].value,
             current_stage=session.current_stage.value,
             risk=risk,
+            screening_progress=session.screening_progress,
+            visual_feedback=visual,
         )
 
     # -- 决策 ------------------------------------------------------------
@@ -97,8 +125,9 @@ class DialogueManager:
 
     def _generate_reply(self, session: SessionState, user_text: str,
                         current_vision: VisionState | None,
-                        decision: PolicyDecision,
-                        visual_ack: VisualAcknowledgment | None) -> str:
+                        decision: PolicyDecision | None,
+                        visual_ack: VisualAcknowledgment | None,
+                        *, closing_reason: str | None = None) -> str:
         """Pass the selected actions to the dialogue Agent; never use canned questions."""
         history = session.conversation_history
         if (history and history[-1].role == MessageRole.USER
@@ -108,18 +137,21 @@ class DialogueManager:
             role=message.role.value, content=message.content,
             visual=_dialogue_visual(message.vision_snapshot),
         ) for message in history]
-        topics = [action.value for action in decision.actions
-                  if action.value != "共情安慰"]
+        actions = [action.value for action in decision.actions] if decision else ["结束本次筛查"]
+        topics = [action for action in actions if action != "共情安慰"]
         request = DialogueAgentRequest(
             conversation_history=previous,
             decision=DialogueDecision(
-                actions=[action.value for action in decision.actions],
+                actions=actions,
                 topic=topics[-1] if topics else None,
+                reason=closing_reason,
+                extra={"topic_turns": session.screening_progress.topic_turns},
             ),
             current_user_input=DialogueCurrentUserInput(
                 text=user_text, visual=_dialogue_visual(current_vision),
             ),
             visual_observation=visual_ack,
+            finish_screening=closing_reason is not None,
         )
         if self._dialogue_agent is not None:
             try:
@@ -152,6 +184,8 @@ class DialogueManager:
             next_strategy=strategy,
             current_stage=session.current_stage.value,
             risk=risk,
+            screening_progress=session.screening_progress,
+            visual_feedback={"reason": "crisis"},
         )
 
 

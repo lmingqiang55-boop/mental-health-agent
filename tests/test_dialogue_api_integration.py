@@ -22,7 +22,8 @@ def test_repeated_policy_action_generates_contextual_follow_up(
         async def generate(self, system_prompt, user_prompt):
             self.prompts.append(user_prompt)
             current = user_prompt.split("用户刚刚说：", 1)[1].splitlines()[0]
-            return f"听起来{current}让你难受。关于睡眠，能再说说具体情况吗？"
+            question = "入睡困难时通常要多久才能睡着？" if current == "入睡困难" else "是入睡困难，还是睡着后容易醒？"
+            return question
 
     generator = RecordingClient()
     monkeypatch.setattr(chat.dialogue_manager, "_dialogue_agent", DialogueAgent(generator))
@@ -40,7 +41,7 @@ def test_repeated_policy_action_generates_contextual_follow_up(
     assert first.status_code == second.status_code == 200
     assert first.json()["next_strategy"] == second.json()["next_strategy"] == "睡眠"
     assert first.json()["reply"] != second.json()["reply"]
-    assert "入睡困难" in second.json()["reply"]
+    assert "入睡困难时" in second.json()["reply"]
     assert "actions：共情安慰、睡眠" in generator.prompts[1]
     assert "助手：" + first.json()["reply"] in generator.prompts[1]
     assert "valence=-0.3" in generator.prompts[1]

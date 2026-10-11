@@ -28,3 +28,8 @@ scripts/_prompt_samples/
 
 # --- 本地模型与训练产物（体积大，不入库）---
 models/
+policy-qwen3-8b-teammate-deploy/
+
+# --- 新前端（Vue3）frontend-vue ---
+frontend-vue/*/node_modules/
+frontend-vue/*/dist/

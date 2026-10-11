@@ -4,6 +4,7 @@
 """
 
 from datetime import datetime, timezone
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -54,6 +55,7 @@ class VisionFrameObservation(BaseModel):
     captured_at_ms: float
     image_digest: str
     state: VisionState
+    source: Literal["real", "mock", "unknown"] = "unknown"
 
 
 class VisionSegment(BaseModel):
@@ -64,6 +66,8 @@ class VisionSegment(BaseModel):
     vision_snapshot: VisionState | None = None
     frame_count: int = 0
     valid_frame_count: int = 0
+    # A frozen recent window for conversational appearance cues, not evaluation.
+    dialogue_frames: list[VisionFrameObservation] = Field(default_factory=list, exclude=True)
 
 
 class AudioState(BaseModel):
@@ -171,6 +175,13 @@ class ConsentRecord(BaseModel):
     withdrawn_at: datetime | None = None
 
 
+class ScreeningProgress(BaseModel):
+    """Conversation coverage only; not symptom scores or clinical completeness."""
+    pending_topic: str | None = None
+    topic_turns: dict[str, int] = Field(default_factory=dict)
+    end_reason: Literal["topic_coverage", "turn_limit", "user_requested"] | None = None
+
+
 class SessionState(BaseModel):
     """一次完整筛查会话的权威状态，由 SessionManager 统一管理。"""
     session_id: str
@@ -183,6 +194,7 @@ class SessionState(BaseModel):
     # Excluded from the session API; no raw audio or upload data is cached.
     chat_receipts: dict[str, ChatReceipt] = Field(default_factory=dict, exclude=True, repr=False)
     current_stage: SessionStage = SessionStage.EXPLORATION
+    screening_progress: ScreeningProgress = Field(default_factory=ScreeningProgress)
 
     # 最新句级多模态状态
     latest_vision_state: VisionState | None = None

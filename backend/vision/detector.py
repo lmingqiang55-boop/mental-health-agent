@@ -23,6 +23,7 @@ from backend.models.states import VisionState
 
 class VisionDetector(ABC):
     """视觉检测接口。帧的格式由具体实现决定，不暴露给 A/C。"""
+    is_simulated = False
 
     @abstractmethod
     def analyze_frame(self, frame: Any | None = None) -> VisionState:
@@ -37,6 +38,8 @@ class MockVisionDetector(VisionDetector):
 
     def __init__(self, face_detected: bool = True) -> None:
         self._face_detected = face_detected
+
+    is_simulated = True
 
     def analyze_frame(self, frame: Any | None = None) -> VisionState:
         if not self._face_detected:
@@ -180,16 +183,32 @@ _detector_lock = RLock()
 def real_vision_detector_active() -> bool:
     """Report the detector that actually produced frames, not only env settings."""
     with _detector_lock:
-        return isinstance(_detector, EmotiEffLibVisionDetector)
+        return _detector is not None and not _detector.is_simulated
+
+
+def describe_vision_status() -> dict:
+    """Report configuration without downloading or initializing model weights."""
+    load_dotenv(DEFAULT_ENV_FILE, override=False)
+    configured = os.getenv("VISION_PROVIDER", "emotiefflib").strip().lower()
+    with _detector_lock:
+        if _detector is not None:
+            provider = "mock" if _detector.is_simulated else (
+                "emotiefflib" if isinstance(_detector, EmotiEffLibVisionDetector) else "custom")
+            state = "simulated" if _detector.is_simulated else "ready"
+        else:
+            provider = configured
+            state = "simulated" if configured == "mock" else "not_loaded"
+        return {"provider": provider, "state": state,
+                "real_analysis": state == "ready" and provider in {"emotiefflib", "custom"}}
 
 
 def get_detector() -> VisionDetector:
-    """按 ``VISION_PROVIDER`` 返回检测器，默认是 Mock。"""
+    """按 ``VISION_PROVIDER`` 返回检测器，真实识别失败不会退回 Mock。"""
     global _detector
     with _detector_lock:
         if _detector is None:
             load_dotenv(DEFAULT_ENV_FILE, override=False)
-            provider = os.getenv("VISION_PROVIDER", "mock").strip().lower()
+            provider = os.getenv("VISION_PROVIDER", "emotiefflib").strip().lower()
             if provider == "emotiefflib":
                 _detector = EmotiEffLibVisionDetector(
                     model_name=os.getenv("VISION_MODEL", "enet_b0_8_va_mtl"),

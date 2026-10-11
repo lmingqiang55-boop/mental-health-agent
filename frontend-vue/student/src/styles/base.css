@@ -1,0 +1,180 @@
+/**
+ * 基础样式 / reset / 通用原子类（学生端）
+ * 移动优先；桌面增强在 @media (min-width: 1024px)。
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--xq-font-base);
+  font-size: var(--xq-fs-base);
+  line-height: 1.65;
+  color: var(--xq-text);
+  background: var(--xq-bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* 暖阳氛围底色（轻量，纯 CSS，不加载图片） */
+body {
+  background-image: radial-gradient(
+      circle at 85% -10%,
+      rgba(255, 184, 77, 0.18),
+      transparent 46%
+    ),
+    radial-gradient(circle at -10% 30%, rgba(255, 138, 92, 0.12), transparent 42%);
+  background-attachment: fixed;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure {
+  margin: 0;
+}
+
+a {
+  color: var(--xq-primary-deep);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ---- 滚动条（桌面）---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--xq-primary) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--xq-primary);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- 通用布局原子类 ---- */
+.xq-page {
+  width: 100%;
+  max-width: var(--xq-maxw);
+  margin: 0 auto;
+  padding: var(--xq-sp-4);
+}
+
+.xq-page-title {
+  font-family: var(--xq-font-pixel);
+  font-weight: 700;
+  font-size: var(--xq-fs-xl);
+  margin: var(--xq-sp-2) 0 var(--xq-sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--xq-sp-2);
+}
+
+.xq-section-title {
+  font-family: var(--xq-font-pixel);
+  font-weight: 600;
+  font-size: var(--xq-fs-lg);
+  margin: var(--xq-sp-6) 0 var(--xq-sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--xq-sp-2);
+}
+
+.xq-muted {
+  color: var(--xq-text-2);
+  font-size: var(--xq-fs-sm);
+}
+
+.xq-row {
+  display: flex;
+  align-items: center;
+  gap: var(--xq-sp-3);
+}
+
+.xq-grid {
+  display: grid;
+  gap: var(--xq-sp-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.xq-stack > * + * {
+  margin-top: var(--xq-sp-3);
+}
+
+.xq-spacer {
+  flex: 1;
+}
+
+/* ---- 免责声明条 ---- */
+.xq-disclaimer {
+  margin-top: var(--xq-sp-3);
+  padding: var(--xq-sp-3) var(--xq-sp-4);
+  border-radius: var(--xq-radius-m);
+  background: var(--xq-primary-soft);
+  color: var(--xq-text-2);
+  font-size: var(--xq-fs-xs);
+  line-height: 1.7;
+}
+
+/* ---- 无障碍：减弱动效 ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- 桌面增强 ---- */
+@media (min-width: 1024px) {
+  .xq-page {
+    padding: var(--xq-sp-6) var(--xq-sp-6) var(--xq-sp-10);
+  }
+  .xq-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

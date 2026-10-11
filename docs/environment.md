@@ -71,7 +71,9 @@ if (-not (Test-Path -LiteralPath .env)) {
 | `TTS_MODEL` / `TTS_VOICE` | 默认 `cosyvoice-v3-flash` / `longyingtao_v3` |
 
 `.env.example` 保留 `ASR_PROVIDER=disabled`、`ASR_DEVICE=cpu` 和
-`VISION_PROVIDER=mock` 的默认值；复制后需要按实际用途配置。
+`VISION_PROVIDER=emotiefflib` 的默认值；真实视觉需要依赖和模型权重。
+既有 `.env` 不会自动更新，可用 `--vision-provider emotiefflib` 覆盖启动配置。
+仅做接口测试时显式设置 `VISION_PROVIDER=mock`，此模式不触发表情描述。
 其余参数及含义见 `.env.example`，真实密钥只保存到本地 `.env`。
 
 每位队友从 QQ 接收训练模型 ZIP，首次执行

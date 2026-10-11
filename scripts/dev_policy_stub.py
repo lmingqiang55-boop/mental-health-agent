@@ -50,10 +50,50 @@ RULES: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     )
 )
 EMPATHY_HINTS = ("难受", "痛苦", "委屈", "无助", "绝望", "撑不住", "崩溃", "煎熬")
+# 每个维度对应的提问特征词，用来从历史里的「助手：」提问判断该维度是否已经问过。
+# 特征词对齐 policy/reply.py 的 QUESTIONS 文案。
+TOPIC_ANCHORS: dict[str, tuple[str, ...]] = {
+    "精神状态": ("精神状态", "精力"),
+    "睡眠": ("睡眠",),
+    "情绪": ("心情",),
+    "躯体症状": ("身体",),
+    "食欲": ("吃饭", "食欲"),
+    "社会功能": ("相处", "家人"),
+    "兴趣": ("兴趣",),
+}
+# 需要覆盖的维度及其顺序（不含危机维度「自杀倾向」——是否追问由真实模型决定）。
+COVERAGE_ORDER = ("精神状态", "情绪", "社会功能", "兴趣", "睡眠", "食欲", "躯体症状")
 
 
-def decide(conversation_text: str) -> list[str]:
-    """关键词规则，返回动作列表（最后一个非共情动作决定主要提问）。"""
+def covered_topics(payload: dict) -> set[str]:
+    """从历史里的助手提问中解析出「已经问过」的维度。
+
+    只看「助手：」行——既避开 system 提示词里列出的全部动作名，也避开用户
+    回答里的关键词（例如学生反复说「低落」，并不代表情绪维度已经问完）。
+    """
+    user_text = "\n".join(
+        message.get("content") or ""
+        for message in payload.get("messages", [])
+        if isinstance(message, dict) and message.get("role") == "user"
+    )
+    assistant_lines = "\n".join(
+        line for line in user_text.splitlines() if line.startswith("助手：")
+    )
+    return {
+        topic
+        for topic, anchors in TOPIC_ANCHORS.items()
+        if any(anchor in assistant_lines for anchor in anchors)
+    }
+
+
+def decide(conversation_text: str, turn: int = 1, covered: set[str] | None = None) -> list[str]:
+    """关键词规则，返回动作列表（最后一个非共情动作决定主要提问）。
+
+    ``covered`` 是本会话已经问过的维度集合。若本轮命中的维度已经问过、或什么都
+    没命中，就顺延到下一个还没覆盖的维度——这样即使学生反复答同一句（一直命中
+    同一个关键词），也不会被永远卡在同一句追问上。
+    """
+    covered = covered or set()
     text = conversation_text or ""
     actions: list[str] = []
     if any(hint in text for hint in EMPATHY_HINTS):
@@ -63,8 +103,22 @@ def decide(conversation_text: str) -> list[str]:
         if pattern.search(text):
             topic = action
             break
+    if topic == "其它" or topic in covered:
+        remaining = [item for item in COVERAGE_ORDER if item not in covered]
+        topic = (remaining[0] if remaining
+                 else COVERAGE_ORDER[(max(turn, 1) - 1) % len(COVERAGE_ORDER)])
     actions.append(topic)
     return actions
+
+
+def turn_index_from(payload: dict) -> int:
+    """用户发言轮次（从 1 开始）：统计历史里的「用户：」条数。"""
+    parts = [
+        message.get("content") or ""
+        for message in payload.get("messages", [])
+        if isinstance(message, dict) and message.get("role") == "user"
+    ]
+    return max("\n".join(parts).count("用户："), 1)
 
 
 def current_turn_from(payload: dict) -> str:
@@ -117,9 +171,15 @@ class StubHandler(BaseHTTPRequestHandler):
             return
 
         current_turn = current_turn_from(payload)
-        actions = decide(current_turn)
+        turn = turn_index_from(payload)
+        covered = covered_topics(payload)
+        actions = decide(current_turn, turn, covered)
         content = json.dumps({"actions": actions}, ensure_ascii=False)
-        print(f"[stub] 命中 {actions}  ←  用户：{current_turn.strip()[:40]}", flush=True)
+        print(
+            f"[stub] 第 {turn} 轮 命中 {actions}  已覆盖 {sorted(covered)}"
+            f"  ←  用户：{current_turn.strip()[:40]}",
+            flush=True,
+        )
         self._json(200, {
             "id": "chatcmpl-dev-stub",
             "object": "chat.completion",

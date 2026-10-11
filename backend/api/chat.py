@@ -4,9 +4,8 @@
 1. 原子地完成「加用户消息 → DialogueManager 决策 → 加助手消息」。
 2. 决策模型或对话 Agent 不可用时返回 503，本轮不落库。
 
-对话没有自动结束信号：决策模型的 11 个动作里没有「结束评估」，因此聊天不再
-自动触发最终评估。综合评估由 ``POST /api/assessment`` 显式触发，
-该接口直接接收上游提供的会话级视觉汇总（见 ``backend/api/assessment.py``）。
+会话控制器根据话题交流和轮数上限发送收尾信号。收尾不自动生成报告，
+前端显示按钮，用户点击后通过 ``POST /api/assessment`` 生成结果。
 """
 
 import hashlib
@@ -15,7 +14,7 @@ import json
 from fastapi import APIRouter, HTTPException
 
 from backend.api.errors import session_not_found
-from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable
+from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable, ScreeningFinished
 from backend.core.session_manager import session_manager
 from backend.models.enums import MessageRole
 from backend.models.requests import ChatRequest
@@ -97,6 +96,10 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=503, detail={
             "code": "DIALOGUE_UNAVAILABLE",
             "message": "对话生成服务暂时不可用，请稍后重试。",
+        }) from exc
+    except ScreeningFinished as exc:
+        raise HTTPException(status_code=409, detail={
+            "code": "SCREENING_FINISHED", "message": str(exc),
         }) from exc
     if updated is None:
         raise session_not_found()

@@ -128,7 +128,8 @@ def load_deepseek_config(
         校验并类型转换后的 DeepSeekConfig。
 
     Raises:
-        DeepSeekConfigError: 缺少 DEEPSEEK_API_KEY，或数值型环境变量无法转换。
+        DeepSeekConfigError: 缺少 DEEPSEEK_DIALOGUE_API_KEY（及兜底 DEEPSEEK_API_KEY），
+            或数值型环境变量无法转换。
     """
     file_values: Dict[str, str] = {}
 
@@ -151,10 +152,10 @@ def load_deepseek_config(
             return _clean(os.environ.get(key))
         return None
 
-    api_key = sourced("DEEPSEEK_API_KEY")
+    api_key = sourced("DEEPSEEK_DIALOGUE_API_KEY") or sourced("DEEPSEEK_API_KEY")
     if not api_key:
         raise DeepSeekConfigError(
-            "DEEPSEEK_API_KEY is missing. "
+            "DEEPSEEK_DIALOGUE_API_KEY (or the shared DEEPSEEK_API_KEY) is missing. "
             "Put it in the project-root .env file (see .env.example); "
             "it must never be hard-coded in source code."
         )

@@ -145,6 +145,7 @@ class DialogueAgentRequest(BaseModel):
     visual_observation: Optional[Literal["happy", "sad", "fearful", "angry"]] = Field(
         default=None, description="本轮允许自然提及的一项可靠视觉线索；为空则不主动提及外观"
     )
+    finish_screening: bool = Field(default=False, description="本轮仅收尾，不能继续提出问题")
     extra: Dict[str, Any] = Field(
         default_factory=dict, description="扩展位：请求级别未来字段"
     )
