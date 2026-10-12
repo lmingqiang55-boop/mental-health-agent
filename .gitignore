@@ -27,7 +27,8 @@ scripts/_prompt_samples/
 !.env.example
 
 # --- 本地模型与训练产物（体积大，不入库）---
-models/
+# 注意：必须用 /models/ 只忽略仓库根目录，否则会连 backend/models/（源码）一起忽略
+/models/
 policy-qwen3-8b-teammate-deploy/
 
 # --- 新前端（Vue3）frontend-vue ---
