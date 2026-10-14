@@ -188,14 +188,37 @@ export interface TranscriptionResponse {
 
 // ---------------- TTS ----------------
 
+/** POST /api/tts/probe 的真合成自检结果（status.last_probe 复用同一结构）。 */
+export interface TtsProbeResult {
+  provider: string
+  voice?: string | null
+  model?: string | null
+  checked_at: number
+  ok: boolean
+  latency_ms: number | null
+  audio_bytes: number
+  error: string | null
+  /** true 表示这条结果来自缓存（60 秒内）。 */
+  cached: boolean
+}
+
 export interface TtsStatusResponse {
+  /** ready=可出声；degraded=配置就绪但上次合成失败；unconfigured=未配置。 */
   state: 'ready' | 'degraded' | 'unconfigured' | string
+  /** 实际生效的 provider（配置的不可用时会静默回退）。 */
+  provider: string
+  /** 配置文件里指定的 provider，和 provider 不同即发生了回退。 */
+  configured_provider: string
+  /** 发生了回退时的原因；未回退为 null。 */
+  fallback_reason?: string | null
   model?: string | null
   voice?: string | null
-  /** 缺失的配置项（state=unconfigured 时非空）。 */
-  missing?: string[]
+  /** state!=ready 时的不可用原因。 */
+  reason?: string | null
   /** 上次合成失败原因；成功合成一次后清空。 */
   last_error?: string | null
+  /** 最近一次真合成自检；没探测过为 null（别把 null 当成"通"）。 */
+  last_probe?: TtsProbeResult | null
 }
 
 // ---------------- Assessment ----------------
