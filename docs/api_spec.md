@@ -308,16 +308,47 @@ FormData 的 Content-Type 和 boundary 由浏览器设置，不继承 JSON 请�
 上传时同时校验采集区间与实际解码时长，超限返回 `422 AUDIO_TOO_LONG`。
 `GET /api/audio/status` 单独报告 ASR 状态；通用 `/api/health` 不代表模型已就绪。
 
-### GET /api/tts/status 与 POST /api/tts
+### GET /api/tts/status、POST /api/tts/probe 与 POST /api/tts
 
-`GET /api/tts/status` 返回 `state: ready | unconfigured`，仅表示阿里云
-CosyVoice 的密钥与业务空间 ID 是否已配置。`POST /api/tts` 请求：
+语音 provider 由 `TTS_PROVIDER` 选择（默认 `cosyvoice`，备选 `edge`）；配置的那
+个不可用时自动退到另一个，因此状态接口把两者都报出来。`GET /api/tts/status`
+的字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `state` | `ready` / `degraded` / `unconfigured` |
+| `provider` | 当前实际生效的 provider |
+| `configured_provider` | `TTS_PROVIDER` 指定的 provider |
+| `fallback_reason` | 两者不同时说明配置的那个为什么没就绪，否则为 `null` |
+| `model` / `voice` | 生效 provider 的模型与音色；不可用时为 `null` |
+| `reason` | 生效 provider 不可用时缺的是什么 |
+| `last_error` | 最近一次真实合成失败的原因 |
+| `last_probe` | 最近一次 `POST /api/tts/probe` 的结果快照；没探测过为 `null` |
+
+`state` 只描述配置与最近一次真实结果：`ready` 表示配置与依赖齐全，`degraded`
+表示齐全但最近一次真实合成失败过（看 `last_error`），`unconfigured` 表示连回退
+后的 provider 都不可用（看 `reason`）。`state=ready` 不代表上游此刻可达。
+
+`POST /api/tts/probe` 真合成两个字的短文本，回答"现在到底能不能出声"；结果按
+provider 缓存 60 秒（用 `cached` 区分是否命中缓存），不写数据库、不返回音频：
+
+```json
+{ "ok": true, "provider": "cosyvoice", "voice": "longyingtao_v3",
+  "model": "cosyvoice-v3-flash", "latency_ms": 812, "audio_bytes": 16384,
+  "error": null, "checked_at": 1760000000.0, "cached": false }
+```
+
+为什么单独做一个探测接口：`/voices/list` 之类的轻量探测**不算数**——实测它一直
+返回 200，而真合成一直返回 403；唯一可信的验证是真合成一次。前端可在用户点
+"测试语音"时调用，或让老师端在开课前自检。
+
+`POST /api/tts` 请求：
 
 ```json
 { "session_id": "会话 ID", "turn_count": 1 }
 ```
 
-传 `turn_count: 0` 可合成新会话的固定开场问题；传 `1` 及以上可合成对应回合的助手回复。后端只读取已保存的助手文本，并向 CosyVoice 请求合成；成功时返回
+传 `turn_count: 0` 可合成新会话的固定开场问题；传 `1` 及以上可合成对应回合的助手回复。后端只读取已保存的助手文本，并向当前 provider 请求合成；成功时返回
 `audio/mpeg` 音频。前端可在 `POST /api/chat` 返回 `turn_count` 后，携带同一
 `session_id` 调用本接口并播放收到的二进制音频。前端播放尚未接入。
 密钥不返回浏览器，合成失败不影响聊天或评估，音频不写入数据库。
@@ -481,7 +512,7 @@ Vision/Audio 未提交时分别为 `null`，聊天必须正常工作。
 | `report` | 六个报告区块及技术元信息；完整结构见 [评估结果页面交接文档](assessment_output_page_handoff.md) |
 | `assessment_method` | 固定为 `evaluation_agent` |
 
-报告文案由后端按已计算分数生成。缺少前后对比时趋势为 `unclear`；没有可靠的视觉一致性计算时 `consistency_level` 为 `unknown`、`consistency_score` 为 `null`。以上响应片段省略了部分字段与数组项；可直接用于页面模拟的完整响应见 [示例 JSON](examples/assessment_response.json)。
+报告文案由后端按已计算分数生成。缺少前后对比时趋势为 `unclear`。视觉一致性由后端逐句比对文字极性与人脸效价得出：可比较的句子达到 2 句时给出 0～100 的 `consistency_score` 与 `low` / `moderate` / `high` 等级（两路信号完全同向为 100，方向相反为 0）；没有视觉数据、或可比较的句子不足 2 句时 `consistency_level` 为 `unknown`、`consistency_score` 为 `null`，并在 `summary` 里写明是哪一种情况。该分数只表示文字自述与面部表现是否对得上，不代表诊断置信度，也不表示受访者是否诚实。以上响应片段省略了部分字段与数组项；可直接用于页面模拟的完整响应见 [示例 JSON](examples/assessment_response.json)。
 未配置 `DEEPSEEK_API_KEY` 或评估服务不可用时，接口返回
 `503 EVALUATION_UNAVAILABLE`，不会生成规则式六维结果。评估调用会向配置的
 DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音频和图像。

@@ -24,6 +24,7 @@ from evaluation_agent.schemas import (
 )
 from evaluation_agent.scoring import DIMENSION_ITEMS, get_level_label_zh
 
+from backend.core.multimodal_consistency import compute_consistency
 from backend.models.enums import RiskLevel
 from backend.models.states import RiskResult
 
@@ -118,13 +119,20 @@ def build_report(
             input_data.vision_summary.mean_engagement, input_data.vision_summary.mean_attention,
             input_data.vision_summary.dominant_emotion))
     )
-    multimodal_summary = (
-        "本次提供了与对话相关的视觉数据；视觉线索只作辅助，"
-        "当前没有可靠的一致性计算结果。"
-        if has_vision else
-        "本次没有可用的视觉信息，仅依据对话文字作初步整理；"
-        "无法判断语言与视觉信息的一致性。"
-    )
+    consistency = compute_consistency(input_data)
+    if has_vision:
+        consistency_score = consistency.score
+        consistency_level = consistency.level
+        multimodal_summary = consistency.summary
+    else:
+        # 没有视觉数据时不评一致性——这与 api_spec / 前端交接文档写明的
+        # "视觉缺失时如实展示 unknown / null" 是同一件事，不要改成 0 分。
+        consistency_score = None
+        consistency_level = ConsistencyLevel.UNKNOWN
+        multimodal_summary = (
+            "本次没有可用的视觉信息，仅依据对话文字作初步整理；"
+            "无法判断语言与视觉信息的一致性。"
+        )
 
     trend_summary = "一次对话缺少可靠的前后对比，暂无法判断状态变化方向。"
     if input_data.vision_summary is not None:
@@ -158,8 +166,8 @@ def build_report(
         ),
         key_findings=findings,
         multimodal_observation=MultimodalObservation(
-            consistency_score=None,
-            consistency_level=ConsistencyLevel.UNKNOWN,
+            consistency_score=consistency_score,
+            consistency_level=consistency_level,
             summary=multimodal_summary,
         ),
         trend_and_suggestions=TrendAndSuggestions(

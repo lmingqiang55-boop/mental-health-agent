@@ -8,6 +8,7 @@ A/C 不直接调用检测器，只通过 API 或对话流程读取 VisionState�
 """
 
 import io
+import logging
 import os
 import random
 import math
@@ -19,6 +20,9 @@ from dotenv import load_dotenv
 
 from backend.llm.config import DEFAULT_ENV_FILE
 from backend.models.states import VisionState
+from backend.vision.face_weights import create_face_detector
+
+logger = logging.getLogger(__name__)
 
 
 class VisionDetector(ABC):
@@ -78,19 +82,34 @@ class EmotiEffLibVisionDetector(VisionDetector):
         self.model_name = model_name
         self._inference_lock = RLock()
         self._recognizer = EmotiEffLibRecognizer(engine=engine, model_name=model_name)
+        # 人脸检测用 YuNet（见 backend.vision.face_weights）。换掉 Haar 的原因：
+        # 它在暗光、侧脸、小脸场景漏检严重（同机实测暗光下 YuNet 187 张 vs
+        # Haar 9 张），且不输出置信度、只能靠放宽 minNeighbors 硬凑，反而引入误检。
+        #
+        # YuNet 权重需要一次性联网下载，所以留一条降级路：拿不到权重时回退 Haar，
+        # 保证离线机器上整条视觉链路仍然能起来。降级只在"YuNet 完全不可用"时发生，
+        # 不做逐帧补检——实测 YuNet 全面优于 Haar，而在无脸帧上补一次 Haar 更可能
+        # 带来误检，误检比漏检更脏（会把不存在的表情喂进一致性计算）。
+        self._face_detector = None
+        self._cascade = None
         try:
-            import cv2
-            cascade_type = getattr(cv2, "CascadeClassifier", None)
-            if cascade_type is None:
-                raise RuntimeError("OpenCV 人脸检测不可用。")
-            else:
-                self._face_cascade = cascade_type(
-                    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-                )
-                if self._face_cascade.empty():
-                    raise RuntimeError("OpenCV 人脸检测权重加载失败。")
-        except ImportError:
-            raise RuntimeError("OpenCV 未安装，请先激活项目环境，再执行 python -m pip install -r requirements.txt。")
+            self._face_detector = create_face_detector()
+        except RuntimeError as exc:
+            try:
+                import cv2
+            except ImportError as import_exc:
+                # create_face_detector 会把"没装 OpenCV"也包成 RuntimeError；降级
+                # 路径自己也要 import cv2，这里不兜住就会把那句引导报错盖成
+                # ModuleNotFoundError，让排障的人以为只是某个可选依赖缺失。
+                raise RuntimeError(
+                    "OpenCV 未安装，请先激活项目环境，再执行 "
+                    "python -m pip install -r requirements.txt"
+                ) from import_exc
+            logger.warning("YuNet 人脸检测不可用（%s），降级为 Haar 级联", exc)
+            self._cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml")
+            if self._cascade.empty():
+                raise RuntimeError(f"人脸检测不可用，且 Haar 级联也加载失败：{exc}") from exc
 
     def analyze_frame(self, frame: Any | None = None) -> VisionState:
         # Haar cascade and lazy model state must not be shared concurrently.
@@ -149,30 +168,57 @@ class EmotiEffLibVisionDetector(VisionDetector):
         except (OSError, ValueError):
             return None
 
-    def _crop_largest_face(self, image):
-        if self._face_cascade is None:
-            raise RuntimeError("人脸检测不可用，不能将整张场景图作为人脸。")
+    def _yunet_face_box(self, image, width, height):
+        """YuNet 给出的最大人脸框 ``(x, y, w, h)``；没检出返回 ``None``。"""
+        import cv2
+
+        # YuNet 走 OpenCV 自带的 dnn，输入必须三通道 BGR：送灰度会报
+        # "Number of input channels should be multiple of 3"，送 RGB 不报错但会
+        # 静默丢掉大部分人脸。它也不按第一帧推断尺寸，每帧都要 setInputSize。
+        self._face_detector.setInputSize((width, height))
+        _, faces = self._face_detector.detect(cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        # detect 的 retval 恒为 1，判断有没有检出只能看 faces 本身。
+        if faces is None or len(faces) == 0:
+            return None
+        return tuple(
+            int(round(value)) for value in
+            max(faces, key=lambda face: face[2] * face[3])[:4]
+        )
+
+    def _haar_face_box(self, image):
+        """降级路径：Haar 级联两档参数重试，取面积最大的框。"""
         import cv2
 
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        faces = self._face_cascade.detectMultiScale(
-            gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48)
-        )
-        # Browser frames are commonly 640-960 px wide; retry with a smaller
-        # minimum face size when the strict pass misses a face.
-        if len(faces) == 0:
-            faces = self._face_cascade.detectMultiScale(
-                gray, scaleFactor=1.05, minNeighbors=3, minSize=(24, 24)
-            )
-        if len(faces) == 0:
+        for scale, neighbors, size in ((1.1, 5, (48, 48)), (1.05, 3, (24, 24))):
+            boxes = self._cascade.detectMultiScale(
+                gray, scaleFactor=scale, minNeighbors=neighbors, minSize=size)
+            if len(boxes):
+                return tuple(
+                    int(value) for value in
+                    max(boxes, key=lambda box: box[2] * box[3])
+                )
+        return None
+
+    def _crop_largest_face(self, image):
+        height, width = image.shape[:2]
+        if self._face_detector is not None:
+            box = self._yunet_face_box(image, width, height)
+        elif self._cascade is not None:
+            box = self._haar_face_box(image)
+        else:
+            raise RuntimeError("人脸检测不可用，不能将整张场景图作为人脸。")
+        if box is None:
             return None
-        x, y, width, height = max(faces, key=lambda box: box[2] * box[3])
-        pad_x = int(width * 0.15)
-        pad_y = int(height * 0.15)
+        x, y, box_width, box_height = box
+        pad_x = int(box_width * 0.15)
+        pad_y = int(box_height * 0.15)
         left = max(0, x - pad_x)
         top = max(0, y - pad_y)
-        right = min(image.shape[1], x + width + pad_x)
-        bottom = min(image.shape[0], y + height + pad_y)
+        right = min(width, x + box_width + pad_x)
+        bottom = min(height, y + box_height + pad_y)
+        if right <= left or bottom <= top:
+            return None
         return image[top:bottom, left:right]
 
 

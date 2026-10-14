@@ -55,7 +55,7 @@ REM ---------- [2/4] 后端 FastAPI ----------
 netstat -ano | findstr ":8000 " | findstr "LISTENING" >nul 2>&1
 if errorlevel 1 (
   echo [2/4] 启动后端 FastAPI（127.0.0.1:8000，首次加载模型约 30~90 秒）...
-  start "心晴-后端-8000" /D "%ROOT%backend" cmd /k "%PY%" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+  start "心晴-后端-8000" /D "%ROOT%" cmd /k "%PY%" -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ) else (
   echo [2/4] 端口 8000 已在监听，跳过启动后端。
 )

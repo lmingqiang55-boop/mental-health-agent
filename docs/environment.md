@@ -66,9 +66,10 @@ if (-not (Test-Path -LiteralPath .env)) {
 | `ASR_PROVIDER=sensevoice` | 启用真实语音转写 |
 | `ASR_DEVICE=cuda:0` | 使用 NVIDIA GPU 进行语音推理 |
 | `VISION_PROVIDER=emotiefflib` | 启用真实表情分析 |
+| `TTS_PROVIDER` | 语音 provider，默认 `cosyvoice`，备选 `edge`；配置的不可用时自动退到另一个 |
 | `DASHSCOPE_API_KEY` | 阿里云百炼语音合成密钥；只在后端使用 |
 | `DASHSCOPE_WORKSPACE_ID` | 华北2（北京）业务空间 ID，例如 `ws-...` |
-| `TTS_MODEL` / `TTS_VOICE` | 默认 `cosyvoice-v3-flash` / `longyingtao_v3` |
+| `TTS_MODEL` / `TTS_VOICE` | 默认 `cosyvoice-v3-flash` / `longyingtao_v3`；备选 `edge` 需要 `edge-tts>=7.3.1`（更早版本合成稳定 403） |
 
 `.env.example` 保留 `ASR_PROVIDER=disabled`、`ASR_DEVICE=cpu` 和
 `VISION_PROVIDER=emotiefflib` 的默认值；真实视觉需要依赖和模型权重。
@@ -91,7 +92,10 @@ if (-not (Test-Path -LiteralPath .env)) {
 
 首次启用真实语音与视觉需要联网下载模型并预留缓存空间。
 `GET /api/audio/status` 的 `state=ready` 表示语音模型可以接收请求；
-`GET /api/tts/status` 的 `state=ready` 表示语音播报已配置；
+`GET /api/tts/status` 的 `state=ready` 表示语音播报已配置、且最近一次真实合成没
+失败（`degraded` 看 `last_error`，`unconfigured` 看 `reason`）；`configured_provider`
+与 `fallback_reason` 说明是否退到了备选 provider。`POST /api/tts/probe` 会真合成
+两个字的短文本并按 provider 缓存 60 秒，是唯一能证明"现在能出声"的自检；
 `/api/health` 只表示 Web 服务可用。使用 `--reload` 时，重载也会重新加载模型。
 
 可选 faster-whisper 对照工具的安装与运行见

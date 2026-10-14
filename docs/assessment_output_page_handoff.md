@@ -15,7 +15,7 @@
 5. 单独展示 `result.risk.risk_level` 风险提示。它与关注等级是两套结果，不能互相替代；`risk_score` 不是患病概率。
 6. 如需给老师看，可展示非空的 `risk_reasons`、`risk_types`、`key_evidence` 和 `requires_intervention`；`key_evidence` 可能包含对话原文。
 
-`report` 是当前实际返回的 `EvaluationOutput`，由已算出的分数、视觉数据可用性和独立风险结果生成模板文案。没有可靠前后对比时，`trend` 为 `unclear`；没有可靠一致性计算时，`consistency_level` 为 `unknown`、`consistency_score` 为 `null`。页面应如实展示这些状态，不要把“关注等级”写成抑郁症诊断等级。
+`report` 是当前实际返回的 `EvaluationOutput`，由已算出的分数、视觉数据可用性和独立风险结果生成模板文案。没有可靠前后对比时，`trend` 为 `unclear`。视觉一致性只在有视觉数据、且至少 2 句能同时拿到文字情绪与人脸效价时才计算：`consistency_score` 是 0～100 的整数，`consistency_level` 取 `low` / `moderate` / `high`；没有视觉数据或可比较的句子不足时才是 `null` 与 `unknown`，此时 `summary` 会写明是哪一种情况。该分数只表示文字自述与面部表现是否对得上，不代表诊断置信度，也不表示受访者是否诚实。页面应如实展示这些状态，不要把“关注等级”写成抑郁症诊断等级。
 
 ## 2. 字段与展示文案
 
@@ -36,7 +36,7 @@
 | `result.report.overall_status.summary` | 字符串 | 总体说明 | `report.overall_status.level/concern_index` 与顶层字段相同。 |
 | `result.report.primary_concern` | `{dimension, description}` | 最值得关注的方面 | `dimension` 为五维字段名之一。 |
 | `result.report.key_findings` | 2～4 个 `{title, description}` | 关键发现 | 当前按突出维度生成；不是临床诊断结论。 |
-| `result.report.multimodal_observation` | `{consistency_score, consistency_level, summary}` | 多模态观察 | `unknown` 时分数为 `null`，不要展示为 0 分。 |
+| `result.report.multimodal_observation` | `{consistency_score, consistency_level, summary}` | 多模态观察 | 分数 0～100，等级 `low` / `moderate` / `high`；只有 `unknown` 时分数才是 `null`，此时不要展示为 0 分。 |
 | `result.report.trend_and_suggestions` | `{trend, trend_summary, suggestions}` | 趋势解读与建议 | `suggestions` 为 2～4 条；缺少纵向依据时趋势是 `unclear`。 |
 | `result.report.metadata` | 版本、评估 ID、生成时间 | 不必展示 | 供后端追踪；与顶层结果保持一致。 |
 | `result.risk.risk_level` | `low` / `medium` / `high` | 风险提示：低 / 中 / 高 | 独立的规则式风险识别。 |
@@ -82,7 +82,7 @@
 ## 5. 交接验收
 
 - 用 [示例 JSON](examples/assessment_response.json) 能显示五维、关注指数、两套等级和生成时间；空数组不显示成空白标签。
-- 能显示 `report` 的总体说明、重点方面、2 条以上关键发现、趋势解读和 2 条以上建议；`unknown` / `unclear` 如实展示，不虚构趋势或视觉一致性。
+- 能显示 `report` 的总体说明、重点方面、2 条以上关键发现、趋势解读和 2 条以上建议；`unknown` / `unclear` 如实展示，不虚构趋势；`consistency_score` 有值时按其等级展示，为 `null` 时说明本次没有可比较的视觉证据，两种情形都不写成医学结论。
 - 页面能区分对话接口的本轮 `risk` 与评估接口的最终 `result.risk`。
 - 只传 `session_id` 即可触发有历史消息的文字评估；成功后可用 `result_id` 加 `session_id` 再次读取。
 - `503`、`404`、`422` 时展示明确错误，不显示上一份结果为本次结果。

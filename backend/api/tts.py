@@ -1,13 +1,20 @@
 """Read a saved assistant reply and return its synthesized audio."""
 
 import asyncio
+import time
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.api.errors import session_not_found
-from backend.audio.tts import TTSError, get_tts_service
+from backend.audio.tts import (
+    PROBE_TEXT,
+    TTSError,
+    configured_provider_name,
+    get_tts_service,
+    provider_unavailable_reason,
+)
 from backend.core.session_manager import session_manager
 from backend.models.enums import MessageRole
 from backend.models.states import SessionState
@@ -21,12 +28,94 @@ class SynthesizeRequest(BaseModel):
     turn_count: int = Field(ge=0)
 
 
+#: 最近一次合成失败（按 provider 记录）。``config.ready`` 只能证明配置与依赖
+#: 齐了，证明不了上游此刻可达——edge-tts 的 7.2.8 及更早版本就是这样：依赖装
+#: 得好好的，真合成却稳定 403。把真实失败留在状态接口上，前端才不会一直显示
+#: "语音可用"。
+_LAST_FAILURE: dict[str, str] = {}
+
+#: 真探测的缓存与超时。合成两个字成本可忽略，但前端可能连点，缓存 60 秒够用；
+#: 超时比 provider 自己的 ``timeout_seconds``（默认 30 秒）短一些，避免把请求
+#: 挂死——探测的结论只有"通"和"不通"两种，不差这点耐心。
+PROBE_CACHE_SECONDS = 60.0
+PROBE_TIMEOUT_SECONDS = 15.0
+_PROBE_CACHE: dict[str, tuple[float, dict]] = {}
+
+
+def _probe_snapshot(provider: str) -> dict | None:
+    cached = _PROBE_CACHE.get(provider)
+    if cached is None:
+        return None
+    return {**cached[1], "cached": True} if time.time() - cached[0] < PROBE_CACHE_SECONDS else None
+
+
 @router.get("/status")
 def tts_status() -> dict:
     service = get_tts_service()
-    return {"state": "ready" if service.config.ready else "unconfigured",
-            "model": service.config.model if service.config.ready else None,
-            "voice": service.config.voice if service.config.ready else None}
+    provider = service.config.provider_name
+    ready = bool(service.config.ready)
+    last_error = _LAST_FAILURE.get(provider)
+    state = "unconfigured" if not ready else ("degraded" if last_error else "ready")
+    # 配置的 provider 不可用时 get_tts_service 会静默退到另一个；只报生效的那个
+    # 会让"Key 配错"看起来和"一切正常"一模一样，所以把回退本身也报出来。
+    configured = configured_provider_name()
+    return {"state": state,
+            "provider": provider,
+            "configured_provider": configured,
+            "fallback_reason": (
+                None if configured == provider
+                else provider_unavailable_reason(configured)),
+            "model": service.config.model if ready else None,
+            "voice": service.config.voice if ready else None,
+            "reason": None if ready else service.config.unavailable_reason,
+            "last_error": last_error,
+            # 只有真合成过才会有值；没探测过就是 None，别把 None 当成"通"。
+            "last_probe": _probe_snapshot(provider)}
+
+
+@router.post("/probe")
+async def probe_speech() -> dict:
+    """真合成一小段，回答"现在到底能不能出声"。
+
+    为什么单独做一个接口：``/api/tts/status`` 看到的是配置；``/voices/list`` 之类
+    的轻量探测**不算数**（实测它一直返回 200，而合成一直返回 403）。唯一可信的
+    证据是真合成一次。这里合成两个字，成本可忽略，结果缓存 ``PROBE_CACHE_SECONDS``。
+
+    前端可以在用户点"测试语音"时调用，或让老师端在开课前自检。
+    """
+    service = get_tts_service()
+    provider = service.config.provider_name
+    cached = _PROBE_CACHE.get(provider)
+    if cached is not None and time.time() - cached[0] < PROBE_CACHE_SECONDS:
+        return {**cached[1], "cached": True}
+    base = {"provider": provider,
+            "voice": service.config.voice,
+            "model": service.config.model,
+            "checked_at": time.time()}
+    if not service.config.ready:
+        result = {**base, "ok": False, "latency_ms": None, "audio_bytes": 0,
+                  "error": service.config.unavailable_reason or "语音服务尚未配置。",
+                  "cached": False}
+        _PROBE_CACHE[provider] = (time.time(), result)
+        return result
+    started = time.perf_counter()
+    try:
+        audio = await asyncio.wait_for(service.synthesize(PROBE_TEXT),
+                                       timeout=PROBE_TIMEOUT_SECONDS)
+    except (TTSError, asyncio.TimeoutError) as exc:
+        reason = "语音服务响应超时。" if isinstance(exc, asyncio.TimeoutError) else str(exc)
+        _LAST_FAILURE[provider] = reason
+        result = {**base, "ok": False,
+                  "latency_ms": int((time.perf_counter() - started) * 1000),
+                  "audio_bytes": 0, "error": reason, "cached": False}
+        _PROBE_CACHE[provider] = (time.time(), result)
+        return result
+    _LAST_FAILURE.pop(provider, None)
+    result = {**base, "ok": True,
+              "latency_ms": int((time.perf_counter() - started) * 1000),
+              "audio_bytes": len(audio), "error": None, "cached": False}
+    _PROBE_CACHE[provider] = (time.time(), result)
+    return result
 
 
 @router.post("", response_class=Response)
@@ -45,11 +134,14 @@ async def synthesize_reply(request: SynthesizeRequest) -> Response:
     if not text.strip() or len(text) > 2000:
         raise HTTPException(status_code=422, detail={
             "code": "INVALID_TTS_TEXT", "message": "这轮回复无法合成语音。"})
+    service = get_tts_service()
     try:
-        audio = await get_tts_service().synthesize(text)
+        audio = await service.synthesize(text)
     except TTSError as exc:
+        _LAST_FAILURE[service.config.provider_name] = str(exc)
         raise HTTPException(status_code=503, detail={
             "code": "TTS_UNAVAILABLE", "message": str(exc)}) from exc
+    _LAST_FAILURE.pop(service.config.provider_name, None)
     return Response(content=audio, media_type="audio/mpeg",
                     headers={"Cache-Control": "no-store"})
 

@@ -6,18 +6,20 @@ from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.core.multimodal_fusion import fuse_turn
 from backend.core.risk_engine import assess_risk
 from backend.core.screening_flow import completion_reason, limit_topic, record_answer
+from backend.core.multimodal_consistency import TurnDiscordance
 from backend.core.visual_acknowledgment import (
-    VisualAcknowledgment, select_visual_observation,
+    VisualAcknowledgment, select_visual_checkin, select_visual_observation,
+    select_visual_tone,
 )
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.llm.prompts import QUESTIONS
 from backend.models.dialogue import (
     DialogueAgentRequest, DialogueCurrentUserInput, DialogueDecision,
-    DialogueHistoryMessage, DialogueVisual,
+    DialogueHistoryMessage, DialogueVisual, DialogueVisualDiscordance,
 )
 from backend.models.enums import MessageRole, SessionStage
-from backend.models.responses import DialogueResponsePayload
+from backend.models.responses import DialogueResponsePayload, VisualFeedback
 from backend.models.states import RiskResult, SessionState, VisionState, _now
 from backend.policy.client import (
     HttpPolicyClient,
@@ -95,13 +97,35 @@ class DialogueManager:
         visual = select_visual_observation(
             session, utterance_id, current_vision)
         visual_ack = visual.emotion
+        # 表情说不出名字时退一步：这一句是不是"说的和显示的反着来"？
+        # 这条通道只要真实新鲜的人脸加有效价，不要求表情有高置信度的名字。
+        checkin = (
+            select_visual_checkin(session, utterance_id, current_vision, user_text)
+            if visual_ack is None else None
+        )
+        discordance = checkin.discordance if checkin is not None else None
+        # 既不构成矛盾、又拿不到说得出口的名字时，只剩最后一条通道：只凭连续效价
+        # 说一句整体语气。三选一，一轮最多提一次外观。
+        reading = (
+            select_visual_tone(session, utterance_id, current_vision)
+            if visual_ack is None and discordance is None else None
+        )
+        tone = reading.tone if reading is not None else None
+        if discordance is not None:
+            visual = VisualFeedback(reason=checkin.reason)
+        elif tone is not None:
+            visual = VisualFeedback(reason=reading.reason)
         reply = self._generate_reply(
-            session, user_text, current_vision, decision, visual_ack)
+            session, user_text, current_vision, decision, visual_ack,
+            visual_discordance=discordance, visual_tone=tone)
         if visual_ack is not None:
             session.last_visual_observation_turn = session.turn_count
             visual.reason = "mentioned" if any(
                 phrase in reply for phrase in ("看起来", "看上去", "表情", "神情", "脸上", "显得")
             ) else "generation_omitted"
+        elif discordance is not None or tone is not None:
+            # 核对与语气同样算"提过一次外观"，要进冷却，免得连着几轮盯着表情说。
+            session.last_visual_observation_turn = session.turn_count
         return DialogueResponsePayload(
             reply=reply,
             next_strategy=decision.actions[-1].value,
@@ -127,7 +151,9 @@ class DialogueManager:
                         current_vision: VisionState | None,
                         decision: PolicyDecision | None,
                         visual_ack: VisualAcknowledgment | None,
-                        *, closing_reason: str | None = None) -> str:
+                        *, closing_reason: str | None = None,
+                        visual_discordance: TurnDiscordance | None = None,
+                        visual_tone: str | None = None) -> str:
         """Pass the selected actions to the dialogue Agent; never use canned questions."""
         history = session.conversation_history
         if (history and history[-1].role == MessageRole.USER
@@ -151,6 +177,14 @@ class DialogueManager:
                 text=user_text, visual=_dialogue_visual(current_vision),
             ),
             visual_observation=visual_ack,
+            visual_discordance=(
+                DialogueVisualDiscordance(
+                    text_polarity=visual_discordance.text_polarity,
+                    vision_valence=visual_discordance.vision_valence,
+                )
+                if visual_discordance is not None else None
+            ),
+            visual_tone=visual_tone if visual_tone in ("low", "bright") else None,
             finish_screening=closing_reason is not None,
         )
         if self._dialogue_agent is not None:

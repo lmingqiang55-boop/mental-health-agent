@@ -55,8 +55,14 @@ def http_json(url: str, timeout: float = 3.0):
         return None
 
 
-def wait_http(url: str, seconds: float = 45.0) -> bool:
-    deadline = time.time() + seconds
+#: ASR_PROVIDER=sensevoice 时 lifespan 会先加载模型，期间 /api/health 不响应；
+#: 首次运行还要叠加权重下载。45 秒会把"正在加载"误判成"启动失败"。
+HEALTH_WAIT_SECONDS = float(os.getenv("STARTUP_HEALTH_WAIT_SECONDS", "600"))
+
+
+def wait_http(url: str, seconds: float | None = None) -> bool:
+    total = HEALTH_WAIT_SECONDS if seconds is None else seconds
+    deadline = time.time() + total
     while time.time() < deadline:
         if http_json(url, timeout=1.5) is not None:
             return True

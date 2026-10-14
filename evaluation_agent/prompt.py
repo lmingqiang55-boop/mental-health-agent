@@ -234,10 +234,9 @@ def _format_metric(value: float | None, digits: int = 2) -> str:
 def _has_any_measurement(snapshot: VisionState) -> bool:
     """快照里是否真的带了任何一项测量值。
 
-    上游的每个指标都可以是 ``None``（没检测到人脸、模型不输出该指标），
-    因此一个"存在但全空"的快照（例如 ``{}``）其实等于**没有视觉数据**。
-    要把它和"测到了、值就是低"区分开——否则会渲染出一行全是"未采集"、
-    还顺带断言"未检测到人脸"的噪音，误导模型。
+    上游的每个指标都可以是 ``None``（没检测到人脸、模型不输出该指标）。
+    一个"存在但全空"的快照（例如 ``{}``）与"跑了检测但什么都没输出"在数据上
+    长得完全一样，因此它只能按**未检出人脸**处理，不能当成"没有视觉数据"。
     """
     if snapshot.face_detected:
         return True
@@ -259,11 +258,16 @@ def _has_any_measurement(snapshot: VisionState) -> bool:
 def _render_vision_line(snapshot: VisionState | None) -> str:
     """把一条消息的句级视觉状态渲染成一行附注。
 
-    返回空串表示"这句话没有可用的视觉数据"，此时不输出任何附注——
-    比输出一行"全部未采集"更干净，也不会让模型以为有什么异常。
+    只有 ``snapshot is None``——这句话**根本没有**视觉数据——才返回空串。
+    只要上游附了快照就一定要输出一行，并且显式写明人脸是否检出：
+    "采集了、但画面里没有人脸"与"根本没采集"语义相反，以前两者都被渲染成
+    空行，评估模型无从分辨，只有会话级的 ``face_present_ratio`` 间接透露。
     """
-    if snapshot is None or not _has_any_measurement(snapshot):
+    if snapshot is None:
         return ""
+    if not _has_any_measurement(snapshot):
+        # 检测跑了却一项指标都没有，只能如实写"未检出人脸"，不静默成空行。
+        return "    〔视觉：未检出人脸〕"
 
     parts: list[str] = []
     if snapshot.emotion is not None:
@@ -282,8 +286,7 @@ def _render_vision_line(snapshot: VisionState | None) -> str:
         parts.append(f"注视稳定={snapshot.gaze_focus:.2f}")
     if snapshot.micro_expression_intensity is not None:
         parts.append(f"微表情强度={snapshot.micro_expression_intensity:.2f}")
-    if snapshot.face_detected:
-        parts.append("有人脸")
+    parts.append("有人脸" if snapshot.face_detected else "未检出人脸")
 
     return "    〔视觉：" + "，".join(parts) + "〕"
 
@@ -323,7 +326,8 @@ def build_user_prompt(evaluation_input: EvaluationInput) -> str:
       是什么状态"；
     - **会话级**：单独一节，说明"整段对话整体如何、走向如何"。
 
-    句级快照缺失的消息不输出任何附注，避免大片"未采集"干扰阅读。
+    只有完全没有快照（``None``）的消息不输出附注；附了快照就一定写清人脸是否
+    检出，避免"采集了但画面里没有人脸"和"根本没采集"被渲染成同一个样子。
     """
     dialogue_lines: list[str] = []
     vision_sample_count = 0
@@ -348,7 +352,8 @@ def build_user_prompt(evaluation_input: EvaluationInput) -> str:
     else:
         vision_hint = (
             f"本段对话共 {vision_sample_count} 条消息带有句级视觉数据，"
-            "各条紧跟在对应消息下方（缩进标注）。"
+            "各条紧跟在对应消息下方（缩进标注）。标注“未检出人脸”只说明该句采集时"
+            "没有可用人脸，不表示用户遮脸、低头或刻意回避，不要据此推测原因。"
         )
 
     return f"""## 对话记录（按时间顺序，共 {len(evaluation_input.dialogue_history)} 条）

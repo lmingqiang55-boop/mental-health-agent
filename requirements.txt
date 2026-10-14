@@ -19,7 +19,14 @@ python-dotenv==1.2.4
 python-multipart==0.0.32
 
 # Speech synthesis for assistant replies (Microsoft Edge neural voices, free).
-edge-tts==7.2.8
+# 7.2.8 及更早版本的合成握手会稳定返回 403；7.3.1 已在本机实测可合成。
+# "声音列表"之类的轻量探测不算数（它一直 200），唯一可信的验证是真合成一次，
+# 即 POST /api/tts/probe。
+edge-tts==7.3.1
+
+# Chinese sentiment dictionaries (HowNet + DLUT ontology) for the text side of the
+# multimodal consistency score. Doubles as the negation/adverb rule set.
+cnsenti==0.0.7
 
 # Grounded Chinese psychological-support knowledge retrieval and offline HTML parsing.
 jieba==0.42.1

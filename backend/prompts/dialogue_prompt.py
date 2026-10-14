@@ -40,6 +40,58 @@ VISUAL_OBSERVATION_NAMES = {
     "happy": "开心", "sad": "难过", "fearful": "紧张", "angry": "烦躁",
 }
 
+VISUAL_TONE_NAMES = {
+    "low": "偏低落（低落、疲惫、提不起劲那一类）",
+    "bright": "偏轻松（放松、愉快那一类）",
+}
+
+
+def _polarity_phrase(value: float) -> str:
+    """把 -1~1 的极性说成人话，供核对句描述用。"""
+    return "积极（轻松、开心一类）" if value > 0 else "消极（低落、疲惫一类）"
+
+
+def _visual_section(request: DialogueAgentRequest) -> str:
+    """【本轮视觉观察】的正文；四种情况互斥，只有一种会出现。
+
+    优先核对而不是顺口一提：当后端判定"说的和显示的反着来"，先按核对的要求写，
+    免得同一句里既报出一个情绪名字又要去核对，前后打架。说不出名字时退一步
+    只用整体语气，措辞上**不许把语气说成某个具体情绪**——那正是这一档要避免的
+    过度解读。
+    """
+    discordance = request.visual_discordance
+    if discordance is not None:
+        return (
+            f"这一句说出来的情绪偏{_polarity_phrase(discordance.text_polarity)}，"
+            f"但画面上的表情偏{_polarity_phrase(discordance.vision_valence)}，两者方向相反。"
+            "先用一句话接住他说出来的内容，再用试探的语气核对一次，"
+            "例如“你说还好，不过看你好像有点累，是这样吗？”。"
+            "只核对一次：不下结论，不说他在掩饰、逞强或不诚实，不把它变成新的情绪话题，"
+            "主要问题仍必须围绕 decision.topic。"
+            "整句由你根据上下文组织，不要提摄像头、检测器或数值。"
+        )
+    if request.visual_observation:
+        return (
+            f"可靠画面提供的外观线索：{VISUAL_OBSERVATION_NAMES[request.visual_observation]}。"
+            "请把这项线索自然融入执行 decision 的完整回复，例如用‘你看起来……’带出当前问题；"
+            "主要问题仍必须围绕 decision.topic，不要转而追问表情或另一个情绪话题。"
+            "整句由你根据上下文组织，不要套固定开头。语气保持试探，不把表情当作用户内心感受或诊断，"
+            "不要提摄像头、检测器或数值。"
+        )
+    if request.visual_tone:
+        return (
+            f"可靠画面显示他此刻的状态{VISUAL_TONE_NAMES[request.visual_tone]}，"
+            "这是**外观线索**，不是他说的内容，也**不是**一个具体情绪，"
+            "只是画面整体的轻重方向。"
+            "必须用一句外观描述把它带进回复（如“你看起来有点累”“感觉你今天没什么精神”），"
+            "不能只当成上下文背景；"
+            "但不能命名具体情绪（不说“你很伤心”“你在焦虑”），也不能当成对他内心的判断。"
+            "先接住他说出来的内容，再带一次外观描述，只提一次；"
+            "主要问题仍必须围绕 decision.topic。"
+            "整句由你根据上下文组织，不要提摄像头、检测器或数值。"
+        )
+    return "本轮没有可口头提及的视觉观察。"
+
 
 DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue Agent（对话生成 Agent）。
 
@@ -65,8 +117,13 @@ DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue 
 7. visual（视觉标签）：仅用于辅助理解用户当前表达状态，可以影响语气、共情程度、
    措辞的柔和程度、以及问句的表达方式。但必须遵守：
    - 不得把视觉标签作为医学诊断依据；
-   - 只有本轮明确给出 visual_observation 时，才可以自然提及用户看起来的状态；
-   - 没有 visual_observation 时，不要根据原始视觉标签自行描述用户的表情；
+   - 只有本轮明确给出 visual_observation、visual_discordance 或 visual_tone 时，
+     才可以自然提及用户看起来的状态；
+   - 三者都没有时，不要根据原始视觉标签自行描述用户的表情；
+   - 给出 visual_discordance 时，只做一次温和核对：先接住他说的内容，再用试探的
+     语气确认一句，不下任何结论，不说他在掩饰、逞强或不诚实，也不要反复追问同一件事；
+   - 给出 visual_tone 时，那只是画面整体的轻重方向，不是情绪名字：可以说“你看起来
+     有点累”这类语气描述，不可以说“你很伤心”“你在焦虑”，也不要把它当成对内心的判断；
    - 不得出现“我检测到你的 valence 是 -0.5”这类表达。
 
 【执行 decision 的方式】
@@ -237,14 +294,7 @@ def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
             if len(request.current_user_input.text.strip()) <= 12 else
             "根据实际需要回应或提问；不要每一轮先复述再提问，避免重复最近回复的开头。"
         ),
-        "【本轮视觉观察】\n" + (
-            f"可靠画面提供的外观线索：{VISUAL_OBSERVATION_NAMES[request.visual_observation]}。"
-            "请把这项线索自然融入执行 decision 的完整回复，例如用‘你看起来……’带出当前问题；"
-            "主要问题仍必须围绕 decision.topic，不要转而追问表情或另一个情绪话题。"
-            "整句由你根据上下文组织，不要套固定开头。语气保持试探，不把表情当作用户内心感受或诊断，"
-            "不要提摄像头、检测器或数值。"
-            if request.visual_observation else "本轮没有可口头提及的视觉观察。"
-        ),
+        "【本轮视觉观察】\n" + _visual_section(request),
         (
             "【任务】\n"
             "请严格按照上游最终决策，结合其他上下文生成下一句回复。\n"

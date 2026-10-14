@@ -59,11 +59,24 @@ class VisionFrameRequest(BaseModel):
 
 
 class VisionCaptureRequest(BaseModel):
+    """开始/结束一次摄像头采集。
+
+    ``capture_id`` 只在**开始**采集时必填。结束采集时它没有信息量——服务端
+    本来就是按 ``session_id`` 把 ``active_vision_capture_id`` 置空，硬性要求
+    非空只会让"关摄像头"这件事平白变成一个 422。为此这里允许 ``active=false``
+    时省略或传 null，同时保留 ``active=true`` 必须给出标识的约束。
+    """
     model_config = ConfigDict(extra="forbid")
     session_id: str
-    capture_id: str = Field(min_length=1, max_length=128, pattern=r"\S")
+    capture_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"\S")
     generation: int = Field(ge=0)
     active: bool
+
+    @model_validator(mode="after")
+    def complete_capture(self) -> "VisionCaptureRequest":
+        if self.active and self.capture_id is None:
+            raise ValueError("active 为真时必须提供 capture_id")
+        return self
 
 
 class VisionSegmentRequest(BaseModel):

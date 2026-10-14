@@ -6,9 +6,21 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.models.states import _now
+
+
+#: 心情档位（1 最差 ~ 5 最好）→ 该档位常见的心情标签。
+#: 取值必须落在 ``backend.core.heal_store.MOOD_TAGS`` 那套词里：学生端
+#: 「按此刻的心情看看」就是拿这些词去匹配内容卡片的 ``tags``。
+MOOD_LEVEL_TAGS: dict[int, tuple[str, ...]] = {
+    1: ("想哭", "委屈", "孤单"),
+    2: ("焦虑", "紧张", "累"),
+    3: ("烦躁", "无聊", "困"),
+    4: ("平静", "放松"),
+    5: ("开心", "有精神"),
+}
 
 
 class MoodEntry(BaseModel):
@@ -40,7 +52,14 @@ class FocusSession(BaseModel):
 
 
 class HealContent(BaseModel):
-    """治愈工具箱内容卡片。"""
+    """治愈工具箱内容卡片。
+
+    ``category`` / ``tags`` / ``summary`` 是学生端页面**直接读取**的三个字段
+    （``frontend-vue/student/src/views/heal/Toolkit.vue``：分类标签取
+    ``c.category``、按心情筛选取 ``c.tags?.includes(tag)``、简介取 ``c.summary``
+    或 ``c.body``）。它们不需要在内容清单里重复填写，由 ``tag`` / ``moods`` /
+    ``desc`` 推导，避免两份数据各自漂移。
+    """
     id: str
     title: str
     tag: str
@@ -48,3 +67,24 @@ class HealContent(BaseModel):
     cover: str
     desc: str
     moods: list[int] = Field(default_factory=list, description="适用的心情档位 1-5")
+
+    category: str = Field(default="", description="展示用分类，默认取 tag")
+    tags: list[str] = Field(
+        default_factory=list,
+        description="心情标签，取值与 MOOD_TAGS 同一套词，供前端按心情筛选")
+    summary: str = Field(default="", description="展示用简介，默认取 desc")
+
+    @model_validator(mode="after")
+    def fill_display_fields(self) -> "HealContent":
+        if not self.category:
+            self.category = self.tag
+        if not self.summary:
+            self.summary = self.desc
+        if not self.tags:
+            merged: list[str] = []
+            for level in sorted(self.moods):
+                for label in MOOD_LEVEL_TAGS.get(level, ()):
+                    if label not in merged:
+                        merged.append(label)
+            self.tags = merged
+        return self

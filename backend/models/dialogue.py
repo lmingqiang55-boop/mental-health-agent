@@ -119,6 +119,22 @@ class DialogueCurrentUserInput(BaseModel):
     )
 
 
+class DialogueVisualDiscordance(BaseModel):
+    """本轮"说出来的情绪"与"脸上的效价"方向相反。
+
+    只在后端判定为矛盾时给出；两项极性放在一起是为了让对话 Agent 知道
+    *哪一边是哪一边*，从而能组织出"你刚说还好，不过看你好像有点累"这类
+    核对句，而不是把两个数字念出来。
+    """
+
+    text_polarity: float = Field(
+        ..., description="这一句文字自述的极性，[-1, 1]，正为积极、负为消极"
+    )
+    vision_valence: float = Field(
+        ..., description="这一句对应的人脸效价，[-1, 1]，正为积极、负为消极"
+    )
+
+
 class DialogueAgentRequest(BaseModel):
     """Dialogue Agent 的完整输入。
 
@@ -144,6 +160,20 @@ class DialogueAgentRequest(BaseModel):
     )
     visual_observation: Optional[Literal["happy", "sad", "fearful", "angry"]] = Field(
         default=None, description="本轮允许自然提及的一项可靠视觉线索；为空则不主动提及外观"
+    )
+    visual_discordance: Optional[DialogueVisualDiscordance] = Field(
+        default=None,
+        description=(
+            "本轮文字自述与面部表现方向相反时给出；有值时按温和核对的表达要求回应，"
+            "允许提及用户看起来的状态，但只核对一次、不下结论"
+        ),
+    )
+    visual_tone: Optional[Literal["low", "bright"]] = Field(
+        default=None,
+        description=(
+            "本轮允许只凭连续效价提及的整体感受（low=偏低落，bright=偏轻松）；"
+            "模型给不出说得出口的情绪名字时才用它，有值时同样只顺口提一句"
+        ),
     )
     finish_screening: bool = Field(default=False, description="本轮仅收尾，不能继续提出问题")
     extra: Dict[str, Any] = Field(
