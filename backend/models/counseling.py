@@ -71,7 +71,11 @@ class AppointmentStatusUpdate(BaseModel):
 
 
 class ICBTUnit(BaseModel):
-    """一个 iCBT 单元。"""
+    """一个 iCBT 单元。
+
+    ``steps`` 是步骤数量（管理端展示用的计数），单元正文存在 ``content_steps``，
+    两者互不影响：管理端仍可只改计数/标题，学生端读到的是完整正文。
+    """
 
     id: str
     no: int = Field(ge=1)
@@ -82,6 +86,10 @@ class ICBTUnit(BaseModel):
     est_minutes: int = Field(default=10, ge=1, le=120)
     status: ICBTStatus = "published"
     audience: str | None = Field(default=None, max_length=64)
+    goal: str = Field(default="", max_length=200, description="本单元要达成的小目标")
+    content_steps: list[str] = Field(default_factory=list, description="单元正文步骤（学生端渲染）")
+    source: str = Field(default="", max_length=120, description="循证出处，如 CBT 认知模型")
+    source_note: str = Field(default="", max_length=300, description="出处补充说明")
     updated_at: datetime = Field(default_factory=_now)
 
 
@@ -132,7 +140,39 @@ class ICBTUnitListResponse(BaseModel):
     units: list[ICBTUnitView]
 
 
+class ICBTCatalogResponse(BaseModel):
+    """学生端目录：仅含已发布单元的正文/来源，不含管理端统计。"""
+
+    units: list[ICBTUnit]
+
+
 class ICBTProgressResponse(BaseModel):
     student_ref: str
     completed_units: list[str]
     updated_at: datetime | None = None
+
+
+# ---------- 想法自查（大模型辅助，认知偏差标注）----------
+
+class ICBTAnalyzeRequest(BaseModel):
+    """学生写下的一句话；可选带上正在练习的单元，让小晴的回应更贴合。"""
+
+    text: str = Field(min_length=1, max_length=1000, description="学生写下的想法/自我陈述")
+    unit_title: str | None = Field(default=None, max_length=64)
+    unit_goal: str | None = Field(default=None, max_length=200)
+
+
+class ICBTBias(BaseModel):
+    """命中的一条认知偏差。"""
+
+    name: str = Field(default="", max_length=32)
+    hint: str = Field(default="", max_length=200)
+
+
+class ICBTAnalyzeResponse(BaseModel):
+    """小晴的分析结果；全部字段都有默认值，单个字段缺失不影响整体可用。"""
+
+    biases: list[ICBTBias] = Field(default_factory=list)
+    reframe: str = Field(default="", max_length=500, description="更有弹性的改写建议")
+    encouragement: str = Field(default="", max_length=300, description="一句简短的支持")
+    question: str = Field(default="", max_length=200, description="温和的追问，帮学生继续觉察")

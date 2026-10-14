@@ -24,20 +24,80 @@ from backend.models.states import _now
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "intervention.sqlite3"
 
-# 与前端学生端 iCBT 目录对应的 6 个单元（内容正文仍由学生端本地渲染）
+# 6 个 iCBT 单元：元信息 + 正文 + 循证出处（学生端渲染正文，管理端只维护元信息）
 SEED_ICBT_UNITS: list[ICBTUnit] = [
-    ICBTUnit(id="u1", no=1, title="认识情绪", module="情绪觉察", order=1,
-             steps=3, est_minutes=8, status="published", audience="全体学生"),
-    ICBTUnit(id="u2", no=2, title="想法与情绪", module="认知调整", order=2,
-             steps=3, est_minutes=10, status="published", audience="全体学生"),
-    ICBTUnit(id="u3", no=3, title="识别思维陷阱", module="认知调整", order=3,
-             steps=3, est_minutes=10, status="published", audience="全体学生"),
-    ICBTUnit(id="u4", no=4, title="行为激活", module="行为改变", order=4,
-             steps=3, est_minutes=12, status="published", audience="全体学生"),
-    ICBTUnit(id="u5", no=5, title="应对压力", module="压力管理", order=5,
-             steps=3, est_minutes=12, status="published", audience="全体学生"),
-    ICBTUnit(id="u6", no=6, title="求助与支持", module="社会支持", order=6,
-             steps=3, est_minutes=8, status="published", audience="全体学生"),
+    ICBTUnit(
+        id="u1", no=1, title="认识情绪", module="情绪觉察", order=1,
+        steps=3, est_minutes=8, status="published", audience="全体学生",
+        goal="学会给情绪命名，理解情绪没有对错。",
+        content_steps=[
+            "回想今天最明显的一种情绪，试着用一个词说出它",
+            "给这种情绪的强烈程度打个分（0—10）",
+            "注意它出现时身体有什么感觉（胸口、肩膀、胃…）",
+        ],
+        source="情绪命名（Affect Labeling）",
+        source_note="Lieberman 等 2007 年研究发现，用词语标记情绪能降低杏仁核激活，是情绪调节的第一步。",
+    ),
+    ICBTUnit(
+        id="u2", no=2, title="想法与情绪", module="认知调整", order=2,
+        steps=3, est_minutes=10, status="published", audience="全体学生",
+        goal="看见「想法」如何影响「感受」。",
+        content_steps=[
+            "写下让你难受的一个瞬间",
+            "写下当时脑子里冒出的第一句话",
+            "问自己：这个想法一定是事实吗？有没有别的解释？",
+        ],
+        source="CBT 认知模型",
+        source_note="Beck 认知疗法认为「事件 → 想法 → 情绪」，改变想法可以改变情绪体验。",
+    ),
+    ICBTUnit(
+        id="u3", no=3, title="识别思维陷阱", module="认知调整", order=3,
+        steps=3, est_minutes=10, status="published", audience="全体学生",
+        goal="认识常见的思维偏差，例如「非黑即白」「以偏概全」。",
+        content_steps=[
+            "回想一句你常对自己说的话",
+            "对照：是不是「全或无」「贴标签」「灾难化」？",
+            "把这句话改写得更有弹性一点",
+        ],
+        source="认知偏差清单",
+        source_note="Burns《Feeling Good》(1980) 归纳了「全或无」「贴标签」「灾难化」等常见思维陷阱。",
+    ),
+    ICBTUnit(
+        id="u4", no=4, title="行为激活", module="行为改变", order=4,
+        steps=3, est_minutes=12, status="published", audience="全体学生",
+        goal="通过小小的行动，慢慢把状态带起来。",
+        content_steps=[
+            "列出 3 件以前让你感到一点点愉快的事",
+            "选最简单的一件，今天就做（哪怕只有 5 分钟）",
+            "做完后记录：做之前 / 之后的心情各是多少",
+        ],
+        source="行为激活（Behavioral Activation）",
+        source_note="Martell 等 2010 年的行为激活疗法证明，先行动再改善情绪，对抑郁症状有效。",
+    ),
+    ICBTUnit(
+        id="u5", no=5, title="应对压力", module="压力管理", order=5,
+        steps=3, est_minutes=12, status="published", audience="全体学生",
+        goal="在压力来临时，有一套可以自救的小方法。",
+        content_steps=[
+            "深呼吸 4-7-8：吸气 4 秒、屏住 7 秒、呼气 8 秒，重复 4 次",
+            "把「必须做完」拆成三步，只做第一步",
+            "允许自己休息，休息不是偷懒",
+        ],
+        source="放松训练 · 4-7-8 呼吸法",
+        source_note="延长呼气能激活副交感神经、降低心率，是临床常用的即刻减压方法。",
+    ),
+    ICBTUnit(
+        id="u6", no=6, title="求助与支持", module="社会支持", order=6,
+        steps=3, est_minutes=8, status="published", audience="全体学生",
+        goal="知道什么时候、向谁求助是可以的。",
+        content_steps=[
+            "写下 2 个你信任的人的名字",
+            "想一句可以开口的话：「我最近有点难受，能陪我说说话吗？」",
+            "把 12356 和心理老师联系方式存进手机",
+        ],
+        source="社会支持与求助",
+        source_note="WHO《2022 世界精神卫生报告》强调，主动求助与稳定的社会支持是心理复原力的重要来源。",
+    ),
 ]
 
 
@@ -94,15 +154,37 @@ class CounselingStore:
             connection.close()
 
     def _seed_units(self) -> None:
-        """首次启动写入种子单元；已存在则不覆盖（管理端改动会保留）。"""
+        """写入种子单元；对已存在但缺少正文的单元做内容回填。
+
+        首次启动：全量插入 6 个单元。
+        已有数据：保留管理端改过的元信息，仅当正文为空时补齐 goal/正文/来源。
+        """
         with self._lock, self._connection() as connection:
-            count = connection.execute("SELECT COUNT(*) FROM icbt_units").fetchone()[0]
-            if count:
+            existing = {
+                row[0]: row[1]
+                for row in connection.execute("SELECT id, payload FROM icbt_units").fetchall()
+            }
+            if not existing:
+                for unit in SEED_ICBT_UNITS:
+                    connection.execute(
+                        "INSERT INTO icbt_units (id, ord, payload) VALUES (?, ?, ?)",
+                        (unit.id, unit.order, unit.model_dump_json()),
+                    )
                 return
-            for unit in SEED_ICBT_UNITS:
+            for seed in SEED_ICBT_UNITS:
+                payload = existing.get(seed.id)
+                if payload is None:
+                    continue
+                unit = ICBTUnit.model_validate_json(payload)
+                if unit.content_steps:
+                    continue  # 已有正文，不再覆盖
+                unit.goal = unit.goal or seed.goal
+                unit.content_steps = seed.content_steps
+                unit.source = unit.source or seed.source
+                unit.source_note = unit.source_note or seed.source_note
                 connection.execute(
-                    "INSERT INTO icbt_units (id, ord, payload) VALUES (?, ?, ?)",
-                    (unit.id, unit.order, unit.model_dump_json()),
+                    "UPDATE icbt_units SET payload = ? WHERE id = ?",
+                    (unit.model_dump_json(), seed.id),
                 )
 
     # ---------- 咨询预约 ----------

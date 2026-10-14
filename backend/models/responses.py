@@ -155,6 +155,11 @@ class HealContentsResponse(BaseModel):
     tags: list[str]
 
 
+class ArtReflectResponse(BaseModel):
+    """艺术表达「读画」的陪伴式解读。"""
+    text: str
+
+
 class GrowthResponse(BaseModel):
     """成长回顾汇总（#12）：把心情 / 打卡 / 专注三项合并成一份星光轨迹。"""
     student_ref: str
