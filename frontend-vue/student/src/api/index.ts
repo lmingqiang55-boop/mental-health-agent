@@ -1,4 +1,4 @@
-import { http } from './http'
+import { http, type RequestConfig } from './http'
 import type {
   AssessmentResponse,
   AudioStatusResponse,
@@ -73,13 +73,16 @@ export const visionApi = {
       .then((r) => r.data),
 
   /** 提交一帧即时分析（不落盘）。带时间的三件套必须同时给。 */
-  frame: (payload: {
-    session_id: string
-    image_base64: string
-    frame_id?: string
-    capture_id?: string
-    captured_at_ms?: number
-  }) => http.post('/api/vision/frame', payload).then((r) => r.data),
+  frame: (
+    payload: {
+      session_id: string
+      image_base64: string
+      frame_id?: string
+      capture_id?: string
+      captured_at_ms?: number
+    },
+    config?: RequestConfig,
+  ) => http.post('/api/vision/frame', payload, config).then((r) => r.data),
 
   /** 按发言区间聚合冻结快照；聊天复用返回的 vision_snapshot。 */
   segment: (payload: {

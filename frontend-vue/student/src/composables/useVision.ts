@@ -14,6 +14,10 @@ export function useVision() {
   const error = ref('')
   const videoEl = ref<HTMLVideoElement | null>(null)
   const faceDetected = ref<boolean | null>(null)
+  // 采集健康度：已成功上报的帧数，以及最近一次取帧/快照失败原因。
+  // 供 UI 区分「摄像头没开」与「开了但数据没上去」。
+  const framesSent = ref(0)
+  const uploadError = ref('')
 
   let stream: MediaStream | null = null
   let timer = 0
@@ -70,22 +74,31 @@ export function useVision() {
     const image = grabFrameBase64()
     if (!image || !sessionId || !captureId) return
     try {
-      await visionApi.frame({
-        session_id: sessionId,
-        image_base64: image,
-        frame_id: newFrameId(),
-        capture_id: captureId,
-        captured_at_ms: performance.now() - originAt,
-      })
+      // 高频（约 1 帧/秒）请求用 silent：失败不弹 toast 刷屏，
+      // 改由 uploadError/framesSent 暴露到会话页的采集状态里。
+      await visionApi.frame(
+        {
+          session_id: sessionId,
+          image_base64: image,
+          frame_id: newFrameId(),
+          capture_id: captureId,
+          captured_at_ms: performance.now() - originAt,
+        },
+        { silent: true },
+      )
+      framesSent.value += 1
+      uploadError.value = ''
     } catch (e) {
-      // 单帧失败不打断：采集未开(409)/视觉模型不可用(503) 时静默
-      if (!isApiError(e)) return
+      // 单帧失败不打断采集，但要把原因记下来给 UI 用。
+      uploadError.value = isApiError(e) ? e.message : '摄像头数据未能上传'
     }
   }
 
   /** 开启采集：sessionId + 摄像头流，并开始定时送帧（约 1 帧/秒）。 */
   async function start(sid: string, originMs: number) {
     error.value = ''
+    uploadError.value = ''
+    framesSent.value = 0
     sessionId = sid
     originAt = originMs
     try {
@@ -115,7 +128,9 @@ export function useVision() {
       })
       faceDetected.value = res.vision_snapshot?.face_detected ?? null
       return res.vision_snapshot
-    } catch {
+    } catch (e) {
+      // 快照失败：不阻断对话（这段仍按仅语音评估），但要暴露原因。
+      uploadError.value = isApiError(e) ? e.message : '视觉快照获取失败'
       return null
     }
   }
@@ -141,5 +156,17 @@ export function useVision() {
     void stop()
   })
 
-  return { active, error, videoEl, faceDetected, bindVideo, ensureCaptureId, start, segment, stop }
+  return {
+    active,
+    error,
+    videoEl,
+    faceDetected,
+    framesSent,
+    uploadError,
+    bindVideo,
+    ensureCaptureId,
+    start,
+    segment,
+    stop,
+  }
 }

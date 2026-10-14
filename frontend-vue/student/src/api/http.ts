@@ -19,6 +19,13 @@ export interface RequestConfig {
   silent?: boolean
 }
 
+// 让 `silent` 成为 axios 一等配置项，供各接口按请求传入（拦截器据此决定是否弹 toast）。
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    silent?: boolean
+  }
+}
+
 http.interceptors.response.use(
   (res) => res,
   (err: AxiosError<{ error?: { code?: string; message?: string } }>) => {

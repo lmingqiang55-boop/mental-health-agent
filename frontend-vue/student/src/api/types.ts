@@ -189,9 +189,13 @@ export interface TranscriptionResponse {
 // ---------------- TTS ----------------
 
 export interface TtsStatusResponse {
-  state: 'ready' | 'unconfigured' | string
-  model?: string
-  voice?: string
+  state: 'ready' | 'degraded' | 'unconfigured' | string
+  model?: string | null
+  voice?: string | null
+  /** 缺失的配置项（state=unconfigured 时非空）。 */
+  missing?: string[]
+  /** 上次合成失败原因；成功合成一次后清空。 */
+  last_error?: string | null
 }
 
 // ---------------- Assessment ----------------

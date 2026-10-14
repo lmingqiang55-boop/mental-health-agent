@@ -31,7 +31,16 @@ const sid = String(route.params.id ?? '')
 
 const { recording, elapsedMs, start: startRecording, stop: stopRecording } = useRecorder()
 const { speaking, speak, stop: stopTts } = useTts()
-const { bindVideo, ensureCaptureId, start: startVision, segment, stop: stopVision } = useVision()
+const {
+  active: visionActive,
+  framesSent: visionFrames,
+  uploadError: visionUploadError,
+  bindVideo,
+  ensureCaptureId,
+  start: startVision,
+  segment,
+  stop: stopVision,
+} = useVision()
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 
@@ -43,6 +52,8 @@ const opener = ref(DEFAULT_OPENER)
 const lastUtteranceId = ref<string | null>(null)
 // 已收尾（后端 assessment_ready）：停止普通追问，等待用户点「生成结果」。
 const closing = ref(false)
+// 摄像头开启但起流/上报失败（begin() 里兜底为仅语音）。
+const camFailed = ref(false)
 // 【临时·测试用】手动输入文字直接送给后端决策模型（跳过语音转写），上线前删除。
 const manualText = ref('')
 let guard = 0
@@ -58,6 +69,24 @@ function originMs(): number {
 }
 
 const recordSeconds = computed(() => Math.min(59, Math.floor(elapsedMs.value / 1000)))
+
+/**
+ * 采集状态（P1-6）：让「没开摄像头」与「开了但没传上去」在界面上可区分。
+ * - off  ：仅语音模式（未开启 / 起流失败兜底）
+ * - warn ：已开启但上报失败，或尚未开始采集
+ * - ok   ：已开启且帧正常上报
+ */
+const visionStatus = computed<{ tone: 'off' | 'warn' | 'ok'; text: string }>(() => {
+  if (!visionActive.value) {
+    return assess.camEnabled && !camFailed.value
+      ? { tone: 'warn', text: '摄像头开启中…' }
+      : { tone: 'off', text: '仅语音模式（摄像头未开启）' }
+  }
+  if (visionUploadError.value) {
+    return { tone: 'warn', text: `摄像头已开启，但数据未能上传：${visionUploadError.value}` }
+  }
+  return { tone: 'ok', text: `摄像头已开启 · 已上传 ${visionFrames.value} 帧` }
+})
 
 function pushMessage(role: Msg['role'], text: string) {
   messages.value.push({ role, text })
@@ -103,7 +132,9 @@ async function begin() {
     if (assess.camEnabled) {
       try {
         await startVision(sid, originMs())
+        camFailed.value = false
       } catch {
+        camFailed.value = true
         toastWarn('摄像头不可用，已切换为仅语音')
       }
     }
@@ -319,6 +350,16 @@ onBeforeRouteLeave(() => {
             暂停
           </button>
         </div>
+
+        <!-- 采集状态：区分「未开启（仅语音）」与「已开启但未上传/上传中」 -->
+        <div
+          v-if="started && !closing"
+          class="session__vision"
+          :class="`is-${visionStatus.tone}`"
+        >
+          <i class="session__vision-dot" />
+          <span>{{ visionStatus.text }}</span>
+        </div>
       </header>
 
       <!-- 采集用 video：正式测评不显示预览（设备检查页已确认过），仅用于取帧上报。 -->
@@ -446,6 +487,33 @@ onBeforeRouteLeave(() => {
 .session__pause:active {
   background: var(--xq-primary-soft);
   color: var(--xq-primary-deep);
+}
+
+/* ---- 采集状态指示 ---- */
+.session__vision {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: var(--xq-fs-xs);
+  padding: 4px 12px;
+  background: var(--xq-surface-2);
+  color: var(--xq-text-2);
+}
+.session__vision-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.session__vision.is-ok {
+  background: var(--xq-primary-soft);
+  color: var(--xq-primary-deep);
+}
+.session__vision.is-warn {
+  background: rgba(255, 138, 92, 0.16);
+  color: var(--xq-hotline);
 }
 
 /* ---- 采集用 video：不显示预览，但保留渲染以保证取帧正常 ---- */

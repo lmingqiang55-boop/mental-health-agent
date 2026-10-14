@@ -46,7 +46,10 @@ function closeCam() {
 }
 
 // 开关切换即预览/释放；进入正式测评前由 onUnmounted 释放，交给测评页重新取流。
+// 摄像头开关与麦克风检测互相独立：一拨就即时写回 store，
+// 避免麦克风未过检时，摄像头设置被 start() 的提前返回连带丢弃。
 watch(camOn, (v) => {
+  assess.setCamEnabled(v)
   if (v) void openCam()
   else closeCam()
 })
@@ -66,7 +69,6 @@ async function checkMic() {
 
 function start() {
   if (micState.value !== 'ok') return
-  assess.setCamEnabled(camOn.value)
   void router.replace({ name: 'assess-session', params: { id: assess.sessionId } })
 }
 
