@@ -8,11 +8,13 @@
 3. **新版 Safety 判定（系统唯一安全来源，每轮恰好一次）**；
 4. 安全分支（UNCERTAIN / HIGH / IMMINENT，或会话已处于支持模式）：
    不进入普通对话，不调用 Decision / Dialogue / 视觉通道，直接给出澄清或支持消息；
-5. 普通分支：DialogueManager 决策并生成回复；
+5. 普通分支：按 ``DIALOGUE_ENGINE`` 交给 legacy 顺序执行或 LangGraph 图调度
+   （两条路径共用同一份业务函数，行为等价）；
 6. 落一条 ASSISTANT 消息、``turn_count`` +1、写幂等回执（**各仅一次**）。
 
 决策模型或对话 Agent 不可用时返回 503，本轮不落库。
 安全判定失败时**不放行**，按 Safety 的 fail-to-REVIEW 口径进入安全澄清。
+同一会话不得中途切换 ``DIALOGUE_ENGINE``，否则返回 409。
 
 会话控制器根据话题交流和轮数上限发送收尾信号。收尾不自动生成报告，
 前端显示按钮，用户点击后通过 ``POST /api/assessment`` 生成结果。
@@ -26,6 +28,7 @@ from fastapi import APIRouter, HTTPException
 from backend.api.errors import session_not_found
 from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable, ScreeningFinished
 from backend.core.session_manager import session_manager
+from backend.graph.engine import DialogueEngineConfigError, DialogueTurnRunner, EngineSessionMismatch
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.requests import ChatRequest
 from backend.models.responses import ChatResponse, VisualFeedback
@@ -42,6 +45,8 @@ from backend.safety.support import (
 
 router = APIRouter(prefix="/api", tags=["chat"])
 dialogue_manager = DialogueManager()
+#: 与 legacy 路径共用同一个 DialogueManager；引擎由 DIALOGUE_ENGINE 决定。
+dialogue_runner = DialogueTurnRunner(dialogue_manager)
 
 
 class _SafetyRunner:
@@ -139,7 +144,7 @@ def chat(request: ChatRequest) -> ChatResponse:
                       "utterance_id": request.utterance_id}
             if request.speech is not None or "vision_snapshot" in request.model_fields_set:
                 kwargs["use_latest_states"] = False
-            payload = dialogue_manager.process_turn(text, session, **kwargs)
+            payload = dialogue_runner.process_turn(text, session, **kwargs)
             messages = [payload.reply]
             reply = payload.reply
             next_strategy = payload.next_strategy
@@ -184,6 +189,15 @@ def chat(request: ChatRequest) -> ChatResponse:
     except ScreeningFinished as exc:
         raise HTTPException(status_code=409, detail={
             "code": "SCREENING_FINISHED", "message": str(exc),
+        }) from exc
+    except EngineSessionMismatch as exc:
+        raise HTTPException(status_code=409, detail={
+            "code": "DIALOGUE_ENGINE_MISMATCH", "message": str(exc),
+        }) from exc
+    except DialogueEngineConfigError as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "DIALOGUE_ENGINE_INVALID",
+            "message": f"对话引擎配置无效：{exc}",
         }) from exc
     if updated is None:
         raise session_not_found()

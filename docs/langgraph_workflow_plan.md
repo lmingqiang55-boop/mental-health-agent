@@ -298,19 +298,61 @@ xxhash 4.0.1           zstandard 0.25.0
 **回归测试：** `pytest -q tests evaluation_agent` → **840 passed in 53.21s**（安装前同为 840 passed）。
 
 
-### Phase 1 — 图骨架，行为与现状**完全等价**
+### Phase 1 — 图骨架，行为与现状**完全等价** ✅ **已完成**
 
 | 项目 | 内容 |
 | --- | --- |
-| 新建 | `backend/graph/__init__.py`、`state.py`（`TurnState` + 预算常量）、`nodes.py`、`build.py`、`engine.py` |
-| 改文件 | `backend/api/chat.py`（按 `DIALOGUE_ENGINE` 分派）；`backend/core/dialogue_manager.py`（把 `process_turn` 内的视觉选择与 `_generate_reply` 抽成可复用函数，**`process_turn` 保留不动**供 legacy 用） |
-| 保留 | `DialogueManager.process_turn`、`_decide`、`_generate_reply` 全部保留；`screening_flow.py` 不改逻辑 |
-| 新增测试 | `tests/test_graph_equivalence.py`：**同一**脚本化会话分别跑 legacy 与 graph，断言 `reply` / `next_strategy` / `current_stage` / `assessment_ready` / `visual_feedback` 全部一致 |
-| 开关 | `DIALOGUE_ENGINE=legacy`（默认）\| `graph`。代码里目前**不存在**这个开关，需新建（读环境变量，默认 `legacy`） |
-| 完成判据 | 现有 840 条全绿；`test_graph_equivalence.py` 全绿 |
+| 新建 | `backend/graph/`：`__init__.py`、`state.py`（`TurnState` + `GRAPH_RECURSION_LIMIT`）、`nodes.py`、`build.py`、`engine.py` |
+| 改文件 | `backend/api/chat.py`（引擎分派 + 两个新错误码）；`backend/core/dialogue_manager.py`（抽出共享函数，`process_turn` 改为组合它们）；`backend/models/states.py`（`dialogue_engine` 内部字段） |
+| 保留 | `DialogueManager.process_turn` / `_decide` / `_generate_reply` 全部保留；`screening_flow.py`、`visual_acknowledgment.py`、`backend/safety/`、`backend/policy/` **一行未改** |
+| 新增测试 | `tests/test_dialogue_engine.py`（30 条） |
+| 开关 | `DIALOGUE_ENGINE=legacy`（默认）\| `graph`。非法取值**报错而非静默回退** |
+| 完成判据 | **870 passed / 0 failed**（840 基线 + 30 新增）✅ |
 
-> Phase 1 的图**仍然每轮调 Decision**。它的价值是：先把"图和现状等价"钉死，
-> 之后任何行为变化都能归因到明确的阶段。
+#### Phase 1 实测记录
+
+**执行模型（实现期最重要的发现）**：`DialogueManager._generate_reply` 内部沿用
+`asyncio.run(...)`（`dialogue_manager.py:176` 附近）。因此**不能**用
+`asyncio.run(graph.ainvoke(...))` + async 节点——节点里再调 `asyncio.run`
+必然抛 `asyncio.run() cannot be called from a running event loop`。
+实测三种组合（`scripts/check_langgraph_env.py` 同口径探针）：
+
+| 组合 | 结果 |
+| --- | --- |
+| `graph.invoke()`（同步）+ 同步节点内 `asyncio.run` | ✅ 连续 3 次全部成功 |
+| `graph.ainvoke()` + **异步**节点内 `asyncio.run` | ❌ 与预期一致地冲突 |
+| `graph.ainvoke()` + **同步**节点（LangGraph 转执行器线程） | ✅ 成功，但依赖执行器语义 |
+
+**结论：Phase 1 采用同步 `graph.invoke()`**——图内不存在事件循环，
+既有业务代码的执行模型与迁移前完全相同，也没有新增任何 `asyncio.run`。
+测试用 AST 断言图内不存在 `asyncio.run` 且不使用 `ainvoke`。
+
+**langgraph 惰性导入**：`backend/graph/__init__.py` 起初在模块级导入 `build`，
+导致 `DIALOGUE_ENGINE=legacy` 也会加载 langgraph（实测
+`"langgraph" in sys.modules` 为 `True`）。已改为 PEP 562 `__getattr__` 惰性暴露，
+实测 legacy 路径导入 `backend.api.chat` 后 langgraph **未加载**，
+"依赖缺失仍能按 legacy 跑"这条退路成立。有 AST 测试守着。
+
+**拓扑**（`decision` 仍无条件执行，与迁移前"每轮必调决策"一致）::
+
+    START ─▶ prepare_turn ─┬─(ending)─▶ dialogue_close ──────────────────────▶ commit ─▶ END
+                           └─(open)──▶ decision ─▶ prepare_vision ─▶ dialogue_execute ─▶ commit
+
+`prepare_turn → (closing | open)` 是**真实条件路由**；`decision` 的入边在
+Phase 2 改为条件边即可实现按需调用，无需再动其他节点。
+
+**防漂移手段**：两组实现共用同一批模块级函数
+（`resolve_current_vision` / `ensure_screening_open` / `select_visual_channels` /
+`finalize_visual_feedback` / `open_payload` / `closing_payload`）与
+`DialogueManager` 的三个公开入口（`decide` / `reply_for_decision` / `closing_reply`），
+图节点不重写任何业务逻辑，只做编排。
+
+**引擎绑定**：会话第一轮把引擎记在 `SessionState.dialogue_engine`
+（`exclude=True`，不进 API 响应），之后不匹配即返回
+409 `DIALOGUE_ENGINE_MISMATCH`，且该轮被整体丢弃、不留半轮。
+
+**明确未做**（留给 Phase 2+）：Dialogue 自主判断是否调用 Decision、
+1~3 条气泡、生成后 Visual Review、把会话写入集中到单一 commit 节点。
 
 ### Phase 2 — Dialogue 主控 + Decision 按需 ⭐**你的首要任务**
 

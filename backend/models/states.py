@@ -222,6 +222,10 @@ class SessionState(BaseModel):
     safety_halted: bool = False
     safety_stage: SafetyStage = "none"
 
+    # 本会话首次跑普通轮时绑定下来的对话引擎（legacy / graph）。
+    # 内部字段，刻意不进 API 响应；用来拒绝同一会话中途切换引擎。
+    dialogue_engine: str | None = Field(default=None, exclude=True)
+
     # 知情同意
     consent: ConsentRecord = Field(default_factory=ConsentRecord)
 
