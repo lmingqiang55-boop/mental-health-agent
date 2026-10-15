@@ -42,12 +42,9 @@ HEAL_CONTENTS: list[HealContent] = [
                 desc="八格小漫画：坏天气会过去，你不需要一直晴朗。", moods=[1, 2, 3, 4, 5]),
 ]
 
-# 心情标签候选（前端多选，供情绪云图统计）
-MOOD_TAGS = [
-    "开心", "平静", "放松", "有精神", "被理解",
-    "累", "困", "烦躁", "焦虑", "委屈",
-    "孤单", "生气", "无聊", "紧张", "想哭",
-]
+# 心情标签候选（前端多选，供情绪云图统计）不在这里定义：它是
+# ``backend.models.heal.MOOD_TAGS``——和按档位分组的 ``MOOD_LEVEL_TAGS``
+# 放在同一个文件里，避免同一套词抄两份、改一处忘一处。
 
 
 def recommend_contents(mood: int | None = None, tag: str | None = None) -> list[HealContent]:

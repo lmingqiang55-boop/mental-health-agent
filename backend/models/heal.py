@@ -12,8 +12,8 @@ from backend.models.states import _now
 
 
 #: 心情档位（1 最差 ~ 5 最好）→ 该档位常见的心情标签。
-#: 取值必须落在 ``backend.core.heal_store.MOOD_TAGS`` 那套词里：学生端
-#: 「按此刻的心情看看」就是拿这些词去匹配内容卡片的 ``tags``。
+#: 取值必须落在 :data:`MOOD_TAGS` 那套词里：学生端「按此刻的心情看看」就是拿
+#: 这些词去匹配内容卡片的 ``tags``（见 ``HealContent.fill_display_fields``）。
 MOOD_LEVEL_TAGS: dict[int, tuple[str, ...]] = {
     1: ("想哭", "委屈", "孤单"),
     2: ("焦虑", "紧张", "累"),
@@ -21,6 +21,15 @@ MOOD_LEVEL_TAGS: dict[int, tuple[str, ...]] = {
     4: ("平静", "放松"),
     5: ("开心", "有精神"),
 }
+
+#: 心情标签候选（学生端多选，供情绪云图统计）。列表顺序即前端标签的展示顺序。
+#: :data:`MOOD_LEVEL_TAGS` 里的每个词都必须出现在这张表里，否则按心情筛内容会
+#: 筛空。两张表放在同一个文件里，就是为了改一处时能立刻看到另一处。
+MOOD_TAGS: list[str] = [
+    "开心", "平静", "放松", "有精神", "被理解",
+    "累", "困", "烦躁", "焦虑", "委屈",
+    "孤单", "生气", "无聊", "紧张", "想哭",
+]
 
 
 class MoodEntry(BaseModel):
