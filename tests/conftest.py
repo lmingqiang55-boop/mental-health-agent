@@ -20,10 +20,34 @@ DEFAULT_ACTIONS = ("共情安慰", "情绪")
 def dialogue_stub(monkeypatch):
     """Keep API tests offline while exercising the dialogue Agent boundary."""
     from backend.api import chat
+    from backend.models.dialogue import DialogueRouteDecision
 
     class Stub:
+        """对话 Agent 的离线替身：生成回复 + 路由判断。
+
+        路由默认返回 ``need_decision=True``，即"每轮都要新策略"，
+        与迁移前的行为一致——不显式开启自主追问的测试不受 Phase 2 影响。
+        """
+
         def __init__(self):
             self.requests = []
+            self.route_requests = []
+            self.need_decision = True
+            self.route_reason_code = "topic_exhausted"
+
+        def set_route(self, need_decision: bool,
+                      reason_code: str = "continue_topic") -> None:
+            """让后续路由判断固定返回指定结论。"""
+            self.need_decision = need_decision
+            self.route_reason_code = reason_code
+
+        async def route(self, request):
+            self.route_requests.append(request)
+            return DialogueRouteDecision(
+                need_decision=self.need_decision,
+                reason_code=self.route_reason_code,
+                reason="离线桩",
+            )
 
         async def generate_reply(self, request):
             self.requests.append(request)

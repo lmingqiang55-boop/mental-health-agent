@@ -25,6 +25,8 @@ __all__ = [
     "DialogueCurrentUserInput",
     "DialogueAgentRequest",
     "DialogueAgentResponse",
+    "DialogueRouteDecision",
+    "DialogueRouteRequest",
 ]
 
 
@@ -185,3 +187,53 @@ class DialogueAgentResponse(BaseModel):
     """Dialogue Agent 的输出：只需要一句真正对用户说的话。"""
 
     reply: str = Field(..., description="下一句真正对用户说的话")
+
+
+class DialogueRouteDecision(BaseModel):
+    """Dialogue Agent 对「这一轮要不要重新决策」的判断。
+
+    这是 Dialogue 主控权的**唯一**体现：它只能说"需要/不需要新的全局策略"。
+    它**不能**表达要换成哪个话题——选话题是 Decision Agent 与
+    话题次数约束器的职责。因此本结构里刻意没有 topic 字段。
+    """
+
+    need_decision: bool = Field(
+        ..., description="是否需要重新调用决策模型，取得新的全局评估策略"
+    )
+    reason_code: str = Field(
+        default="", description="简短原因码，供调试与统计；不向用户展示"
+    )
+    reason: str = Field(
+        default="", description="一句话理由，仅供调试，不向用户展示"
+    )
+
+
+class DialogueRouteRequest(BaseModel):
+    """Dialogue 路由判断的完整输入。
+
+    只提供判断"是否该换全局策略"所需的信息：当前策略、当前话题及其已用轮数、
+    整体进度。刻意不提供话题候选列表——Dialogue 不该替决策模型挑话题。
+    """
+
+    conversation_history: List[DialogueHistoryMessage] = Field(
+        default_factory=list, description="当前这一轮之前的完整历史（不含本轮输入）"
+    )
+    current_user_input: DialogueCurrentUserInput = Field(
+        ..., description="用户当前最新的一句话"
+    )
+    active_actions: List[str] = Field(
+        default_factory=list, description="当前生效的全局动作；为空表示还没有有效策略"
+    )
+    active_topic: Optional[str] = Field(
+        default=None, description="当前正在推进的全局评估话题；None 表示还没确定"
+    )
+    active_topic_turns: int = Field(
+        default=0, description="当前话题已经完成计数的轮数"
+    )
+    topic_turns: Dict[str, int] = Field(
+        default_factory=dict, description="各话题已完成的轮数"
+    )
+    topic_limit: int = Field(..., description="单个话题的轮数上限")
+    turn_count: int = Field(default=0, description="本次筛查已完成的用户轮数")
+    min_turns: int = Field(..., description="可以收尾的最少轮数")
+    max_turns: int = Field(..., description="强制收尾的轮数上限")

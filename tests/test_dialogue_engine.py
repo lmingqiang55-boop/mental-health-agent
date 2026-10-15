@@ -461,11 +461,18 @@ def test_each_session_pins_its_own_engine(monkeypatch):
 # 图结构与节点路由
 # ---------------------------------------------------------------------------
 
-def test_route_after_prepare_splits_closing_from_open():
-    assert TurnNodes.route_after_prepare({"ending": None}) == "open"
-    assert TurnNodes.route_after_prepare({}) == "open"
+def test_route_after_closing_splits_closing_from_open():
+    assert TurnNodes.route_after_closing({"ending": None}) == "open"
+    assert TurnNodes.route_after_closing({}) == "open"
     for ending in ("user_requested", "turn_limit", "topic_coverage"):
-        assert TurnNodes.route_after_prepare({"ending": ending}) == "closing"
+        assert TurnNodes.route_after_closing({"ending": ending}) == "closing"
+
+
+def test_route_after_dialogue_needs_an_explicit_decision():
+    assert TurnNodes.route_after_dialogue({"need_decision": True}) == "need_decision"
+    assert TurnNodes.route_after_dialogue({"need_decision": False}) == "reuse_decision"
+    # 缺省必须落到"决策"这一侧：多调一次决策是安全的，漏掉一次不是。
+    assert TurnNodes.route_after_dialogue({}) == "reuse_decision"
 
 
 def test_graph_calls_are_synchronous_and_never_nest_asyncio_run():
@@ -520,15 +527,44 @@ def test_langgraph_is_imported_lazily():
 
 
 def test_graph_node_names_are_stable():
-    """节点名是测试与后续 Phase 2 条件的契约，改名必须显式。"""
+    """节点名是测试与后续阶段条件的契约，改名必须显式。"""
     from backend.graph.build import build_turn_graph
     from backend.core.dialogue_manager import DialogueManager
 
     graph = build_turn_graph(DialogueManager())
     assert set(graph.get_graph().nodes) >= {
-        "prepare_turn", "decision", "prepare_vision",
-        "dialogue_execute", "dialogue_close", "commit",
+        "prepare_turn", "closing_check", "dialogue_route", "decision",
+        "resolve_topic", "visual_prepare", "dialogue_execute",
+        "dialogue_close", "commit",
     }
+
+
+def test_graph_has_no_back_edges():
+    """图必须是有向无环的：节点重复执行会重复更新话题计数与冷却。"""
+    from backend.graph.build import build_turn_graph
+    from backend.core.dialogue_manager import DialogueManager
+
+    edges = [(edge.source, edge.target)
+             for edge in build_turn_graph(DialogueManager()).get_graph().edges]
+    assert edges, "图应当有边"
+
+    # Kahn 拓扑排序：存在环时无法取完所有节点。
+    nodes = {node for edge in edges for node in edge}
+    indegree = dict.fromkeys(nodes, 0)
+    for _, target in edges:
+        indegree[target] += 1
+    queue = [node for node, degree in indegree.items() if degree == 0]
+    visited = 0
+    while queue:
+        node = queue.pop()
+        visited += 1
+        for source, target in edges:
+            if source != node:
+                continue
+            indegree[target] -= 1
+            if indegree[target] == 0:
+                queue.append(target)
+    assert visited == len(nodes), "图存在回边（环），节点会被重复执行"
 
 
 def test_recursion_limit_failure_becomes_a_clear_error(monkeypatch):

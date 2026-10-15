@@ -10,8 +10,13 @@
 import asyncio
 from dataclasses import dataclass
 
-from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
-from backend.core.screening_flow import completion_reason, limit_topic, record_answer
+from backend.agents.dialogue_agent import (
+    DialogueAgent, DialogueAgentError, route_fallback,
+)
+from backend.core.screening_flow import (
+    MAX_TOPIC_TURNS, MAX_TURNS, MIN_TURNS, completion_reason, limit_topic,
+    record_answer,
+)
 from backend.core.multimodal_consistency import TurnDiscordance
 from backend.core.visual_acknowledgment import (
     VisualAcknowledgment, select_visual_checkin, select_visual_observation,
@@ -21,17 +26,20 @@ from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.models.dialogue import (
     DialogueAgentRequest, DialogueCurrentUserInput, DialogueDecision,
-    DialogueHistoryMessage, DialogueVisual, DialogueVisualDiscordance,
+    DialogueHistoryMessage, DialogueRouteDecision, DialogueRouteRequest,
+    DialogueVisual, DialogueVisualDiscordance,
 )
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.responses import DialogueResponsePayload, VisualFeedback
 from backend.models.states import SessionState, VisionState, _now
 from backend.policy.client import (
+    DialogueAction,
     HttpPolicyClient,
     PolicyClientError,
     PolicyDecision,
     get_policy_client,
 )
+
 class DialogueUnavailable(RuntimeError):
     """The dialogue generation service cannot produce a usable reply."""
 
@@ -76,6 +84,24 @@ def resolve_current_vision(
 def ensure_screening_open(session: SessionState) -> None:
     if session.current_stage in (SessionStage.ASSESSMENT_READY, SessionStage.COMPLETED):
         raise ScreeningFinished("本次筛查已收尾，请生成结果或重新开始。")
+
+
+def history_before_turn(session: SessionState,
+                        user_text: str) -> list[DialogueHistoryMessage]:
+    """本轮生成/路由用的历史：**不含**本轮这条用户输入。
+
+    ``/api/chat`` 在调用之前已经把本轮用户消息写进了 ``conversation_history``，
+    因此这里在末尾那条正是本轮输入时把它去掉，避免同一句话在 Prompt 里出现两次。
+    生成与路由共用本函数，两处不会各自判断一遍而分家。
+    """
+    history = session.conversation_history
+    if (history and history[-1].role == MessageRole.USER
+            and history[-1].content == user_text):
+        history = history[:-1]
+    return [DialogueHistoryMessage(
+        role=message.role.value, content=message.content,
+        visual=_dialogue_visual(message.vision_snapshot),
+    ) for message in history]
 
 
 def select_visual_channels(
@@ -212,6 +238,76 @@ class DialogueManager:
         session.screening_progress.end_reason = ending
         return reply
 
+    def route_turn(self, session: SessionState, user_text: str,
+                   current_vision: VisionState | None) -> DialogueRouteDecision:
+        """Dialogue 主控：判断本轮是否需要新的全局策略。
+
+        **路由失败不中断这一轮**，一律回退为"需要决策"（即迁移前的既有流程）。
+        多调一次决策模型是安全的；因为路由坏掉而停止话题推进不是。
+        """
+        request = self._route_request(session, user_text, current_vision)
+        if self._dialogue_agent is not None:
+            try:
+                return asyncio.run(self._dialogue_agent.route(request))
+            except (DialogueAgentError, DeepSeekClientError) as exc:
+                return route_fallback(f"路由调用失败：{type(exc).__name__}")
+            except Exception as exc:  # noqa: BLE001 - 路由绝不能成为单点故障
+                return route_fallback(f"路由意外失败：{type(exc).__name__}")
+
+        try:
+            client = DeepSeekClient(load_deepseek_config())
+        except DeepSeekConfigError:
+            return route_fallback("缺少有效的 DeepSeek 配置")
+
+        async def decide() -> DialogueRouteDecision:
+            try:
+                return await DialogueAgent(client).route(request)
+            finally:
+                # 每个节点自建自关客户端，绝不跨已关闭的事件循环复用。
+                await client.client.close()
+
+        try:
+            return asyncio.run(decide())
+        except (DialogueAgentError, DeepSeekClientError) as exc:
+            return route_fallback(f"路由调用失败：{type(exc).__name__}")
+        except Exception as exc:  # noqa: BLE001 - 路由绝不能成为单点故障
+            return route_fallback(f"路由意外失败：{type(exc).__name__}")
+
+    def reuse_decision(self, session: SessionState) -> PolicyDecision:
+        """复用当前仍然有效的全局策略，供跳过决策的轮次生成回复。
+
+        这不是"为了填 Schema 伪造一个决策"，而是把上一条**仍然有效**的决策
+        原样还原。调用方（``resolve_topic``）只在 ``should_force_decision``
+        判定策略有效时才会走到这里，因此 ``active_actions`` 必然合法且非空。
+        """
+        stored = session.screening_progress.active_actions
+        if not stored:
+            raise DialogueUnavailable("跳过决策时没有可复用的全局策略")
+        try:
+            actions = [DialogueAction(action) for action in stored]
+        except ValueError as exc:
+            raise DialogueUnavailable("已存全局策略含无效动作，无法复用") from exc
+        return PolicyDecision(actions=actions)
+
+    def _route_request(self, session: SessionState, user_text: str,
+                       current_vision: VisionState | None) -> DialogueRouteRequest:
+        progress = session.screening_progress
+        return DialogueRouteRequest(
+            conversation_history=history_before_turn(session, user_text),
+            current_user_input=DialogueCurrentUserInput(
+                text=user_text, visual=_dialogue_visual(current_vision),
+            ),
+            active_actions=list(progress.active_actions),
+            active_topic=progress.active_topic,
+            active_topic_turns=progress.topic_turns.get(
+                progress.active_topic or "", 0),
+            topic_turns=dict(progress.topic_turns),
+            topic_limit=MAX_TOPIC_TURNS,
+            turn_count=session.turn_count,
+            min_turns=MIN_TURNS,
+            max_turns=MAX_TURNS,
+        )
+
     def finish_screening(self, user_text: str, session: SessionState,
                          current_vision: VisionState | None,
                          ending: str) -> DialogueResponsePayload:
@@ -239,14 +335,7 @@ class DialogueManager:
                         visual_discordance: TurnDiscordance | None = None,
                         visual_tone: str | None = None) -> str:
         """Pass the selected actions to the dialogue Agent; never use canned questions."""
-        history = session.conversation_history
-        if (history and history[-1].role == MessageRole.USER
-                and history[-1].content == user_text):
-            history = history[:-1]
-        previous = [DialogueHistoryMessage(
-            role=message.role.value, content=message.content,
-            visual=_dialogue_visual(message.vision_snapshot),
-        ) for message in history]
+        previous = history_before_turn(session, user_text)
         actions = [action.value for action in decision.actions] if decision else ["结束本次筛查"]
         topics = [action for action in actions if action != "共情安慰"]
         request = DialogueAgentRequest(

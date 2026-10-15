@@ -1,19 +1,37 @@
 # -*- coding: utf-8 -*-
 """LangGraph 节点：把一轮普通筛查拆成可独立调度与单独测试的步骤。
 
-【Phase 1 过渡说明】
-本阶段的节点拆分**不改变任何业务行为**——每个节点都直接调用
-:mod:`backend.core.dialogue_manager` 里已有的模块级函数/公开方法，
-两组实现共用同一份逻辑，因此不存在"图里又重写一遍"的漂移风险。
+每个节点都只调用 :mod:`backend.core.dialogue_manager` /
+:mod:`backend.core.screening_flow` 里已有的函数，不在图里重写业务逻辑，
+因此 ``legacy`` 与 ``graph`` 两条路径不会各写一份而漂移。
 
-当前拓扑（``decision`` 仍是**无条件**执行，即原有的"每轮必调决策"）::
+当前拓扑（Phase 2，``decision`` 已改为**按需**执行）::
 
-    START -> prepare_turn -> [收尾?] -> dialogue_close -----------------> commit -> END
-                                   \\-> decision -> prepare_vision -> dialogue_execute -> commit
+    START -> prepare_turn -> closing_check -+-(收尾)-> dialogue_close ------------> commit -> END
+                                            |
+                                            +-(普通)-> dialogue_route -+-(需要)-> decision -+
+                                                                       |                     |
+                                                                       +-(复用)--------------+
+                                                                                 |
+                                                                          resolve_topic
+                                                                                 |
+                                                    visual_prepare -> dialogue_execute -> commit
 
-Phase 2 会在 ``prepare_vision`` 与 ``decision`` 之间插入 ``dialogue_route``，
-把 ``decision`` 改成**按需**执行。因此本文件的节点划分即为 Phase 2 的挂载点，
-不是最终的"单节点包装"。
+【职责严格分离】这是本阶段最重要的结构约定，因为节点一旦重复执行，
+历史、话题计数与冷却都会被重复更新：
+
+- ``prepare_turn``   ：只做"消费"——视觉新鲜度、阶段守卫、登记上一轮回答的话题。
+- ``closing_check``  ：只读地判断本轮是否收尾，不做任何写入。
+- ``dialogue_route`` ：只判断"要不要新的全局策略"，不选话题、不写话题。
+- ``decision``       ：只调用决策模型，**不做**话题次数约束。
+- ``resolve_topic``  ：本轮**唯一**的话题记账点，决定"下一条回答算在哪个话题下"。
+- ``visual_prepare`` ：只挑视觉线索，不写会话状态。
+- ``dialogue_execute``：生成回复并记录外观是否真的被提及（影响冷却）。
+- ``commit``         ：只组装响应载荷。
+
+话题次数约束（``limit_topic``）刻意从 ``decision`` 移到 ``resolve_topic``：
+这样"取得新策略"与"决定下一条回答属于哪个话题"各自只有一个负责人，
+两条分支（需要决策 / 复用决策）也在同一处收口。
 """
 
 from __future__ import annotations
@@ -30,14 +48,21 @@ from backend.core.dialogue_manager import (
     resolve_current_vision,
     select_visual_channels,
 )
+from backend.core.screening_flow import (
+    adopt_decision, carry_over_topic, should_force_decision,
+)
 from backend.graph.state import TurnState
 
-__all__ = ["TurnNodes"]
+__all__ = ["TurnNodes", "CLOSING_PATH", "OPEN_DECIDED_PATH", "OPEN_REUSED_PATH"]
 
-#: 正常轮次的节点顺序（供文档与测试断言使用）。
-OPEN_PATH = ("prepare_turn", "decision", "prepare_vision", "dialogue_execute", "commit")
-#: 收尾轮次的节点顺序。
-CLOSING_PATH = ("prepare_turn", "dialogue_close", "commit")
+#: 收尾轮次的节点顺序（供文档与测试断言使用）。
+CLOSING_PATH = ("prepare_turn", "closing_check", "dialogue_close", "commit")
+#: 普通轮次、本轮取了新策略的节点顺序。
+OPEN_DECIDED_PATH = ("prepare_turn", "closing_check", "dialogue_route", "decision",
+                     "resolve_topic", "visual_prepare", "dialogue_execute", "commit")
+#: 普通轮次、本轮复用已有策略（Dialogue 自主追问）的节点顺序。
+OPEN_REUSED_PATH = ("prepare_turn", "closing_check", "dialogue_route",
+                    "resolve_topic", "visual_prepare", "dialogue_execute", "commit")
 
 
 class TurnNodes:
@@ -52,12 +77,12 @@ class TurnNodes:
     def __init__(self, manager: DialogueManager) -> None:
         self._manager = manager
 
-    # -- 准备 ------------------------------------------------------------
+    # -- 准备（只消费，不产生新话题）--------------------------------------
 
     def prepare_turn(self, state: TurnState) -> dict:
-        """视觉新鲜度 -> 阶段守卫 -> 记账上一轮话题 -> 判断是否收尾。
+        """视觉新鲜度 -> 阶段守卫 -> 登记上一轮回答所属话题。
 
-        顺序与 ``process_turn`` 完全一致；四项都必须在决策之前。
+        顺序与 ``process_turn`` 一致；前两项必须在任何模型调用之前。
         """
         session = state["session"]
         current_vision = resolve_current_vision(
@@ -65,25 +90,76 @@ class TurnNodes:
             state.get("use_latest_states", True))
         ensure_screening_open(session)
         record_answer(session)
-        ending = completion_reason(session, state["user_text"])
-        return {"current_vision": current_vision, "ending": ending}
+        return {"current_vision": current_vision}
+
+    def closing_check(self, state: TurnState) -> dict:
+        """只读地判断本轮是否收尾；不做任何会话写入。"""
+        return {"ending": completion_reason(state["session"], state["user_text"])}
 
     @staticmethod
-    def route_after_prepare(state: TurnState) -> str:
-        """本阶段真正的条件路由：收尾轮不再提问，普通轮继续评估。"""
+    def route_after_closing(state: TurnState) -> str:
+        """收尾轮不再提问，普通轮进入路由判断。"""
         return "closing" if state.get("ending") is not None else "open"
 
-    # -- 普通轮次 --------------------------------------------------------
+    # -- 路由（只判断，不选话题）------------------------------------------
 
-    def decision(self, state: TurnState) -> dict:
-        """取得本轮评估动作，并交由话题次数约束器裁剪。
+    def dialogue_route(self, state: TurnState) -> dict:
+        """判断本轮是否需要**新的**全局策略。
 
-        Phase 1 保持原有行为：**每轮都会调用决策模型**。
+        后端强制条件优先，并且**短路掉路由模型调用**——既然结论已经确定，
+        就没有必要再花一次模型调用去问 Dialogue。Dialogue 只在真正有余地
+        判断时才被问到。
         """
         session = state["session"]
-        return {"decision": limit_topic(session, self._manager.decide(session))}
+        forced = should_force_decision(session)
+        if forced is not None:
+            return {"forced_reason": forced, "need_decision": True,
+                    "route": None, "route_reason": forced}
+        decision = self._manager.route_turn(
+            session, state["user_text"], state.get("current_vision"))
+        return {"forced_reason": None, "need_decision": decision.need_decision,
+                "route": decision, "route_reason": decision.reason_code}
 
-    def prepare_vision(self, state: TurnState) -> dict:
+    @staticmethod
+    def route_after_dialogue(state: TurnState) -> str:
+        """需要新策略就调决策模型，否则复用已有效的那一条。"""
+        return "need_decision" if state.get("need_decision") else "reuse_decision"
+
+    # -- 决策（只调模型，不做话题约束）------------------------------------
+
+    def decision(self, state: TurnState) -> dict:
+        """调用决策模型取得新的全局动作；每轮最多一次。
+
+        话题次数约束不在这里做——见 :meth:`resolve_topic`。
+        """
+        return {"decision": self._manager.decide(state["session"])}
+
+    # -- 话题记账（本轮唯一写作者）----------------------------------------
+
+    def resolve_topic(self, state: TurnState) -> dict:
+        """决定"下一条用户回答算在哪个话题下"，并确定本轮要执行的动作。
+
+        - 本轮取了新策略：先用话题次数约束器裁剪，再登记 ``active_*``；
+        - 本轮复用策略：沿用当前全局话题（Dialogue 无权更换全局话题）。
+
+        两条分支都会设置 ``pending_topic``，因此**下一条回答一定会被计数**，
+        与"本轮是否调用过决策模型"无关。
+        """
+        session = state["session"]
+        decision = state.get("decision")
+        if decision is None:
+            carry_over_topic(session)
+            decision = self._manager.reuse_decision(session)
+        else:
+            constrained = limit_topic(session, decision)
+            adopt_decision(session, constrained,
+                           session.screening_progress.pending_topic)
+            decision = constrained
+        return {"decision": decision}
+
+    # -- 普通轮次的生成 --------------------------------------------------
+
+    def visual_prepare(self, state: TurnState) -> dict:
         """三选一挑出本轮可用的视觉线索（说得出口的表情 / 温和核对 / 整体语气）。
 
         必须在生成**之前**完成，这样回复才有机会自然带上视觉信息。
@@ -118,12 +194,7 @@ class TurnNodes:
     # -- 出口 ------------------------------------------------------------
 
     def commit(self, state: TurnState) -> dict:
-        """组装最终响应载荷。
-
-        Phase 1 仅此一处收口；会话状态的写入目前仍跟随各自节点
-        （与 ``process_turn`` 的位置一一对应），把写入集中到单一节点
-        是 Phase 2 引入重写回边时才需要做的事。
-        """
+        """组装最终响应载荷；**不**做任何会话状态写入。"""
         session = state["session"]
         ending = state.get("ending")
         if ending is not None:

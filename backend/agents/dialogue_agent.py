@@ -1,38 +1,58 @@
 # -*- coding: utf-8 -*-
-"""Dialogue Agent：受控对话生成。
+"""Dialogue Agent：受控对话生成 + 路由判断。
 
-流程（严格只有这一条链路）::
+本模块只有两条链路，都是「结构化输入 -> Prompt -> LLM -> 结构化输出」::
 
-    DialogueAgentRequest
-        -> build_dialogue_user_prompt(request)   （复用第 2 步实现）
-        -> llm_client.generate(system, user)     （DeepSeek 或 Fake）
-        -> DialogueAgentResponse(reply=...)
+    generate_reply: DialogueAgentRequest -> build_dialogue_user_prompt
+                    -> llm_client.generate -> DialogueAgentResponse(reply=...)
 
-【职责边界】本模块**只**做「结构化输入 -> Prompt -> LLM -> reply」。
-因此这里没有、也永远不应该有：
-- 话题选择 / 话题切换判断 / topic 计数；
+    route:          DialogueRouteRequest -> build_dialogue_route_prompt
+                    -> llm_client.generate -> DialogueRouteDecision(need_decision=...)
+
+【职责边界】本模块**只**做上面两条链路。因此这里没有、也永远不应该有：
+- 话题选择（选哪个话题、换成哪个话题）；
+- topic 计数与话题次数上限；
 - action 分支判断（如 if action == "共情安慰"）；
 - 记忆检索或写入；
 - 视觉评分规则、风险评分、疾病诊断；
 - 随机选择、重试策略或所谓「Agent 自主规划」。
 
-decision 由上游（决策 Agent + 话题次数约束器）给出，本 Agent 只负责执行，
-不修改、不补充、不重新决定。
+``route`` 只回答"这一轮要不要新的全局策略"这一个布尔问题，**它不决定换成哪个
+话题**——那仍然是决策模型 + 话题次数约束器的职责。``generate_reply`` 的 decision
+由上游给出，本 Agent 只负责执行，不修改、不补充、不重新决定。
 """
 
 from __future__ import annotations
 
 from typing import Any
 from difflib import SequenceMatcher
+import json
 import re
 
-from backend.models.dialogue import DialogueAgentRequest, DialogueAgentResponse
+from backend.models.dialogue import (
+    DialogueAgentRequest,
+    DialogueAgentResponse,
+    DialogueRouteDecision,
+    DialogueRouteRequest,
+)
 from backend.prompts.dialogue_prompt import (
     DIALOGUE_AGENT_SYSTEM_PROMPT,
+    DIALOGUE_ROUTER_SYSTEM_PROMPT,
+    build_dialogue_route_prompt,
     build_dialogue_user_prompt,
 )
 
-__all__ = ["DialogueAgent", "DialogueAgentError"]
+__all__ = ["DialogueAgent", "DialogueAgentError", "parse_route_decision",
+           "route_fallback"]
+
+#: 路由模块可以给出的原因码；用于识别"模型没有按约定输出"。
+ROUTE_REASON_CODES = frozenset({
+    "continue_topic", "clarify", "topic_exhausted",
+    "user_wants_change", "off_topic",
+})
+#: 路由异常（输出不合约定或调用失败）时使用的原因码。
+ROUTE_ERROR = "route_error"
+ROUTE_UNCERTAIN = "route_uncertain"
 
 
 class DialogueAgentError(RuntimeError):
@@ -59,6 +79,54 @@ def _repeated_opening(reply: str, previous: list[str]) -> bool:
                for prefix in ("听你这么说", "听起来", "嗯，", "嗯,"))
 
 
+def route_fallback(reason: str) -> DialogueRouteDecision:
+    """路由不可用时的**安全**结论：回到既有的"每轮都决策"流程。"""
+    return DialogueRouteDecision(
+        need_decision=True, reason_code=ROUTE_ERROR, reason=reason)
+
+
+def parse_route_decision(content: str) -> DialogueRouteDecision:
+    """解析路由模块的输出；任何异常都安全回退为"需要决策"。
+
+    回退方向是刻意选的：多调一次决策模型只是多一次调用，而错误地跳过决策
+    会让全局话题推进停摆。因此只有"布尔值明确 + 原因码在约定集合内"才接受
+    ``need_decision=False``；模型没按约定输出时一律回退。
+    """
+    if not isinstance(content, str):
+        return route_fallback("路由输出不是文本")
+    text = content.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if len(lines) >= 3 and lines[-1].strip() == "```":
+            text = "\n".join(lines[1:-1]).strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return route_fallback("路由输出不是合法 JSON")
+    if not isinstance(payload, dict):
+        return route_fallback("路由输出不是 JSON 对象")
+
+    value = payload.get("need_decision")
+    if isinstance(value, bool):
+        need_decision = value
+    elif isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        need_decision = value.strip().lower() == "true"
+    else:
+        return route_fallback("need_decision 缺失或不是布尔值")
+
+    reason_code = str(payload.get("reason_code") or "").strip()
+    reason = str(payload.get("reason") or "").strip()
+    if need_decision and reason_code not in ROUTE_REASON_CODES:
+        # "需要"是无条件安全的，原因码不认也照样接受，只把原因码标注清楚。
+        reason_code = ROUTE_UNCERTAIN
+    elif not need_decision and reason_code not in ROUTE_REASON_CODES:
+        return DialogueRouteDecision(
+            need_decision=True, reason_code=ROUTE_UNCERTAIN,
+            reason=f"原因码不在约定集合内：{reason_code or '（空）'}")
+    return DialogueRouteDecision(
+        need_decision=need_decision, reason_code=reason_code, reason=reason)
+
+
 class DialogueAgent:
     """根据上游 decision 生成下一句对用户说的话。
 
@@ -76,6 +144,24 @@ class DialogueAgent:
         self.llm_client = llm_client
         self.last_system_prompt: str | None = None
         self.last_user_prompt: str | None = None
+        self.last_route_system_prompt: str | None = None
+        self.last_route_user_prompt: str | None = None
+
+    async def route(self, request: DialogueRouteRequest) -> DialogueRouteDecision:
+        """判断这一轮是否需要重新调用决策模型。
+
+        与 :meth:`generate_reply` 同属"结构化输入 -> Prompt -> LLM -> 结构化输出"，
+        但职责分离：本方法**不生成任何对用户可见的话**，也不选话题。
+        模型调用异常会原样抛出，由调用方决定如何回退。
+        """
+        user_prompt = build_dialogue_route_prompt(request)
+        self.last_route_system_prompt = DIALOGUE_ROUTER_SYSTEM_PROMPT
+        self.last_route_user_prompt = user_prompt
+        content = await self.llm_client.generate(
+            system_prompt=DIALOGUE_ROUTER_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+        )
+        return parse_route_decision(content or "")
 
     async def generate_reply(
         self,

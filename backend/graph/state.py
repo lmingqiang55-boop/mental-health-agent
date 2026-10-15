@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import TypedDict
 
 from backend.core.dialogue_manager import VisualChannels
+from backend.models.dialogue import DialogueRouteDecision
 from backend.models.responses import DialogueResponsePayload, VisualFeedback
 from backend.models.states import SessionState, VisionState
 from backend.policy.client import PolicyDecision
@@ -42,6 +43,15 @@ class TurnState(TypedDict, total=False):
     current_vision: VisionState | None
     #: 收尾原因（``topic_coverage`` / ``turn_limit`` / ``user_requested``）；非空即收尾轮。
     ending: str | None
+    #: 后端强制调用决策模型的原因码；非空即**不做**路由判断，直接决策。
+    forced_reason: str | None
+    #: Dialogue 路由结论；为 None 表示本轮被后端强制，没有问过 Dialogue。
+    route: DialogueRouteDecision | None
+    #: 本轮是否需要新的全局策略（后端强制 OR Dialogue 建议）。
+    need_decision: bool
+    #: 本轮生效的原因码：被强制时用 ``forced_reason``，否则用路由的 ``reason_code``。
+    route_reason: str
+    #: 本轮实际使用的全局决策（新取得的，或复用的上一条有效决策）。
     decision: PolicyDecision | None
     channels: VisualChannels | None
     reply: str | None

@@ -28,13 +28,16 @@ from backend.models.dialogue import (
     DialogueCurrentUserInput,
     DialogueDecision,
     DialogueHistoryMessage,
+    DialogueRouteRequest,
     DialogueUserMemory,
     DialogueVisual,
 )
 
 __all__ = [
     "DIALOGUE_AGENT_SYSTEM_PROMPT",
+    "DIALOGUE_ROUTER_SYSTEM_PROMPT",
     "build_dialogue_user_prompt",
+    "build_dialogue_route_prompt",
 ]
 
 # 外观线索与语气的说法直接取视觉模块的那一份，不在本文件另抄一份：
@@ -297,6 +300,89 @@ def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
             "请严格按照上游最终决策，结合其他上下文生成下一句回复。\n"
             "- 当前用户输入就是历史对话之后新的一轮，不要与历史中的消息混淆或重复。\n"
             "- 只输出真正要对用户说的那一句话。"
+        ),
+    ]
+    return "\n\n".join(sections)
+
+
+# --------------------------------------------------------------------------
+# Dialogue 路由（Phase 2）：判断这一轮是否需要新的全局策略
+# --------------------------------------------------------------------------
+
+DIALOGUE_ROUTER_SYSTEM_PROMPT = """你是心理状态评估系统中 Dialogue Agent 的**路由模块**。
+
+【你的唯一职责】
+判断"这一轮是否需要重新调用决策模型，取得新的**全局**评估策略"。
+
+【你不是决策模型】
+你不选择话题，也不决定换成哪个话题。
+需要换话题时，你只能说"需要"，由决策模型决定换成哪一个。
+因此你的输出里**没有**话题字段，也不要在 reason 里指定新话题。
+
+【什么情况需要新策略（need_decision = true）】
+1. 当前话题已经问得差不多，再追问只会重复用户已经答过的内容。
+2. 用户表达了想换话题、不想聊这个，或明确说这个话题没什么可说的。
+3. 用户这句话与当前话题关系不大，硬顺着当前话题问会显得生硬。
+4. 你需要一个完全不同的方向才能继续推进评估。
+
+【什么情况不需要（need_decision = false）】
+1. 用户刚给出新的具体信息（时间、频率、程度、影响、例子），顺势再追问一句很自然。
+2. 用户需要先被回应或被澄清，澄清完再继续当前话题即可。
+3. 用户情绪明显，需要先共情承接；此时马上换话题会显得机械、不近人情。
+
+【判断准则】
+- 不要每一轮都要求新策略：追问是正常对话的一部分，不是异常。
+- 也不要总是选择继续：同一个话题连续追问超过两轮就会像问卷。
+- 拿不准时选 need_decision = true。多调一次决策模型是安全的，
+  漏掉一次必要的话题推进不是。
+
+只输出一个 JSON 对象，不要输出解释、前后缀或代码块以外的任何内容：
+{"need_decision": true 或 false, "reason_code": "简短原因码", "reason": "一句话理由"}
+
+reason_code 只能取以下之一：
+- continue_topic     当前话题还值得追问
+- clarify            需要先澄清用户刚说的内容
+- topic_exhausted    当前话题问得差不多了，需要新方向
+- user_wants_change  用户想换话题或不想继续当前话题
+- off_topic          用户说的与当前话题无关，需要新方向
+"""
+
+
+def _format_route_progress(request: DialogueRouteRequest) -> str:
+    """渲染【评估进度】分区：让路由模块知道当前话题用了多少轮、还剩多少轮。"""
+    if request.active_topic:
+        head = (f"当前话题：{request.active_topic}"
+                f"（已完成 {request.active_topic_turns} 轮，"
+                f"单话题上限 {request.topic_limit} 轮）")
+    else:
+        head = "当前话题：（尚未确定）"
+    covered = "、".join(
+        f"{topic} {count} 轮" for topic, count in request.topic_turns.items()) or "（暂无）"
+    return "\n".join([
+        head,
+        f"各话题轮数：{covered}",
+        f"已完成轮数：{request.turn_count}"
+        f"（第 {request.min_turns} 轮起才可能收尾，第 {request.max_turns} 轮强制收尾）",
+    ])
+
+
+def build_dialogue_route_prompt(request: DialogueRouteRequest) -> str:
+    """把 DialogueRouteRequest 渲染成路由模块的 User Prompt。
+
+    与 :func:`build_dialogue_user_prompt` 一样是**纯函数**：只做格式化，
+    不调用模型、不做任何业务判断、不含话题候选列表。
+    """
+    actions_text = "、".join(request.active_actions) or "（尚无有效全局策略）"
+    sections = [
+        "【历史对话】\n" + _format_history(request.conversation_history),
+        "【当前用户输入】\n" + _format_current_input(request.current_user_input),
+        "【当前全局策略】\n" + f"actions：{actions_text}",
+        "【评估进度】\n" + _format_route_progress(request),
+        (
+            "【任务】\n"
+            "判断这一轮是否需要重新调用决策模型取得新的全局策略。\n"
+            "- 只判断“需不需要”，不要指定新话题。\n"
+            "- 只输出一个 JSON 对象。"
         ),
     ]
     return "\n\n".join(sections)

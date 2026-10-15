@@ -5,10 +5,10 @@
 :class:`backend.models.states.SessionState` 仍是唯一权威会话状态
 （本阶段刻意不引入 LangGraph Checkpointer）。
 
-本阶段（Phase 1）只做**等价迁移**：节点是把
-:meth:`backend.core.dialogue_manager.DialogueManager.process_turn` 的各步骤
-原样拆开，并且两组实现共用同一批模块级函数，行为必须与顺序执行完全一致。
-决策仍是**每轮必调**，改为按需调用是 Phase 2 的事。
+本阶段（Phase 2）Dialogue 已成为正常对话的主控：由 ``dialogue_route`` 判断
+这一轮是否需要**新的**全局策略，``decision`` 只在需要时执行。后端强制条件
+（尚无有效策略、话题已到次数上限、话题失效、高风险话题）优先，并且短路掉
+路由模型调用。话题次数、收尾规则与视觉机制均沿用既有实现。
 
 【关于导入】本包**不**在导入时加载 ``langgraph``：只有真正调用
 :func:`build_turn_graph` 才会导入。这样 ``DIALOGUE_ENGINE=legacy`` 的路径

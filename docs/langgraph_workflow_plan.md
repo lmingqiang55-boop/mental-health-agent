@@ -340,6 +340,8 @@ xxhash 4.0.1           zstandard 0.25.0
 
 `prepare_turn → (closing | open)` 是**真实条件路由**；`decision` 的入边在
 Phase 2 改为条件边即可实现按需调用，无需再动其他节点。
+（Phase 2 实际做的比这句更多：`prepare_vision` 更名为 `visual_prepare`，
+并新增了 `closing_check` / `dialogue_route` / `resolve_topic` 三个节点。）
 
 **防漂移手段**：两组实现共用同一批模块级函数
 （`resolve_current_vision` / `ensure_screening_open` / `select_visual_channels` /
@@ -354,20 +356,83 @@ Phase 2 改为条件边即可实现按需调用，无需再动其他节点。
 **明确未做**（留给 Phase 2+）：Dialogue 自主判断是否调用 Decision、
 1~3 条气泡、生成后 Visual Review、把会话写入集中到单一 commit 节点。
 
-### Phase 2 — Dialogue 主控 + Decision 按需 ⭐**你的首要任务**
+### Phase 2 — Dialogue 主控 + Decision 按需 ⭐**你的首要任务** ✅ **已完成**
 
 | 项目 | 内容 |
 | --- | --- |
-| 改文件 | `backend/models/dialogue.py`：`DialogueAgentRequest` 增加 `mode: Literal["route_and_reply","execute_decision"]`，`decision` 改为**可选**（`Optional[DialogueDecision] = None`，并在 docstring 写明"只有 `execute_decision` 模式必须有"）；新增 `DialogueRouteDecision`（`needs_decision` / `reason` / `suggested_topic` / `messages`）；`DialogueAgentResponse` 增加 `messages: list[str]` |
-| 改文件 | `backend/prompts/dialogue_prompt.py`：新增 `route_and_reply` 的 system/user 段（要求输出严格 JSON，含 `needs_decision` 与理由）、`execute_decision` 的段（强调必须服从 topic）；视觉段与历史段**复用现有** `_visual_section` / `_format_history` |
-| 改文件 | `backend/agents/dialogue_agent.py`：新增 `route()` 与按模式分派的解析；**保留**全部现有校验（`_near_repeated_question`、`_repeated_opening`、`closing_question`、`missed_visual`）与重写机制；JSON 解析要**容忍纯文本回退**（模型不听话时按"单条消息 + 不请求决策"处理，绝不因格式问题丢轮次） |
-| 改文件 | `backend/core/screening_flow.py`：新增 `active_topic` 处理、`should_force_decision()`；`limit_topic` / `record_answer` / `completion_reason` 的阈值**一行不改** |
-| 改文件 | `backend/models/states.py`：`ScreeningProgress.active_topic` |
-| 改文件 | `backend/prompts/…`+`backend/graph/nodes.py`：`dialogue_route` / `decision` / `dialogue_execute` 三节点落地 |
-| 新增测试 | `tests/test_dialogue_autonomy.py`：① 模型说"不需要"且预算未满 → **Decision 调用次数为 0**；② 话题用满 2 次 → 后端**强制**请求 Decision；③ 模型自报 `suggested_topic="抑郁"`（不在白名单）→ 被丢弃；④ 模型要求 decision 但预算已耗尽 → 降级为本地回复、不报错、不死循环 |
-| 新增测试 | `tests/test_screening_constraints_preserved.py`：本地追问轮次**同样**计入话题计数；`topic_coverage` / `turn_limit` / `user_requested` 三种收尾在 graph 下**仍然**能触发（这是 §2.3 那个坑的守卫） |
-| 完成判据 | 上述测试全绿 + Phase 1 等价测试在"每轮必调 Decision"的老脚本上仍全绿 + 现有 840 条全绿 |
-| 产出证据 | `tests/test_decision_budget_evidence.py`：6 轮脚本会话，断言 `graph` 的 Decision 调用次数 **严格小于** `legacy`，并把两侧计数打印出来（对应你的开发原则 9） |
+| 新建 | `tests/test_dialogue_autonomy.py`（43 条）、`scripts/compare_decision_budget.py`（可复现对照实验） |
+| 改文件 | `backend/core/screening_flow.py`（`should_force_decision` / `adopt_decision` / `carry_over_topic` / `coverage_complete`）；`backend/models/states.py`（`ScreeningProgress.active_topic` / `.active_actions`，均 `exclude=True`）；`backend/models/dialogue.py`（`DialogueRouteDecision` / `DialogueRouteRequest`）；`backend/prompts/dialogue_prompt.py`（路由 System Prompt + Builder）；`backend/agents/dialogue_agent.py`（`parse_route_decision` / `route()` / `route_fallback`）；`backend/core/dialogue_manager.py`（`route_turn` / `reuse_decision` / `history_before_turn`）；`backend/graph/{state,nodes,build}.py` |
+| 一行未改 | `limit_topic` / `record_answer` / `completion_reason` 的**任何阈值**；`backend/safety/**`；`backend/policy/**`；`backend/core/visual_acknowledgment.py`；全部前端文件 |
+| 完成判据 | **914 passed / 0 failed**（870 基线 + 43 自主性 + 1 前端契约）✅ |
+
+#### Phase 2 实测记录
+
+**与计划的两处偏离（都是有意的）**
+
+1. **没有改 `DialogueAgentRequest` 的 Schema。** 计划里写"`decision` 改为可选 + 增加 `mode`"，
+   实际做法是：`decision` **保持必填**，跳过决策时用 `reuse_decision()` 把
+   ``active_actions`` 原样还原成 `PolicyDecision`。理由是原方案会让 Dialogue Agent
+   出现"没有决策也能工作"的第二种工作模式，而本阶段的约束是
+   *Dialogue 不能自己选话题*——保持 `decision` 必填正好编码了这条约束。
+   `suggested_topic` 也没有加：路由结构里**刻意没有**话题字段，模型在类型层面
+   就无法指定新话题（比"加了再在代码里丢弃"更可靠）。
+
+2. **新增了一个计划里没有的节点 `resolve_topic`，并新增了一条强制条件 `coverage_lag`。**
+   - `resolve_topic`：两条分支（需要决策 / 复用决策）在这里收口，成为本轮**唯一**的
+     话题记账点。计划把 `limit_topic` 留在 `decision` 里，那会让"复用策略"分支
+     没有写 `pending_topic` 的地方——正是"自主追问不计入话题"那个 bug 的来源。
+   - `coverage_lag`：实测发现自主追问会让每个话题都用满 2 轮，覆盖面推进明显变慢
+     （最坏情况第 16 轮才补齐，只剩 4 轮余量）。规则是"已过 `MIN_TURNS`、
+     当前话题已有 1 轮、覆盖仍不全 → 强制轮换"，把最坏情况压到第 13 轮。
+
+**拓扑（最终）**::
+
+    START ─▶ prepare_turn ─▶ closing_check ─┬─(收尾)─▶ dialogue_close ──────────────────▶ commit ─▶ END
+                                            │
+                                            └─(普通)─▶ dialogue_route ─┬─(需要新策略)─▶ decision ─┐
+                                                                       │                       │
+                                                                       └─(复用已有效策略)──────┤
+                                                                                               ▼
+                                                                         resolve_topic ─▶ visual_prepare
+                                                                               ─▶ dialogue_execute ─▶ commit
+
+`dialogue_route` 在**后端强制**时短路掉路由模型调用（结论已定，不必再问一次）。
+图**没有回边**，有 AST 级拓扑排序测试守着，因此节点不会被重复执行。
+
+**两个关键机制**
+
+- **`active_topic` 与 `pending_topic` 的分工**：`active_topic` 是"正在推进的全局话题"，
+  只在决策生效时更新；`pending_topic` 是"下一条回答该计入哪个话题"，**每轮结束时
+  必定被指向一个明确话题**（`adopt_decision` 或 `carry_over_topic`）。因此计数与
+  "本轮是否调用过决策模型"完全解耦。幂等性来自**消费即清空**：
+  `record_answer` 计数后立刻把 `pending_topic` 置 `None`，重复调用不再累加。
+- **路由失败的方向**：一律回退为 `need_decision=True`（回到既有的每轮决策流程）。
+  只有"布尔值明确 + 原因码在约定集合内"才接受 `need_decision=False`。
+  多调一次决策是安全的，让话题推进停摆不是。
+
+**对照实验（离线桩，`scripts/compare_decision_budget.py`）**
+
+决策模型固定返回 `["共情安慰","睡眠"]`（话题能否切换完全取决于后端次数约束）：
+
+| 模式 | 轮数 | 决策调用 | 路由调用 | 回复生成 |
+| --- | --- | --- | --- | --- |
+| legacy（6 轮） | 6 | **6** | 0 | 6 |
+| graph / 每轮要新策略（6 轮） | 6 | **6** | 4 | 6 |
+| graph / 按需（6 轮） | 6 | **3** | 3 | 6 |
+| legacy（跑到收尾） | 10 | **9** | 0 | 10 |
+| graph / 每轮要新策略 | 10 | **9** | 7 | 10 |
+| graph / 按需 | 13 | **8** | 4 | 13 |
+
+- "每轮要新策略"时 graph 与 legacy 的决策次数**完全一致**，且话题计数逐项相同——
+  说明减少的调用完全来自路由判断，不是顺手改了别的东西。
+- 按需模式下 6 轮省一半；轮数拉长后省得变少，因为**话题轮换本身就需要决策**
+  （`coverage_lag` / `topic_budget` 强制），这是结构性代价，不是缺陷。
+- 按需模式覆盖全部 8 个话题用时 13 轮 vs legacy 10 轮：更慢，但在 20 轮预算内。
+
+**这些数字只证明调度逻辑，不证明对话质量。** 真实模型下的质量与延迟需要真模型实验。
+
+**明确未做**（留给 Phase 3+）：Safety 迁入图、1~3 条气泡、生成后 Visual Review、
+Agent Trace、高并发改造。
 
 ### Phase 3 — Safety 迁入图作为节点 0
 
