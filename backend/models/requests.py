@@ -152,6 +152,19 @@ class FocusLogRequest(BaseModel):
     mood_after: int | None = Field(default=None, ge=1, le=5)
 
 
+class ArtReflectRequest(BaseModel):
+    """艺术表达「读画」：提交画面的客观特征，返回一段陪伴式解读。
+
+    只传特征、不传图像；服务端仅做语言生成，不落库、不参与风险判定。
+    """
+    colors: list[str] = Field(default_factory=list, max_length=8, description="用到的颜色名")
+    fill: float = Field(default=0.0, ge=0.0, le=1.0, description="涂满程度 0~1")
+    symmetry: Literal["free", "mirror", "mandala"] = "free"
+    mood: str = Field(default="", max_length=20, description="学生自评心情，选填")
+    prompt: str = Field(default="", max_length=80, description="当次题面，选填")
+    title: str = Field(default="", max_length=30, description="作品标题，选填")
+
+
 # ---------------------------------------------------------------------------
 # 学生档案 / 紧急联系人
 # ---------------------------------------------------------------------------

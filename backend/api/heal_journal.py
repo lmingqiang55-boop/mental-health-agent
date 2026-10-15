@@ -4,16 +4,19 @@
 记录持久化在 backend/data/heal_journal.sqlite3，刷新/重启不丢。
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
+from backend.core.art_reflect import ArtReflectUnavailable, reflect_artwork
 from backend.core.heal_store import heal_store, recommend_contents, _since, _today
 from backend.models.heal import MOOD_TAGS, MoodEntry
 from backend.models.requests import (
+    ArtReflectRequest,
     FocusLogRequest,
     HabitCheckinRequest,
     SaveMoodRequest,
 )
 from backend.models.responses import (
+    ArtReflectResponse,
     FocusListResponse,
     FocusLogResponse,
     GrowthResponse,
@@ -151,3 +154,27 @@ def growth(
         moods=moods,
         habits=habits,
     )
+
+
+# ---------------------------------------------------------------------------
+# 艺术表达「读画」（#8，可选增强）
+# ---------------------------------------------------------------------------
+
+@router.post("/art/reflect", response_model=ArtReflectResponse)
+async def reflect_art(request: ArtReflectRequest) -> ArtReflectResponse:
+    """把画面的客观特征交给大模型，写一段陪伴式解读。
+
+    仅做语言生成：不落库、不参与风险判定。大模型不可用时返回 503，
+    前端静默回退到本地回看文案。
+    """
+    try:
+        text = await reflect_artwork(request.model_dump())
+    except ArtReflectUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "ART_REFLECT_UNAVAILABLE",
+                "message": "读画服务暂时不可用，已保留本地回看文案。",
+            },
+        ) from None
+    return ArtReflectResponse(text=text)
