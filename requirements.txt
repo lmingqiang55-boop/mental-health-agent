@@ -37,6 +37,14 @@ beautifulsoup4==4.14.3
 emotiefflib==1.1.1
 opencv-python==4.14.0.94
 
+# LangGraph multi-agent dialogue workflow (Dialogue 主控 + 按需 Decision).
+# Phase 0 实测：1.2.15 会强制 websockets<17，把已装的 17.2 降级到 16.1.1。
+# 固定 1.2.2 并显式要求 websockets>=17，使 langgraph-sdk 解析到 0.3.15，
+# 从而 `pip install -r requirements.txt` 可复现"零变更"环境（0 移除 / 0 升降级）。
+# 若将来升级 langgraph，必须重新核对 websockets 约束是否仍成立。
+langgraph==1.2.2
+websockets>=17
+
 # Whole-recording ASR: the exact CUDA builds must match.
 torch==2.8.0+cu128
 torchaudio==2.8.0+cu128
