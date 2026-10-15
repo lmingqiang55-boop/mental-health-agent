@@ -147,6 +147,7 @@ class Suggestion(StrictModel):
     effect: Literal["unknown", "helpful", "ineffective", "worse"] = "unknown"
     active: bool = True
     wording_id: str | None = None
+    source_title: str = ""
     revisions: list[dict] = Field(default_factory=list)
 
 
@@ -175,10 +176,42 @@ class SupportReport(StrictModel):
     degraded_reason: str | None = None
 
 
+def original_text(goal: str, steps: list[str]) -> str:
+    """把一条方法的目标与步骤连成一段自然的话，供浅字呈现。
+
+    首报里的建议和聊天轮消息里的 `references` 用同一口径，避免两处对同一条方法
+    给出不一样的原文。
+    """
+    chunks: list[str] = []
+    for part in [goal, *steps]:
+        part = " ".join(str(part).split())
+        if not part:
+            continue
+        if chunks and chunks[-1][-1] not in "。！？；…":
+            chunks[-1] = chunks[-1] + "；"
+        chunks.append(part)
+    return "".join(chunks)
+
+
+class MessageReference(StrictModel):
+    """回答下方那行浅字：知识库原文的文字内容。学生可见，不含知识编号与来源信息。
+
+    text 是知识库里这条方法原本的说法，直接连成一段话，不做字段罗列；
+    conditions/cautions 是这条方法本来就带着的执行条件与要注意的事，同样按整句呈现，
+    前端不加“执行条件：/请留意：”这类标签，也不展示来源标题。
+    """
+
+    title: str
+    text: str = Field(min_length=1, max_length=1200)
+    conditions: list[str] = Field(default_factory=list)
+    cautions: list[str] = Field(default_factory=list)
+
+
 class HealingMessage(StrictModel):
     role: Literal["user", "assistant"]
     content: str
     created_at: datetime = Field(default_factory=_now)
+    references: list[MessageReference] = Field(default_factory=list)
 
 
 class HealingContextUpdate(StrictModel):
@@ -244,7 +277,10 @@ class HealingChatRequest(StrictModel):
 
 
 class StudentSuggestion(StrictModel):
+    """报告卡片里的方法。浅字呈现用 text + prerequisites + cautions，编号与步骤表由前端决定不用。"""
+
     title: str
+    text: str
     goal: str
     steps: list[str]
     prerequisites: list[str]
@@ -293,10 +329,12 @@ def student_view(state: HealingState) -> HealingResponse:
         status=state.status, turn_count=state.turn_count,
         report=StudentReport(
             **report.model_dump(exclude={"suggestion_ids", "degraded_reason"}),
-            suggestions=[StudentSuggestion(**item.model_dump(include={
-                "title", "goal", "steps", "prerequisites", "cautions",
-                "execution", "effect", "active",
-            })) for item in state.suggestions if item.suggestion_id in initial],
+            suggestions=[StudentSuggestion(
+                text=original_text(item.goal, item.steps),
+                **item.model_dump(include={
+                    "title", "goal", "steps", "prerequisites", "cautions",
+                    "execution", "effect", "active",
+                })) for item in state.suggestions if item.suggestion_id in initial],
         ),
         messages=state.messages, risk=state.risk,
         notice="本次陪伴记录仅在当前会话中保留；刷新或服务重启后请重新进入。",

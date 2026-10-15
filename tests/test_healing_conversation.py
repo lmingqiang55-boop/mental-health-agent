@@ -12,7 +12,7 @@ from backend.healing.agent import AgentDraft, NarrativeCheck
 from backend.healing.client import HealingUnavailable
 from backend.healing.conversation import question_problem
 from backend.healing.execution import unresolved_feedback
-from backend.healing.interaction import repeated_answer
+from backend.healing.interaction import mentioned_scenes, repeated_answer, resolve_goal
 from backend.healing.knowledge import load_knowledge
 from backend.healing.retriever import HealingRetriever
 from backend.models.healing import Feedback, HealingBackground, HealingMessage, HealingState
@@ -386,3 +386,32 @@ def test_four_boundaries_with_stable_real_two_method_precondition(support, actio
         assert any(item.execution == 'not_attempted' and item.suggestion_id == second.suggestion_id for item in current.feedback)
     assert chat(sid, state.healing_id, text, 'stable-boundary').json() == response.json()
     assert store.list_by_student(healing.session_manager.get_session(sid).student_ref) == records_before
+
+
+@pytest.mark.parametrize('text, expected', [
+    ('平时上学吃饭睡觉正常', []),
+    ('最近有点考试压力，平时上学吃饭睡觉正常', ['study_stress']),
+    ('睡不好，跟同学关系还行', ['sleep']),
+    ('吃饭正常，成绩不错', []),
+])
+def test_topics_called_normal_do_not_count_as_a_second_concern(text, expected):
+    """A "nothing wrong here" side remark must not trigger the priority question."""
+    assert set(mentioned_scenes(text)) == set(expected)
+    assert resolve_goal(text).needs_confirmation is False
+
+
+@pytest.mark.parametrize('text, expected', [
+    ('睡觉不正常', ['sleep']),
+    ('睡眠不太正常', ['sleep']),
+    ('睡眠不怎么正常', ['sleep']),
+    ('睡觉不算正常', ['sleep']),
+    ('跟同学关系不太正常', ['relationships']),
+    ('跟同学关系挺紧张的', ['relationships']),
+])
+def test_real_concerns_are_not_masked_as_normal(text, expected):
+    assert set(mentioned_scenes(text)) == set(expected)
+
+
+def test_two_real_concerns_still_ask_for_priority():
+    goal = resolve_goal('我今天考试很紧张，晚上也睡不好')
+    assert goal.needs_confirmation and set(goal.mentioned_scenes) == {'study_stress', 'sleep'}

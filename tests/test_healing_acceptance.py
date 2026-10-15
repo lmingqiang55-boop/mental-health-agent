@@ -125,7 +125,8 @@ def test_absent_demographics_never_borrow_older_age(acceptance, text, age, stage
     assert state.memory.background.age == age and state.memory.background.school_stage == stage
     assert bool(state.suggestions) == methods
     if not methods:
-        assert not model.calls
+        assert model.calls[0] == "AgentDraft" and "FitCheck" not in model.calls
+        assert state.report.degraded_reason
 
 
 @pytest.mark.parametrize("background", [
@@ -159,7 +160,8 @@ def test_unknown_background_pause_end_and_invalid_reply_without_model(acceptance
     ended = reply(sid, initial["healing_id"], "今天先到这里", message)
     assert ended.status_code == 200 and ended.json()["status"] == "ended"
     assert reply(sid, initial["healing_id"], "今天先到这里", message).json() == ended.json()
-    assert reply(sid, initial["healing_id"], "继续说").status_code == 409 and not model.calls
+    calls = len(model.calls)
+    assert reply(sid, initial["healing_id"], "继续说").status_code == 409 and len(model.calls) == calls
 
 
 @pytest.mark.parametrize("case", RETRIEVAL_CASES, ids=lambda row: row["id"])

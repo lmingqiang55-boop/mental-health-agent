@@ -61,10 +61,11 @@ def test_read_refreshes_medium_report_to_later_plan_once(support):
     assert initial["risk"]["risk_level"] == "medium"
     session_manager.modify_session(sid, lambda state: state.conversation_history.append(
         Message(role=MessageRole.USER, content="今晚准备跳楼")))
+    calls = len(fake.calls)
     refreshed = client.get(f"/api/healing/{sid}")
     assert refreshed.status_code == 200 and refreshed.json()["risk"]["risk_level"] == "high"
     assert client.get(f"/api/healing/{sid}").json() == refreshed.json()
-    assert not fake.calls
+    assert len(fake.calls) == calls
 
 
 @pytest.mark.parametrize("effect,quote", [
@@ -238,7 +239,11 @@ def test_replacement_method_keeps_global_number_in_messages_and_context(support)
     assert response.status_code == 200, response.text
     state = healing.healing_store.slot(sid).state
     assert [item.display_number for item in state.suggestions] == [1, 2, 3]
-    assert "第3个方法" in response.json()["messages"][-1]["content"]
+    content = response.json()["messages"][-1]["content"]
+    assert "第3个方法" not in content and "执行条件" not in content
+    citations = response.json()["messages"][-1]["references"]
+    assert len(citations) == 1 and citations[0]["title"] == state.suggestions[2].title
+    assert citations[0]["text"] and "knowledge_id" not in response.text
     fake.feedback, fake.recommendations = [], []
     assert chat(sid, hid, "第三个方法不方便做，先暂停").status_code == 200
     state = healing.healing_store.slot(sid).state
@@ -296,5 +301,143 @@ def test_deferred_adult_method_after_replacements_does_not_renumber_report(suppo
     state = healing.healing_store.slot(sid).state
     assert [item.display_number for item in state.suggestions] == [1, 2, 3, 4]
     assert state.report.suggestion_ids == report_ids and len(response.json()["report"]["suggestions"]) == 2
-    assert "第4个方法" in response.json()["messages"][-1]["content"]
+    citations = response.json()["messages"][-1]["references"]
+    assert [item["title"] for item in citations] == [state.suggestions[3].title]
     assert sum(item.active for item in state.suggestions) == 2
+
+
+def test_reference_carries_conditions_and_cautions_but_no_source(support):
+    """浅字给的是知识库原文，连同它本来就要求的条件和要注意的事；来源信息不出现在学生响应里。"""
+    sid, _, _, fake = support
+    healing.healing_agent.retriever = HealingRetriever([
+        knowledge("name-concern", executor="student", prerequisites=[], exclusions=[]),
+        knowledge("other", title="换一种说法", executor="student",
+                  prerequisites=["先跟可信任的成人说一声。"], exclusions=["不要在很困的时候做。"]),
+    ])
+    fake.recommendations = ["name-concern"]
+    hid = start(sid).json()["healing_id"]
+    target = healing.healing_store.slot(sid).state.suggestions[0]
+    quote = "第一个方法我试了，没有帮助"
+    fake.recommendations = ["other"]
+    fake.feedback = [Feedback(suggestion_id=target.suggestion_id, execution="attempted",
+                              effect="ineffective", evidence=quote)]
+    response = chat(sid, hid, quote)
+    assert response.status_code == 200, response.text
+    citations = response.json()["messages"][-1]["references"]
+    assert len(citations) == 1 and citations[0]["title"] == "换一种说法"
+    assert citations[0]["conditions"] == ["先跟可信任的成人说一声。"]
+    assert citations[0]["cautions"] == ["不要在很困的时候做。"]
+    assert not citations[0]["text"].startswith("执行条件")
+    assert "合成来源" not in response.text and "example.org" not in response.text
+
+
+def test_simplified_turn_speaks_from_the_verified_wording_and_cites_it(support):
+    """学生说看不懂时，交给模型的是已校验的简化版原文，浅字也随之换成那条原文。"""
+    from backend.models.healing import KnowledgeWording
+
+    sid, _, _, fake = support
+    healing.healing_agent.retriever = HealingRetriever([knowledge("name-concern", wordings=[
+        KnowledgeWording(wording_id="name-concern-simple", style="simple", title="说说今天最烦的事",
+                         goal="把担心说出口", steps=["跟身边的大人说一句今天最烦的事。"],
+                         semantic_checked=True)])])
+    fake.recommendations = ["name-concern"]
+    hid = start(sid).json()["healing_id"]
+    target = healing.healing_store.slot(sid).state.suggestions[0]
+    fake.recommendations = []
+    fake.simplify_id = target.suggestion_id
+    response = chat(sid, hid, "第一个方法看不懂，能简单一点吗")
+    assert response.status_code == 200, response.text
+    offers = fake.calls[-1]["simplified_wordings"]
+    assert [item["suggestion_id"] for item in offers] == [target.suggestion_id]
+    assert offers[0]["steps"] == ["跟身边的大人说一句今天最烦的事。"]
+    assert offers[0]["conditions"] == target.prerequisites
+    assert offers[0]["steps"] != target.steps
+    state = healing.healing_store.slot(sid).state
+    assert state.suggestions[0].wording_id == "name-concern-simple"
+    citations = response.json()["messages"][-1]["references"]
+    assert [item["title"] for item in citations] == ["说说今天最烦的事"]
+    assert "跟身边的大人说一句今天最烦的事。" in citations[0]["text"]
+    assert "简化文字" not in response.json()["messages"][-1]["content"]
+
+
+def test_simplification_without_a_verified_wording_offers_nothing(support):
+    """没有通过校验的简化表达时，不给模型任何“自己编一个简化版”的口子。"""
+    sid, _, _, fake = support
+    fake.recommendations = ["name-concern"]
+    hid = start(sid).json()["healing_id"]
+    target = healing.healing_store.slot(sid).state.suggestions[0]
+    fake.recommendations = []
+    fake.simplify_id = target.suggestion_id
+    assert chat(sid, hid, "第一个方法看不懂，能简单一点吗").status_code == 200
+    assert fake.calls[-1]["simplified_wordings"] == []
+    state = healing.healing_store.slot(sid).state
+    assert state.suggestions[0].wording_id == target.wording_id
+
+
+def test_narrative_check_receives_already_proposed_methods(support):
+    """复核清单里带上已经提出过的方法，复述旧方法不会再被当成编造。"""
+    from backend.healing.agent import NarrativeCheck
+    from test_healing import FakeClient
+
+    sid, _, _, _ = support
+
+    class RecordingClient(FakeClient):
+        def __init__(self):
+            super().__init__()
+            self.checked = []
+
+        async def generate(self, system, payload, schema, **kwargs):
+            if schema is NarrativeCheck:
+                self.checked.append(payload)
+            return await super().generate(system, payload, schema, **kwargs)
+
+    model = RecordingClient()
+    model.recommendations = ["name-concern"]
+    healing.healing_agent.client = model
+    hid = start(sid).json()["healing_id"]
+    target = healing.healing_store.slot(sid).state.suggestions[0]
+    model.recommendations = []
+    assert chat(sid, hid, "这个方法我试了").status_code == 200
+    payload = model.checked[-1]
+    assert [item["suggestion_id"] for item in payload["previous_methods"]] == [target.suggestion_id]
+    assert payload["previous_methods"][0]["steps"] == target.steps
+    assert payload["previous_methods"][0]["conditions"] == target.prerequisites
+    assert payload["simplified_wordings"] == []
+
+
+def test_report_suggestion_gives_the_same_light_text_as_a_citation(support):
+    """首报里的方法也带好浅字原文，且与聊天轮引用的连法完全一致。"""
+    from backend.healing.agent import make_reference
+
+    sid, _, _, fake = support
+    healing.healing_agent.retriever = HealingRetriever([knowledge("name-concern")])
+    fake.recommendations = ["name-concern"]
+    suggestion = start(sid).json()["report"]["suggestions"][0]
+    target = healing.healing_store.slot(sid).state.suggestions[0]
+    assert suggestion["text"] == make_reference(target).text
+    assert suggestion["text"] == "梳理考试压力；在成人指导下说出让你有压力的事情。"
+    assert suggestion["prerequisites"] == list(target.prerequisites)
+    assert suggestion["cautions"] == list(target.cautions)
+    assert "\n" not in suggestion["text"] and "1." not in suggestion["text"]
+
+
+def test_priority_report_status_follows_the_model_instead_of_hardcoded_active(support):
+    """学生同时带来两件事时，首报状态也听模型的，不再写死 active。"""
+    from backend.healing.agent import AgentDraft
+    from test_healing import FakeClient
+
+    sid, _, _, _ = support
+
+    class PausingReportClient(FakeClient):
+        async def generate(self, system, payload, schema, **kwargs):
+            draft = await super().generate(system, payload, schema, **kwargs)
+            if schema is AgentDraft and payload["phase"] == "report":
+                draft.next_action = "pause"
+                draft.question = None
+            return draft
+
+    healing.healing_agent.client = PausingReportClient()
+    data = start(sid, background={"school_stage": "middle", "current_concern": "我考试很紧张，晚上也睡不好"}).json()
+    assert data["status"] == "paused"
+    assert data["report"]["question"] is None
+    assert data["report"]["suggestions"] == []
