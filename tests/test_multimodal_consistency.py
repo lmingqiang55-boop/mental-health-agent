@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from backend.core.multimodal_consistency import compute_consistency
-from backend.core.text_polarity import text_polarity
+from backend.core.text_polarity import is_whole_sentence_denial, text_polarity
 from backend.core.vision_thresholds import ConsistencyThresholds
 from evaluation_agent.inputs import EvaluationInput
 from evaluation_agent.schemas import ConsistencyLevel
@@ -36,20 +36,70 @@ def test_pure_denial_reads_as_mildly_positive_not_negative() -> None:
     文字与表情就朝同一个方向，矛盾永远发现不了。
     """
 
-    for phrase in ("没有", "没", "没事", "没事儿", "我没事", "没什么", "没啥", "没关系"):
+    for phrase in ("没有", "没", "没事", "没事儿", "我没事", "没什么", "没啥", "没关系",
+                   "没什么大不了的", "没事的"):
         value = text_polarity(phrase)
         assert value is not None, phrase
         assert 0.0 < value < 0.5, phrase
     # "还没"意思是"尚未"，不是"我没事"，别被剥成正向。
     assert text_polarity("还没呢") is None
+    # 剥掉语气词也不能把"尚未"变成"我没事"：这两句和"还没呢"是同一层意思，
+    # 只差一个"还"，读法必须一致（拿不准就返回 None）。
+    assert text_polarity("没呢") is None
+    assert text_polarity("没有呢") is None
     # 句中出现的否认片段不适用整句规则，仍走词典路径（这里没有情绪词）。
     assert text_polarity("没有烦心事") is None
+
+
+def test_whole_sentence_denial_helper_matches_the_reading() -> None:
+    """报告侧排除用的判定必须和极性读法同一套，不能各判各的。"""
+
+    for phrase in ("没有", "没", "没事", "我没事", "没什么", "没关系", "没什么大不了的"):
+        assert is_whole_sentence_denial(phrase), phrase
+        assert text_polarity(phrase) is not None, phrase
+    for phrase in ("还没呢", "没呢", "没有呢", "没有烦心事", "我很难过", "今天考了三门", ""):
+        assert not is_whole_sentence_denial(phrase), phrase
 
 
 def test_text_polarity_falls_back_to_ontology_words() -> None:
     """「迷茫」只在 DLUT 本体里，知网给它 0 分，兜底路径要能读出负向。"""
 
     assert text_polarity("我很迷茫") < 0.0
+
+
+def test_whole_sentence_denials_do_not_enter_the_consistency_score() -> None:
+    """整句否认不参与会话级一致性分数（报告口径的决定，见模块 docstring）。
+
+    ``text_polarity`` 为了单句核对把"我没事"读成弱正向；如果这个分数也采用，
+    普通筛查里大量的"没有"就会跟偏低的脸色凑成一对对"不一致"，把分数系统性压低。
+    排除之后这里应当回到"没得比、不给分"，并在 summary 里说清排除了 2 句。
+    """
+
+    result = compute_consistency(_input(
+        _user("没有", -0.31),
+        _user("没事", -0.31),
+    ))
+    assert result.score is None
+    assert result.level is ConsistencyLevel.UNKNOWN
+    assert result.pairs == ()
+    assert result.considered_turns == 2
+    assert "整句否认" in result.summary
+    assert "没有分数不等于" in result.summary
+
+
+def test_denials_are_excluded_while_normal_sentences_still_count() -> None:
+    """排除的是否认句，不是整场会话；正常句子照算，排除了几句要写在 summary 里。"""
+
+    result = compute_consistency(_input(
+        _user("没有", -0.8),
+        _user("我最近很难过", -0.8),
+        _user("没什么", -0.8),
+        _user("压力很大", -0.6),
+    ))
+    assert result.score is not None and result.score >= 80
+    assert len(result.pairs) == 2
+    assert result.considered_turns == 4
+    assert "另有 2 句是整句否认" in result.summary
 
 
 def test_consistency_is_high_when_both_signals_point_the_same_way() -> None:

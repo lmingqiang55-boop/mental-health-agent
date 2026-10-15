@@ -197,13 +197,16 @@ def freeze_segment(request: VisionSegmentRequest) -> VisionSegmentResponse:
                              and request.end_ms - 5000 <= item.captured_at_ms < request.end_ms])
         session.vision_segments[request.utterance_id] = segment
         result["value"] = segment
-        # 只在真正新建片段时落盘（默认关闭）：重放同一区间会走上面的
-        # 早返回分支，不会把同一个片段写两遍。
-        dump_segment(request.session_id, request.utterance_id, segment)
+        # 只有真正新建片段时才落盘（默认关闭）：重放同一区间会走上面的早返回
+        # 分支，不会把同一个片段写两遍。写盘本身放在 modify_session 之后——
+        # 这里是会话锁里面，落盘要写磁盘，不该占着全局锁（见下面的调用）。
+        result["created"] = True
 
     updated = session_manager.modify_session(request.session_id, mutator)
     if updated is None:
         raise session_not_found()
+    if result.get("created"):
+        dump_segment(request.session_id, request.utterance_id, result["value"])
     return VisionSegmentResponse(session_id=request.session_id, utterance_id=request.utterance_id,
                                  **result["value"].model_dump())
 

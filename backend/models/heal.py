@@ -17,28 +17,39 @@ from backend.models.states import _now
 MOOD_LEVEL_TAGS: dict[int, tuple[str, ...]] = {
     1: ("想哭", "委屈", "孤单"),
     2: ("焦虑", "紧张", "累"),
-    3: ("烦躁", "无聊", "困"),
+    3: ("烦躁", "生气", "无聊", "困"),
     4: ("平静", "放松"),
     5: ("开心", "有精神"),
 }
 
-#: 心情标签候选（学生端多选，供情绪云图统计）。列表顺序即前端标签的展示顺序。
-#: :data:`MOOD_LEVEL_TAGS` 里的每个词都必须出现在这张表里，否则按心情筛内容会
-#: 筛空。两张表放在同一个文件里，就是为了改一处时能立刻看到另一处。
+#: 心情标签候选（内容库的筛选候选词）。顺序即学生端筛选 chip 的展示顺序。
+#:
+#: **每个词都必须至少被一个档位分组覆盖**（见 :data:`MOOD_LEVEL_TAGS`）：内容卡片的
+#: ``tags`` 只由档位分组推导，候选表里多出来的词点下去就是一张空列表（"被理解"曾经
+#: 就是这样，已删）。反过来，档位分组里的词也必须在候选表里——两张表放在同一个文件里
+#: 就是为了改一处时能立刻看到另一处；``tests/test_heal_mood_tags.py`` 双向守这条规则。
+#:
+#: 注意它**不是**心情日记「和什么有关」的标签（那是学生端自己的场景词表，例如
+#: 学习/人际/家庭），两者的含义与消费者都不同，别合并。
 MOOD_TAGS: list[str] = [
-    "开心", "平静", "放松", "有精神", "被理解",
+    "开心", "平静", "放松", "有精神",
     "累", "困", "烦躁", "焦虑", "委屈",
     "孤单", "生气", "无聊", "紧张", "想哭",
 ]
 
 
 class MoodEntry(BaseModel):
-    """一条心情日记（按日期唯一，重复提交覆盖当天）。"""
+    """一条心情日记（按日期唯一，重复提交覆盖当天）。
+
+    ``tags`` 是学生端心情日记里「和什么有关」的场景标签，由学生端自己给出、后端
+    不校验，供 ``/api/heal/growth`` 聚合出「常出现的心情标签」。它与
+    :data:`MOOD_TAGS`（内容库筛选候选词）**不是同一套词**，别再按后者去校验或过滤。
+    """
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     mood: int = Field(ge=1, le=5, description="心情档位 1（最差）~ 5（最好）")
     weather: str | None = Field(default=None, max_length=20, description="自定义天气，如 晴/多云")
     color: str | None = Field(default=None, max_length=20, description="心情色，如 #FFD166")
-    tags: list[str] = Field(default_factory=list, description="心情标签，如 焦虑/放松")
+    tags: list[str] = Field(default_factory=list, description="场景标签，如 学习/人际")
     note: str | None = Field(default=None, max_length=200)
     voice_text: str | None = Field(default=None, max_length=200, description="语音输入转写文本")
     updated_at: datetime = Field(default_factory=_now)

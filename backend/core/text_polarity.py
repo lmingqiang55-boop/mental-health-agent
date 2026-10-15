@@ -66,6 +66,11 @@
 把影响压到最小，核对通道也只会温和地问一次、明令不许下结论；要彻底区分"否认
 症状"与"否认情绪"必须先有对话上下文，那不是单句极性函数能做的判断。
 
+**这条弱正向只给单句核对用，会话级的一致性分数不采用它**：调用方先问
+:func:`is_whole_sentence_denial`，整句否认的句子不计入比对（见
+:mod:`backend.core.multimodal_consistency`）。理由是那个分数要回答"两路信号彼此
+接近的程度"，而否认句是回答"有没有"的，把它当成情绪表达会让普通筛查普遍低分。
+
 **本函数不是语义理解**：它看不见反讽、读不出上下文，拿不准时返回 ``None``，
 由调用方把这一句排除在统计之外，而不是塞一个 0 假装"中性"。
 """
@@ -155,6 +160,25 @@ r"""整句话只是否认时，剥掉前后缀之后剩下的核心说法。
 交给正常规则处理更准。
 """
 
+DENIAL_WHOLE_PHRASES: frozenset[str] = frozenset({
+    "没什么大不了", "没什么大不了的",
+})
+r"""整句原样匹配的否认说法，不参与剥头剥尾。
+
+为什么单列：``"没什么大不了的"`` 里的"了"是"大不了"这个词的一部分，不是语气词，
+按 :data:`_DENIAL_STRIP_TAIL` 剥掉尾巴就只剩 ``"没什么大不"``，核心匹配不到，
+于是落回词典路径、实测读成 ``-0.58``（本体把"大不了"当负向词，前面的"没什么"
+没被算作否定）——和"没事"的读法正好相反，同为"我在说没事"却一个抓矛盾一个抓不到。
+"""
+
+_NOT_YET_CORES: frozenset[str] = frozenset({"没", "没有"})
+r"""光秃秃的"没""没有"——它们既可能是"我没问题"，也可能是"尚未"。
+
+区别只在有没有"还"和"呢"：``"还没睡"``\ ``"还没呢"`` 是"尚未"，不是"我没问题"；
+而 ``"没呢"``\ ``"没有呢"`` 是同一层"尚未"的意思被剥掉了语气词之后的样子。
+拿不准，所以按本模块一贯的规矩返回 ``None``（见 :func:`_denial_core`）。
+"""
+
 _DENIAL_STRIP_HEAD: tuple[str, ...] = (
     "我", "也", "都", "其实", "真的", "现在", "目前",
 )
@@ -164,8 +188,10 @@ _DENIAL_STRIP_HEAD: tuple[str, ...] = (
 _DENIAL_STRIP_TAIL: tuple[str, ...] = (
     "了", "的", "啊", "呀", "呢", "吧", "嘛", "哦", "噢",
 )
-"""否认句尾常见的语气词。剥掉"呢"之后 ``"还没呢"`` → ``"还没"`` 仍不匹配核心，
-因此这类"尚未"的说法不会被误伤。"""
+r"""否认句尾常见的语气词。剥掉"呢"之后 ``"还没呢"`` → ``"还没"`` 仍不匹配核心；
+但 ``"没呢"``\ ``"没有呢"`` 会剥成光秃秃的"没""没有"，那层"尚未"的意思就没了，
+所以 :func:`_denial_core` 对这两个核心另有判断，不因为少一个"还"就当成"我没事"。
+"""
 
 _DENIAL_STRIP_CHARS = frozenset(
     "，。！？、；：,.!?;: \t\r\n\u3000～~…—-_*/\\\"'“”‘’()（）[]【】"
@@ -371,9 +397,19 @@ def _ontology_polarity(text: str) -> float | None:
 
 
 def _denial_core(text: str) -> str:
-    """剥掉标点、人称与语气词，得到否认句的核心说法；不是整句否认时返回空串。"""
+    r"""剥掉标点、人称与语气词，得到否认句的核心说法；不是整句否认时返回空串。
 
-    core = "".join(ch for ch in text.strip() if ch not in _DENIAL_STRIP_CHARS)
+    先按 :data:`DENIAL_WHOLE_PHRASES` 整句原样匹配（"没什么大不了的"里的"了"不是
+    语气词，剥不得），再走剥头剥尾。尾部语气词里只有"呢"会改变否定应答的意思
+    （``"没呢"``\ ``"没有呢"`` 是"尚未"），所以剥掉过"呢"之后只剩
+    :data:`_NOT_YET_CORES` 的，按"拿不准"处理，返回空串。
+    """
+
+    stripped = "".join(ch for ch in text.strip() if ch not in _DENIAL_STRIP_CHARS)
+    if stripped in DENIAL_WHOLE_PHRASES:
+        return stripped
+    core = stripped
+    dropped_yet_particle = False
     changed = True
     while changed and core:
         changed = False
@@ -382,9 +418,27 @@ def _denial_core(text: str) -> str:
                 core = core[len(head):]
                 changed = True
         while core and core[-1] in _DENIAL_STRIP_TAIL:
+            if core[-1] == "呢":
+                dropped_yet_particle = True
             core = core[:-1]
             changed = True
-    return core if core in DENIAL_CORES else ""
+    if core not in DENIAL_CORES:
+        return ""
+    if dropped_yet_particle and core in _NOT_YET_CORES:
+        return ""
+    return core
+
+
+def is_whole_sentence_denial(text: str) -> bool:
+    """整句话只是一句否认（"我没事""没什么""没有"）时为真。
+
+    ``text_polarity`` 会把这些句子读成弱正向，好让"嘴上说没事、脸上却难过"能被
+    **单句**核对通道抓到；但它们不是情绪表达，而是回答"有没有"的，所以
+    :func:`backend.core.multimodal_consistency.compute_consistency` 用它把这些
+    句子排除在会话级一致性分数之外。
+    """
+
+    return bool(_denial_core(text))
 
 
 def _denial_polarity(text: str) -> float | None:
