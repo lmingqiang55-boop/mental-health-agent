@@ -6,6 +6,7 @@ import pytest
 
 from backend.core.session_manager import session_manager
 from backend.healing.adult_support import support_signal
+from backend.healing.agent import AgentDraft, NarrativeCheck
 from backend.healing.conversation import question_problem
 from backend.healing.execution import feedback_targets, preparation_targets, simplification_targets
 from backend.healing.interaction import pause_signal
@@ -441,3 +442,191 @@ def test_priority_report_status_follows_the_model_instead_of_hardcoded_active(su
     assert data["status"] == "paused"
     assert data["report"]["question"] is None
     assert data["report"]["suggestions"] == []
+
+
+def test_confirmation_first_report_keeps_the_general_caution(support):
+    """学生一次带来好几件事时的首报，也要带那句通用提醒。
+
+    这条路径原先不带 cautions，报告卡片里"要留意的是"整块是空的，
+    和普通首报不一致。
+    """
+
+    from backend.healing.agent import REPORT_CAUTION
+
+    sid, _, _, _ = support
+    data = start(sid, background={"school_stage": "middle", "current_concern": "我考试很紧张，晚上也睡不好"}).json()
+    assert data["report"]["suggestions"] == []
+    assert data["report"]["question"]
+    assert data["report"]["cautions"] == [REPORT_CAUTION]
+
+
+class SpokenClient:
+    """可指定"正文里自报提到了哪些方法"的客户端。"""
+
+    def __init__(self, base, *, knowledge_ids=(), suggestion_ids=(), recommend=()):
+        self.base = base
+        self.knowledge_ids = list(knowledge_ids)
+        self.suggestion_ids = list(suggestion_ids)
+        self.recommend = list(recommend)
+        self.narrative_payloads = []
+
+    async def generate(self, system, payload, schema, **kwargs):
+        if schema is NarrativeCheck:
+            self.narrative_payloads.append(payload)
+        draft = await self.base.generate(system, payload, schema, **kwargs)
+        if schema is AgentDraft and payload["phase"] != "report":
+            draft.recommendation_ids = list(self.recommend)
+            draft.spoken_knowledge_ids = list(self.knowledge_ids)
+            draft.spoken_suggestion_ids = list(self.suggestion_ids)
+        return draft
+
+
+def _start_one_method(sid, fake):
+    fake.recommendations = ["name-concern"]
+    hid = start(sid).json()["healing_id"]
+    fake.recommendations = []
+    return hid
+
+
+def test_prose_claiming_a_method_it_did_not_select_is_rejected(support):
+    """正文说了一条候选的做法、却没选中它 → 本轮报错，上一轮状态原样保留。
+
+    没有这一条时，模型说了候选 C、却选中并引用了 A，程序完全看不出来，
+    学生看到的是"正文推荐一个做法、下面的浅字是另一条方法"。
+    """
+
+    sid, _, _, fake = support
+    hid = _start_one_method(sid, fake)
+    before = healing.healing_store.slot(sid).state.model_copy(deep=True)
+    claimed = SpokenClient(fake, knowledge_ids=["other"])
+    healing.healing_agent.client = claimed
+
+    response = chat(sid, hid, "我还是有点紧张")
+    assert response.status_code == 503
+    assert healing.healing_store.slot(sid).state == before
+    # 重试那一轮必须带上结构化反馈，说明这是可修复的一类问题。
+    assert claimed.base.calls[-1]["validation_feedback"]
+
+
+def test_prose_claiming_a_method_it_selected_is_cited(support):
+    """正文提到的做法与浅字对得上时正常出一轮，且浅字是那条方法的原文。"""
+
+    sid, _, _, fake = support
+    hid = _start_one_method(sid, fake)
+    claimed = SpokenClient(fake, knowledge_ids=["other"], recommend=["other"])
+    healing.healing_agent.client = claimed
+
+    response = chat(sid, hid, "我还是有点紧张")
+    assert response.status_code == 200, response.text
+    references = response.json()["messages"][-1]["references"]
+    # 浅字必须就是正文提到的那一条（"other"），不能是另一条方法。
+    assert [item["text"] for item in references] == ["梳理考试压力；在成人指导下表达考试担忧。"]
+    assert "source_title" not in response.text
+
+
+def test_repeating_a_presented_method_needs_no_new_citation(support):
+    """顺带复述一条以前提过的方法：允许，而且不再重复附浅字。"""
+
+    sid, _, _, fake = support
+    hid = _start_one_method(sid, fake)
+    target = healing.healing_store.slot(sid).state.suggestions[0]
+    claimed = SpokenClient(fake, suggestion_ids=[target.suggestion_id])
+    healing.healing_agent.client = claimed
+
+    response = chat(sid, hid, "上次那个方法我还没试")
+    assert response.status_code == 200, response.text
+    assert response.json()["messages"][-1]["references"] == []
+
+
+def test_narrative_checker_only_sees_the_method_the_prose_claims(support):
+    """复核器只看"选中的 + 正文自报提到的"，不再拿到本轮全部候选。"""
+
+    sid, _, _, fake = support
+    hid = _start_one_method(sid, fake)
+    claimed = SpokenClient(fake, knowledge_ids=["other"], recommend=["other"])
+    healing.healing_agent.client = claimed
+    assert chat(sid, hid, "我还是有点紧张").status_code == 200
+
+    seen = claimed.narrative_payloads[-1]["knowledge"]
+    assert [item["knowledge_id"] for item in seen] == ["other"]
+
+
+def test_question_only_rejection_is_structural_not_message_matching(support):
+    """只否掉提问的那类拒绝，靠结构化原因走"去掉问题复用正文"。
+
+    以前是 ``str(exc).startswith("陪伴每轮只保留")``：提示词里改一个字，
+    这条路径就失效，后果是"只是提问不合格"退化成整轮 503。
+    """
+
+    from backend.healing.agent import REASON_QUESTION, HealingDraftInvalid, rejected_question_only
+    from test_healing import FakeClient
+
+    # 文案相同但没带原因 → 按正文被否处理；带原因才走只去问题的分支。
+    assert not rejected_question_only(HealingDraftInvalid("陪伴每轮只保留一个主要问题"))
+    assert rejected_question_only(HealingDraftInvalid("随便什么文案", reason=REASON_QUESTION))
+
+    sid, _, _, fake = support
+
+    class TwoQuestionClient(FakeClient):
+        async def generate(self, system, payload, schema, **kwargs):
+            draft = await super().generate(system, payload, schema, **kwargs)
+            if schema is AgentDraft:
+                draft.question = "最近睡得怎么样？平时几点开始准备睡？"
+            return draft
+
+    healing.healing_agent.client = TwoQuestionClient()
+    data = start(sid).json()
+    assert data["status"] == "paused"
+    assert data["report"]["question"] is None
+    assert healing.healing_store.slot(sid).state.report.understanding
+    assert "？" not in data["messages"][-1]["content"] if data["messages"] else True
+
+
+def test_overlong_corpus_method_is_truncated_instead_of_a_500(support):
+    """一条知识的目标 + 6 个长步骤会超过浅字上限，只能截断，不能抛 500。
+
+    上限是 1200 字，而语料允许"目标 300 字 + 6 步各 500 字"（合计约 3300 字）。
+    超限时抛的是字段校验错误，绕过"失败即报错、进度保留"的 503 通道、直接变 500。
+    """
+
+    from backend.models.healing import REFERENCE_TEXT_MAX
+
+    sid, _, _, fake = support
+    healing.healing_agent.retriever = HealingRetriever([
+        knowledge(goal="梳理" * 150, steps=["说" * 500 for _ in range(6)])])
+    fake.recommendations = ["name-concern"]
+    response = start(sid)
+    assert response.status_code == 200, response.text
+    text = response.json()["report"]["suggestions"][0]["text"]
+    assert len(text) <= REFERENCE_TEXT_MAX
+    assert text.endswith("…")
+
+
+def test_blank_knowledge_goal_is_rejected_when_the_corpus_loads():
+    """纯空白的 goal 会在加载时就报错，不会等到生成那一轮变成 500。"""
+
+    from pydantic import ValidationError
+
+    from backend.models.healing import KnowledgeItem
+
+    payload = knowledge().model_dump()
+    payload["goal"] = "   "
+    with pytest.raises(ValidationError):
+        KnowledgeItem(**payload)
+
+
+def test_source_title_never_reaches_the_model_or_the_student(support):
+    """知识来源标题只留在后台：既不进发给模型的方法清单，也不进学生可见内容。"""
+
+    import json
+
+    from backend.models.healing import Suggestion
+
+    sid, _, _, fake = support
+    hid = _start_one_method(sid, fake)
+    assert chat(sid, hid, "这个方法我试了").status_code == 200
+
+    assert "source_title" not in Suggestion.model_fields
+    sent = fake.calls[-1]["suggestions"]
+    assert sent and all("source_title" not in item for item in sent)
+    assert "source_title" not in json.dumps(client.get(f"/api/healing/{sid}").json(), ensure_ascii=False)

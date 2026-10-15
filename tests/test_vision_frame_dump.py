@@ -161,6 +161,25 @@ def test_a_serialization_failure_never_breaks_the_dialogue(
     assert not list((tmp_path / "dump").glob("*.jsonl"))
 
 
+def test_a_payload_build_failure_never_breaks_the_dialogue(
+        detector, tmp_path, monkeypatch):
+    """构造那一行内容时抛错，也不能把对话带崩。
+
+    兜底原先只包住"序列化 + 写文件"，payload 的构造在 try 之外；而调用点
+    （/api/vision/segment）不包异常，于是构造一旦抛错就是一次 500，
+    "任何失败都不该让一次真实对话失败"就成了空话。这里让描述检测器那条路抛错。
+    """
+
+    monkeypatch.setenv(DUMP_DIR_ENV, str(tmp_path / "dump"))
+    monkeypatch.setattr(vision_frame_dump, "describe_loaded_vision_detector",
+                        lambda: (_ for _ in ()).throw(RuntimeError("描述炸了")))
+
+    sid = session()
+    prepare(sid)
+    assert segment(sid).status_code == 200
+    assert not list((tmp_path / "dump").glob("*.jsonl"))
+
+
 def test_the_dump_records_which_chain_produced_it(detector, tmp_path, monkeypatch):
     """每行都要带来源字段：不同 provider / 模型 / 人脸检测后端不能混着算分位数。
 

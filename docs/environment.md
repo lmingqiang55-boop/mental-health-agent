@@ -25,6 +25,10 @@ conda activate mental-health-agent
 ```
 
 更新会调整 Python、pip 和直接依赖版本；其他项目的包应使用其他环境。
+**拉取别人的提交后也要跑一次**：直接依赖的版本会变（例如 `cnsenti` 是新增的、
+`edge-tts` 从 7.2.8 升到 7.3.1，更早版本合成稳定 403），不更新就会出现"代码是新的、
+功能悄悄变弱或报错"。还有一个人脸权重文件不入库，需要每台机器各下一次：
+`python -m backend.vision.face_weights`。逐项清单见 [队友更新须知](队友更新须知.md)。
 前端锁文件更新后执行：
 
 ```powershell
@@ -66,6 +70,7 @@ if (-not (Test-Path -LiteralPath .env)) {
 | `ASR_PROVIDER=sensevoice` | 启用真实语音转写 |
 | `ASR_DEVICE=cuda:0` | 使用 NVIDIA GPU 进行语音推理 |
 | `VISION_PROVIDER=emotiefflib` | 启用真实表情分析 |
+| `VISION_YUNET_MODEL` | 人脸权重的路径覆盖项；留空即用 `backend/vision/weights/` 下的默认文件。权重不入库，先执行 `python -m backend.vision.face_weights`（约 227 KB，自动校验 SHA-256）；拿不到会自动退回 Haar 级联，只是暗光漏检更多 |
 | `VISION_FRAME_DUMP_DIR` | 留空即关闭；给一个目录则把冻结后的逐帧情绪/置信度/效价落成 JSONL，仅供阈值重校 |
 | `TTS_PROVIDER` | 语音 provider，默认 `cosyvoice`，备选 `edge`；配置的不可用时自动退到另一个 |
 | `DASHSCOPE_API_KEY` | 阿里云百炼语音合成密钥；只在后端使用 |

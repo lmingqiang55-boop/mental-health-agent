@@ -55,7 +55,13 @@ SYSTEM = """你是面向中小学生的心理支持陪伴助手，不是诊断�
 不要写“第几个方法”“执行条件”“请留意”“同一个方法的简短表达”这类固定格式；这些格式一律由程序负责。
 要提到具体做法时，就用你自己的口语把选中的那条候选知识说成一句自然的话，
 像朋友随口带的建议，只说你选中的那一条，不照抄知识原文的句子、不翻译成步骤清单。
+做法里的数量、次数、时长、频率必须来自知识原文：不许自己加“每天三次”“每次十分钟”
+“坚持两周”这类原文没有的剂量或频次，也不许改动原文里的数字；原文里有的数字可以照说。
 已经提出过的方法也可以自然地再提一句（说的是同一件事，不新增步骤）。
+说了哪条候选的做法，就必须把它放进 recommendation_ids（选中才会附浅字），
+同时把它的 knowledge_id 填进 spoken_knowledge_ids；只是顺带复述以前提过的方法，
+就把那个 suggestion_id 填进 spoken_suggestion_ids，不要重新说它的步骤、也不必再选它。
+本轮正文里没有提到任何做法时，两个 spoken 数组都留空数组。
 程序会把这条知识的原文、本来要求的条件和要注意的事，用浅字附在回答下方；
 同一个知识只在第一次出现、以及被换成更简单的说法时各附一次，正文不用交代条件和注意事项。
 问题只聚焦一件事；不要求在多个方法中选择。需要暂停或收尾时不提问。
@@ -76,7 +82,8 @@ suggestion_id 只用于 feedback，指向已经提出的方法。候选方法不
 严格只返回 JSON，字段为 understanding(一般不超过 200 字，简明扼要说到要点、像对人说话；
 情况确实复杂时可以适当写长，但不要为凑字数铺陈；之后每轮 1-3 句),
 focus(<=120字), question(字符串或null),
-recommendation_ids(数组), feedback(数组，每项 suggestion_id/execution/effect/evidence),
+recommendation_ids(数组), spoken_knowledge_ids(数组), spoken_suggestion_ids(数组),
+feedback(数组，每项 suggestion_id/execution/effect/evidence),
 next_action(continue/pause/end), safety_referral(布尔)。"""
 SYSTEM += """可选 simplify_suggestion_id 只能指向已提出且仍有效的方法；学生明确觉得文字难懂、
 步骤太复杂时，可请求使用已校验的简短表达。不新编步骤，不删除成人条件；无效或拒绝的方法不再简化重推。
@@ -140,6 +147,10 @@ class AgentDraft(StrictModel):
     question: str | None = Field(default=None, max_length=100)
     recommendation_ids: list[str] = Field(default_factory=list, max_length=2,
         description="Only knowledge_id from candidate knowledge, never suggestion_id; follow-up can be empty")
+    spoken_knowledge_ids: list[str] = Field(default_factory=list, max_length=2,
+        description="本轮自由文字里提到做法、并要从本轮候选里选的 knowledge_id")
+    spoken_suggestion_ids: list[str] = Field(default_factory=list, max_length=2,
+        description="本轮自由文字里顺带复述的、以前已经提出过的方法的 suggestion_id")
     feedback: list[Feedback] = Field(default_factory=list, max_length=2)
     next_action: str = "continue"
     safety_referral: bool = False
@@ -153,8 +164,30 @@ class NarrativeCheck(StrictModel):
                          "unnecessary_clarification"]] = Field(default_factory=list, max_length=8)
 
 
+REASON_PROSE = "prose"
+REASON_QUESTION = "question"
+REASON_FEEDBACK = "feedback"
+"""被否的原因分类。**结构化**携带，不靠比对提示词原文——
+
+以前是 ``str(exc).startswith("陪伴每轮只保留")`` 和 ``str(exc) == "报告生成不能虚构学生反馈"``：
+提示词里改一个字，判定就失效，后果是"只是提问不合格"退化成整轮报错。
+现在原因在抛出的地方就写进 ``reason``，改文案不再影响行为。
+"""
+
+
 class HealingDraftInvalid(HealingUnavailable):
-    """A draft can be repaired once; transport failures remain ordinary errors."""
+    """A draft can be repaired once; transport failures remain ordinary errors.
+
+    ``reason`` 决定这次能不能"只丢一部分重来"：
+
+    - :data:`REASON_QUESTION`：正文可用，只是提问不合格 → 去掉问题后复用正文；
+    - :data:`REASON_FEEDBACK`：报告阶段不许带反馈 → 丢掉反馈字段后复用正文；
+    - :data:`REASON_PROSE`：正文本身不可用 → 直接报错，绝不展示。
+    """
+
+    def __init__(self, message: str, *, reason: str = REASON_PROSE) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 # 这些核对项只否掉“这一轮的提问”，模型自己的口语正文仍然可用；
@@ -163,17 +196,18 @@ QUESTION_ONLY_ISSUES = {"multiple_questions", "repeated_question", "unnecessary_
 
 
 def rejected_question_only(exc: HealingDraftInvalid) -> bool:
-    issues = getattr(exc, "issues", None)
-    if issues is not None:
-        return bool(issues) and set(issues) <= QUESTION_ONLY_ISSUES
-    return str(exc).startswith(("陪伴每轮只保留", "这个问题已经问过", "陪伴问题未通过"))
+    """这次是否只是"提问不合格"。判定只看结构化原因，不看提示词文字。"""
+
+    return getattr(exc, "reason", REASON_PROSE) == REASON_QUESTION
 
 
 def choose_scene(text: str, memory: HealingMemory | None = None) -> Scene:
     return resolve_goal(text, memory).scene
 
 
-def validate_draft(draft: AgentDraft, hits: list[KnowledgeHit], *, initial: bool):
+def validate_draft(draft: AgentDraft, hits: list[KnowledgeHit], *, initial: bool,
+                   presented_suggestion_ids: frozenset[str] = frozenset(),
+                   presented_knowledge_ids: frozenset[str] = frozenset()):
     allowed = {hit.item.knowledge_id for hit in hits}
     if len(set(draft.recommendation_ids)) != len(draft.recommendation_ids) or not set(draft.recommendation_ids) <= allowed:
         raise HealingDraftInvalid("支持服务返回了无法对应知识的建议")
@@ -181,6 +215,18 @@ def validate_draft(draft: AgentDraft, hits: list[KnowledgeHit], *, initial: bool
         raise HealingDraftInvalid("初次报告须选择一到两个已提供的候选方法")
     if draft.next_action not in {"continue", "pause", "end"}:
         raise HealingDraftInvalid("支持服务返回了无法识别的进度")
+    # 正文里"顺口提到的做法"必须和回答下方附的浅字对得上：说了本轮候选里的哪条，
+    # 就得真的选中它（选中才会有浅字）；提以前提过的方法可以，那些早就附过浅字了。
+    # 没有这一条时，模型说了候选 C、却选了并引用 A，程序完全看不出来——
+    # 学生看到的是"正文推荐一个做法、浅字是另一条方法"。
+    if not set(draft.spoken_knowledge_ids) <= allowed:
+        raise HealingDraftInvalid("支持服务返回了无法对应知识的做法说明")
+    unbacked = [key for key in draft.spoken_knowledge_ids
+                if key not in set(draft.recommendation_ids) and key not in presented_knowledge_ids]
+    if unbacked:
+        raise HealingDraftInvalid("正文提到的做法没有对应的引用")
+    if not set(draft.spoken_suggestion_ids) <= presented_suggestion_ids:
+        raise HealingDraftInvalid("支持服务返回了无法对应已提出方法的做法说明")
     prose = draft.understanding + " " + draft.focus
     if re.search(r"https?://|www\.|\[[0-9]+\]|(?:资料|知识|信息)来源|来源[：:]|知识编号|诊断为|你患有|保证.{0,6}(治愈|有效)|"
                  r"我已(?:经)?(?:联系|通知|安排)|我会(?:联系|通知|安排).{0,8}(?:老师|家长|医生)", prose):
@@ -189,9 +235,9 @@ def validate_draft(draft: AgentDraft, hits: list[KnowledgeHit], *, initial: bool
         raise HealingDraftInvalid("自由文字包含固定格式，请改成自然口吻的一句话")
     if draft.question:
         if draft.question.count("？") + draft.question.count("?") > 1 or "http" in draft.question:
-            raise HealingDraftInvalid("陪伴每轮只保留一个主要问题")
+            raise HealingDraftInvalid("陪伴每轮只保留一个主要问题", reason=REASON_QUESTION)
     if initial and draft.feedback:
-        raise HealingDraftInvalid("报告生成不能虚构学生反馈")
+        raise HealingDraftInvalid("报告生成不能虚构学生反馈", reason=REASON_FEEDBACK)
 
 
 def make_suggestion(hit: KnowledgeHit, turn: int, style="unknown", *, display_number=None) -> Suggestion:
@@ -208,7 +254,6 @@ def make_suggestion(hit: KnowledgeHit, turn: int, style="unknown", *, display_nu
         cautions=list(dict.fromkeys([*item.exclusions, *item.referral_conditions])), proposed_turn=turn,
         display_number=display_number,
         wording_id=wording.wording_id if wording else None,
-        source_title=item.source_title,
     )
 
 
@@ -216,10 +261,13 @@ def make_reference(suggestion: Suggestion) -> MessageReference:
     """把一条已提出的方法转成回答下方的浅字条目。
 
     内容是知识库原文（目标与步骤连成一段），加上这条方法本来就要求的执行条件与要注意的事；
-    不含知识编号、来源网址或来源标题。
+    不含知识编号、来源网址或来源标题。原文超长由 :func:`original_text` 截断；
+    万一原文为空（知识条的 goal 不允许纯空白，正常不该出现），退回用标题，
+    免得空串撞上 ``MessageReference.text`` 的下限、把这一轮变成 500。
     """
+    text = original_text(suggestion.goal, suggestion.steps) or suggestion.title.strip()
     return MessageReference(
-        title=suggestion.title, text=original_text(suggestion.goal, suggestion.steps),
+        title=suggestion.title, text=text or suggestion.title,
         conditions=list(suggestion.prerequisites), cautions=list(suggestion.cautions),
     )
 
@@ -431,9 +479,17 @@ class HealingAgent:
             "复述已有方法不算编造。"
             "但要核对做法是否确实来自 knowledge 或 previous_methods：编造两者之外的方法或步骤即 unsupported_method，"
             "把知识原文抄成步骤清单或编号、出现‘执行条件/请留意/同一个方法的简短表达’这类固定格式也算问题。"
+            "做法里的数量、次数、时长、频率必须能在 knowledge、previous_methods 或 simplified_wordings 的原文里"
+            "找到：自己加一个‘每天三次’‘每次十分钟’‘坚持两周’这类原文没有的剂量或频次，"
+            "或者把原文里的次数改掉，都算 unsupported_method，即使整句话听起来很合理。"
             "给了 simplified_wordings 时，正文里关于那条方法的说法只能来自它（可以换个说法，"
             "不能新增步骤、不能删掉它给的执行条件）；自己另编一个更简化的版本，或改动其中的步骤和条件，"
             "同样算 unsupported_method。"
+            "另外核对正文和它自报的引用是否一致：正文里用口语带出了某条做法时，"
+            "recommendation_ids 应当含有对应的 knowledge_id（本轮新提出的），"
+            "spoken_suggestion_ids 应当含有对应的 suggestion_id（以前提出过的）；"
+            "spoken_knowledge_ids 里声明提到的候选却不在 recommendation_ids 里、"
+            "或者正文提到的做法与声明的那些 id 不是同一条，都算 unsupported_method。"
             "不能包含诊断、疗效承诺或链接来源。不能编造年龄、经历、已尝试效果或视觉情绪结论；"
             "筛查指标只能作为指标，不能改写成学生已表达的事实。问题聚焦一件事，"
             "不能包含多个需要分别回答的独立追问或要求从多种方法中选择。"
@@ -463,13 +519,35 @@ class HealingAgent:
              "previous_methods": previous_methods or [],
              "simplified_wordings": simplified_wordings or [],
              "understanding": draft.understanding, "focus": draft.focus, "question": draft.question,
+             "recommendation_ids": list(draft.recommendation_ids),
+             "spoken_knowledge_ids": list(draft.spoken_knowledge_ids),
+             "spoken_suggestion_ids": list(draft.spoken_suggestion_ids),
              "output_schema": NarrativeCheck.model_json_schema()},
             NarrativeCheck, max_tokens=800,
         )
         if not checked.valid or checked.issues:
-            error = HealingDraftInvalid("支持文字未通过依据和单问题校验：" + ",".join(checked.issues))
-            error.issues = list(checked.issues)
+            issues = list(checked.issues)
+            # 只否掉提问的核对项：原因结构化地传下去，不靠比对异常文案。
+            reason = REASON_QUESTION if issues and set(issues) <= QUESTION_ONLY_ISSUES else REASON_PROSE
+            error = HealingDraftInvalid("支持文字未通过依据和单问题校验：" + ",".join(issues), reason=reason)
+            error.issues = issues
             raise error
+
+    @staticmethod
+    def spoken_knowledge(candidates, draft) -> list[dict]:
+        """交给复核器的候选：**只留本轮正文真正提到的那几条**。
+
+        以前把本轮检索到的全部候选（最多四条）都交给复核器，于是"正文说的是候选 C、
+        引用的是 A"这种错位它无从判断——两条都在它的视野里、都算有依据。
+        现在的口径是：复核器只看"正文自报提到的"加"本轮选中的"，专心判断
+        正文写的和自报的那条是不是同一条；"说了却没选中"由程序在
+        :func:`validate_draft` 里直接拦掉。
+        """
+
+        if not candidates:
+            return []
+        mentioned = set(draft.recommendation_ids) | set(draft.spoken_knowledge_ids)
+        return [item for item in candidates if item.get("knowledge_id") in mentioned]
 
     async def generate_checked(self, payload, memory, hits, *, initial=False, text="", previous=None, timings=None):
         timings = timings if timings is not None else {}
@@ -482,12 +560,17 @@ class HealingAgent:
         payload["asked_questions"] = asked[-10:]
 
         def check(draft: AgentDraft):
-            validate_draft(draft, hits, initial=initial)
+            validate_draft(draft, hits, initial=initial,
+                           presented_suggestion_ids=frozenset(
+                               item.suggestion_id for item in previous.suggestions if item.active) if previous else frozenset(),
+                           presented_knowledge_ids=frozenset(
+                               item.knowledge_id for item in previous.suggestions) if previous else frozenset())
             if draft.question and draft.question in asked:
-                raise HealingDraftInvalid("这个问题已经问过，请回应新回答、换一个相关问题或自然收尾")
+                raise HealingDraftInvalid("这个问题已经问过，请回应新回答、换一个相关问题或自然收尾",
+                                          reason=REASON_QUESTION)
             problem = question_problem(draft.question, text, previous, goal_changed=payload.get("goal_changed", False))
             if problem:
-                raise HealingDraftInvalid("陪伴问题未通过进度校验：" + problem)
+                raise HealingDraftInvalid("陪伴问题未通过进度校验：" + problem, reason=REASON_QUESTION)
             if initial and draft.simplify_suggestion_id:
                 raise HealingDraftInvalid("初次报告还没有可以简化的已提出建议")
 
@@ -495,7 +578,8 @@ class HealingAgent:
             started = perf_counter()
             try:
                 await self.check_narrative(draft, memory, text, previous, payload.get("explanations"),
-                                           payload.get("adult_support"), payload.get("knowledge"),
+                                           payload.get("adult_support"),
+                                           self.spoken_knowledge(payload.get("knowledge"), draft),
                                            self.presented_methods(previous.suggestions) if previous else [],
                                            payload.get("simplified_wordings"))
             finally:
@@ -526,10 +610,10 @@ class HealingAgent:
             except HealingDraftInvalid as exc:
                 if attempt:
                     exc.draft = draft.model_dump(mode="json")
-                    if str(exc) == "报告生成不能虚构学生反馈":
+                    if exc.reason == REASON_FEEDBACK:
                         # 报告阶段不接受编造的反馈；这句话本身没问题，丢掉反馈字段就能用。
                         draft.feedback = []
-                    elif rejected_question_only(exc):
+                    elif exc.reason == REASON_QUESTION:
                         # 只否掉这一轮的提问：留着模型自己的正文，去掉问题后重新核对。
                         draft.question = None
                         draft.next_action = "pause"
@@ -546,7 +630,9 @@ class HealingAgent:
                            "allowed_recommendation_ids": [hit.item.knowledge_id for hit in hits],
                            "previous_invalid_draft": draft.model_dump(mode="json"),
                            "repair": "重写本轮 JSON。只选择候选 knowledge_id；做法要用自己的口语说成一句自然的话，"
-                                     "不列步骤、不编号、不照抄原文；问题只问一件事。"}
+                                     "不列步骤、不编号、不照抄原文；说了哪条候选的做法就要把它选进 recommendation_ids "
+                                     "并写进 spoken_knowledge_ids，顺带复述以前提过的方法写 spoken_suggestion_ids；"
+                                     "做法里的数量、次数、时长必须来自知识原文；问题只问一件事。"}
 
     @measure_model_calls
     async def start(self, memory: HealingMemory, session_risk: RiskResult, crisis_mode=False) -> HealingState:
@@ -609,6 +695,7 @@ class HealingAgent:
             # 状态与普通路径一样听模型的，不写死 active。
             state.status = {"continue": "active", "pause": "paused", "end": "ended"}[draft.next_action]
             state.report = SupportReport(understanding=draft.understanding, focus=draft.focus,
+                                         cautions=[REPORT_CAUTION],
                                          question=question if state.status == "active" else None)
         else:
             picked = set(draft.recommendation_ids)
@@ -765,7 +852,10 @@ class HealingAgent:
         accepted = self.apply_feedback(state, draft.feedback, text, previous.suggestions)
         self.record_preparation(state, prepared_ids, text)
         if draft.feedback and not accepted:
-            draft.recommendation_ids = []
+            # 这一轮只澄清、不加新方法。但正文里已经"顺口说出来"的那条留着：
+            # 把它丢掉，学生看到的就成了一句没有出处、也没有原文的做法。
+            draft.recommendation_ids = [key for key in draft.recommendation_ids
+                                        if key in set(draft.spoken_knowledge_ids)]
             if unresolved_feedback(text, previous.suggestions):
                 question = "你说的是刚才哪一个方法？"
                 if question in "\n".join(message.content for message in previous.messages
@@ -776,7 +866,8 @@ class HealingAgent:
                 draft.focus = "先确认这条反馈对应的方法。" if question else "我们可以先停在这里，想继续时再聊。"
                 try:
                     await self.check_narrative(draft, memory, text, previous, explanations,
-                                               state.adult_support.model_dump(), candidate_knowledge,
+                                               state.adult_support.model_dump(),
+                                               self.spoken_knowledge(candidate_knowledge, draft),
                                                self.presented_methods(previous.suggestions), simplification_offers)
                 except HealingDraftInvalid:
                     # The same checked, questionless pause is available after
@@ -785,12 +876,15 @@ class HealingAgent:
                     draft.next_action = "pause"
                     draft.focus = "我们可以先停在这里，想继续时再聊。"
                     await self.check_narrative(draft, memory, text, previous, explanations,
-                                               state.adult_support.model_dump(), candidate_knowledge,
+                                               state.adult_support.model_dump(),
+                                               self.spoken_knowledge(candidate_knowledge, draft),
                                                self.presented_methods(previous.suggestions), simplification_offers)
         # Adding an unrelated method after "还没试" is not progress.
+        # 只清掉正文没提到的那些：正文里已经说出口的做法留着，否则那句话就没有浅字可对。
         if any(item.active for item in state.suggestions) and not goal_changed and not removed and not any(
                 item.execution == "declined" or item.effect in {"ineffective", "worse"} for item in accepted):
-            draft.recommendation_ids = []
+            draft.recommendation_ids = [key for key in draft.recommendation_ids
+                                        if key in set(draft.spoken_knowledge_ids)]
         excluded.update(item.method_key for item in state.suggestions if item.execution == "declined"
                         or item.effect in {"ineffective", "worse"})
         known_methods = {item.method_key for item in state.suggestions}
@@ -821,7 +915,8 @@ class HealingAgent:
             state.report.question = question
         if previous.goal.needs_confirmation:
             state.report = SupportReport(understanding=draft.understanding, focus=draft.focus,
-                suggestion_ids=[item.suggestion_id for item in suggestions], question=question)
+                suggestion_ids=[item.suggestion_id for item in suggestions],
+                cautions=[REPORT_CAUTION], question=question)
         # 聊天只有自然口语：方法不写进正文，改为在回答下方附浅字原文
         # （首次出现的、被恢复的、以及这一轮换成简化版的那条）。
         cited: dict[str, Suggestion] = {}
@@ -831,6 +926,12 @@ class HealingAgent:
         if simplified is not None and simplified.active:
             cited[simplified.suggestion_id] = simplified
         references = [make_reference(item) for item in cited.values()]
+        # 主体校验在 validate_draft 里（说了候选就必须选中）；但程序随后仍可能按容量
+        # 或进度把本轮的建议丢掉，那时正文里的那句做法就没有浅字可对。这里记进审计，
+        # 便于事后发现，不改本轮行为。
+        cited_knowledge = {item.knowledge_id for item in cited.values()}
+        spoken_without_reference = [key for key in draft.spoken_knowledge_ids
+                                    if key not in cited_knowledge and key not in prior]
         paragraphs = [draft.understanding]
         if question:
             paragraphs.append(question)
@@ -839,6 +940,9 @@ class HealingAgent:
         state.audit.append({"phase": "follow_up", "turn": state.turn_count, "at": _now().isoformat(),
                             "knowledge": [hit.model_dump(mode="json") for hit in hits],
                             "goal": state.goal.model_dump(), "goal_changed": goal_changed,
+                            "spoken_knowledge_ids": list(draft.spoken_knowledge_ids),
+                            "spoken_suggestion_ids": list(draft.spoken_suggestion_ids),
+                            "spoken_without_reference": spoken_without_reference,
                             "explanations": explanations, "context_removed": removed, **timings,
                             "retrieval_ms": retrieval_ms, "total_ms": (perf_counter()-started)*1000})
         return state

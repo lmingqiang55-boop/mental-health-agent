@@ -80,23 +80,27 @@ def dump_segment(session_id: str, utterance_id: str,
     target_dir = dump_dir()
     if target_dir is None:
         return None
-    payload = {
-        "session_id": session_id,
-        "utterance_id": utterance_id,
-        "capture_id": segment.capture_id,
-        "start_ms": segment.start_ms,
-        "end_ms": segment.end_ms,
-        "frame_count": segment.frame_count,
-        "valid_frame_count": segment.valid_frame_count,
-        # 重校要先按"哪条链路产出的"分组：不同 provider / 模型 / 人脸检测后端
-        # （YuNet 还是降级后的 Haar）不可混在一起算分位数。
-        "detector": describe_loaded_vision_detector(),
-        "snapshot": (segment.vision_snapshot.model_dump(exclude={"timestamp"})
-                     if segment.vision_snapshot is not None else None),
-        "frames": [_frame_payload(item) for item in segment.dialogue_frames],
-    }
-    path = target_dir / _filename(session_id)
     try:
+        # payload 的构造也必须在兜底里面：describe_loaded_vision_detector() 与
+        # model_dump() 都可能在"将来加字段"时抛错（比如某个字段是不可序列化的类型），
+        # 而调用点在 /api/vision/segment 里、不包异常——构造一旦抛错就是一次 500，
+        # 与模块 docstring 承诺的"任何失败都不该让一次真实对话失败"矛盾。
+        payload = {
+            "session_id": session_id,
+            "utterance_id": utterance_id,
+            "capture_id": segment.capture_id,
+            "start_ms": segment.start_ms,
+            "end_ms": segment.end_ms,
+            "frame_count": segment.frame_count,
+            "valid_frame_count": segment.valid_frame_count,
+            # 重校要先按"哪条链路产出的"分组：不同 provider / 模型 / 人脸检测后端
+            # （YuNet 还是降级后的 Haar）不可混在一起算分位数。
+            "detector": describe_loaded_vision_detector(),
+            "snapshot": (segment.vision_snapshot.model_dump(exclude={"timestamp"})
+                         if segment.vision_snapshot is not None else None),
+            "frames": [_frame_payload(item) for item in segment.dialogue_frames],
+        }
+        path = target_dir / _filename(session_id)
         target_dir.mkdir(parents=True, exist_ok=True)
         line = _serialize(payload)
         with _write_lock:

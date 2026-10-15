@@ -103,7 +103,10 @@ class KnowledgeItem(StrictModel):
     school_stages: list[SchoolStage] = Field(default_factory=list)
     executor: Literal["student", "adult_guided", "adult", "unspecified"]
     purpose: Literal["method", "explanation", "help"]
-    goal: str = Field(min_length=1, max_length=300)
+    # pattern 要求至少一个非空白字符：goal 是浅字原文的开头，纯空白的 goal 会让
+    # "拼出来的原文是空串"，撞上 MessageReference.text 的下限、在生成那一轮抛 500。
+    # 语料里出现这种条目属于数据错误，让它在加载时就报出来，别拖到运行时。
+    goal: str = Field(min_length=1, max_length=300, pattern=r"\S")
     steps: list[str] = Field(default_factory=list, max_length=6)
     prerequisites: list[str] = Field(default_factory=list, max_length=8)
     exclusions: list[str] = Field(default_factory=list, max_length=8)
@@ -147,7 +150,6 @@ class Suggestion(StrictModel):
     effect: Literal["unknown", "helpful", "ineffective", "worse"] = "unknown"
     active: bool = True
     wording_id: str | None = None
-    source_title: str = ""
     revisions: list[dict] = Field(default_factory=list)
 
 
@@ -176,11 +178,20 @@ class SupportReport(StrictModel):
     degraded_reason: str | None = None
 
 
-def original_text(goal: str, steps: list[str]) -> str:
+REFERENCE_TEXT_MAX = 1200
+"""浅字原文的长度上限，与 :class:`MessageReference` 的 ``text`` 上限一致。
+
+一条知识允许写"目标 300 字 + 6 个步骤各 500 字"，拼起来最长能到 3300 字左右。
+超上限时截断加省略号，而不是让生成那一轮抛字段校验错误（那是 500，不是"失败即
+报错"的 503 通道，还会把上一轮的状态一起丢掉）。
+"""
+
+
+def original_text(goal: str, steps: list[str], *, limit: int = REFERENCE_TEXT_MAX) -> str:
     """把一条方法的目标与步骤连成一段自然的话，供浅字呈现。
 
     首报里的建议和聊天轮消息里的 `references` 用同一口径，避免两处对同一条方法
-    给出不一样的原文。
+    给出不一样的原文；超过 ``limit`` 时在词句边界附近截断并加省略号。
     """
     chunks: list[str] = []
     for part in [goal, *steps]:
@@ -190,7 +201,11 @@ def original_text(goal: str, steps: list[str]) -> str:
         if chunks and chunks[-1][-1] not in "。！？；…":
             chunks[-1] = chunks[-1] + "；"
         chunks.append(part)
-    return "".join(chunks)
+    text = "".join(chunks)
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit - 1].rstrip("；;，,、。 ")
+    return clipped + "…"
 
 
 class MessageReference(StrictModel):

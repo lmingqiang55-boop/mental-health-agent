@@ -78,6 +78,7 @@
 from __future__ import annotations
 
 import math
+import re
 from functools import lru_cache
 
 from backend.core.text_signals import predicate_is_negated
@@ -140,6 +141,33 @@ _SPOKEN_DIRECTION: dict[str, float] = {
 _SPOKEN_WEIGHTS: dict[str, float] = {**COLLOQUIAL_POSITIVE, **COLLOQUIAL_NEGATIVE}
 """口语词 → 基准权重。"""
 
+_DENIAL_EXTRAS: frozenset[str] = frozenset({"没什么", "没啥", "没什么事", "没啥事"})
+r"""口语否认说法，补进知网否定词表。
+
+知网的否定词只收"没/没有/不/不是"这类，"没什么""没啥"一个都没收。它们因此被当成
+普通词往下走，落到本体里当负向词用：实测 ``"没什么问题"`` 读成 ``-0.32``，而意思
+相同的 ``"没问题"`` 读成 ``+0.32``——同一个意思两个方向。补进来之后两者一致。
+"""
+
+_DENIED_DENIAL = re.compile(
+    r"(?:不是|不算|并不|没有|没|不)"
+    r"[^，。！？、；：,.!?;:]{0,2}"
+    r"(?:没事儿|没什么事|没啥事|没什么|没啥|没事|没关系)",
+)
+r"""「否认自己的否认」= 我不好。
+
+``"我不是没事"``\ ``"我没有说没事"``\ ``"我不觉得没事"`` 在字面上是否定一个否认，
+实际意思是**在说自己不好**。按"奇数个否定词翻转"的老规则，它们会被读成弱正
+（实测 ``+0.32``），配上难过的脸就构成一次假矛盾——正好是这个模块最不该犯的错：
+拿摄像头的猜测去反驳学生自己的诉苦。这里对这类说法单独给弱负向。
+
+中间允许插两个字，是为了盖住 ``"没有说没事"``\ ``"不觉得没事"``；
+核心词不含光秃秃的"没""没有"，避免把 ``"我没有不开心"``（= 我不难过）也卷进来。
+"""
+
+_DENIED_DENIAL_WEIGHT = 0.5
+"""「否认的否认」与 :data:`DENIAL_WEIGHT` 同档，只是方向相反。"""
+
 DENIAL_WEIGHT = 0.5
 """整句否认的语气强度：与"还好""还行"同档（0.5），只是弱正向，不是强正向。"""
 
@@ -180,17 +208,25 @@ r"""光秃秃的"没""没有"——它们既可能是"我没问题"，也可能�
 """
 
 _DENIAL_STRIP_HEAD: tuple[str, ...] = (
-    "我", "也", "都", "其实", "真的", "现在", "目前",
+    "我觉得", "我感觉", "我认为", "说实话", "老实说", "总的来说",
+    "我", "也", "都", "其实", "真的", "现在", "目前", "最近", "刚刚", "刚", "今天",
 )
-"""否认句里可以剥掉的人称与副词前缀。故意不收"还"：``"还没"`` 意思是"尚未"，
-不是"我没事"，剥掉就会把它误读成正向。"""
+r"""否认句里可以剥掉的人称与副词前缀，长的在前（先剥"我觉得"再剥"我"）。
+
+故意不收"还"：``"还没"`` 意思是"尚未"，不是"我没事"，剥掉就会把它误读成正向。
+实测这层前缀是"我没事"这类读法的**唯一**入口：多一个"我觉得""最近"就落回词典
+路径，被读成 ``-0.32``（本体把"没事"收成负向词），方向正好读反。
+"""
 
 _DENIAL_STRIP_TAIL: tuple[str, ...] = (
-    "了", "的", "啊", "呀", "呢", "吧", "嘛", "哦", "噢",
+    "真的", "来着", "就是了", "而已",
+    "了", "的", "啊", "呀", "呢", "吧", "嘛", "哦", "噢", "嘞", "啦", "啰", "喔",
 )
-r"""否认句尾常见的语气词。剥掉"呢"之后 ``"还没呢"`` → ``"还没"`` 仍不匹配核心；
-但 ``"没呢"``\ ``"没有呢"`` 会剥成光秃秃的"没""没有"，那层"尚未"的意思就没了，
-所以 :func:`_denial_core` 对这两个核心另有判断，不因为少一个"还"就当成"我没事"。
+r"""否认句尾常见的语气词与口头填充，长的在前（先剥"真的"再剥"的"）。
+
+剥掉"呢"之后 ``"还没呢"`` → ``"还没"`` 仍不匹配核心；但 ``"没呢"``\ ``"没有呢"``
+会剥成光秃秃的"没""没有"，那层"尚未"的意思就没了，所以 :func:`_denial_core` 对这两个
+核心另有判断，不因为少一个"还"就当成"我没事"。
 """
 
 _DENIAL_STRIP_CHARS = frozenset(
@@ -307,6 +343,44 @@ def _split_off_adverb(
     return []
 
 
+_NEGATION_PREFIXES: tuple[str, ...] = ("不是", "并不", "没有", "不", "没", "别")
+r"""被 jieba 粘进同一个词里的否定前缀，长的在前。"""
+
+
+def _split_off_negation(
+    word: str, weights: dict[str, float], sentiment: tuple[frozenset[str], ...],
+) -> list[str]:
+    r"""把被 jieba 粘成一个词的"否定 + 情绪词"切开：``"不太好"`` → ``"不" + "太好"``。
+
+    :func:`_split_off_adverb` 管的是"程度副词 + 情绪词"被粘起来；这一条管前面还多
+    一个否定词的情况。实测 jieba 把 ``"不太好"`` 整体当成一个词，而它两张词典都不收，
+    于是"我不太好"读出来是 ``None``——一句很常见的自述直接消失，而语义相同的
+    ``"我不太开心"`` 是 ``-0.76``。
+
+    只在**切出来的后半段确实是情绪词**时才切，并且整词本来就是词表里的情绪词、
+    或是整句否认核心（"没事""没什么""没关系"）时一律不切。于是：
+
+    - ``"不想"``\ ``"不行"`` 在口语词表里 → 不切；
+    - ``"不好意思"``\ ``"不同"``\ ``"不用"``\ ``"受不了"`` 后半段不是情绪词 → 不切；
+    - ``"不差"``\ ``"不烦"`` 切完再按否定翻转 → 读成弱正向，和语义一致。
+    """
+
+    if len(word) < 2 or _is_sentiment_word(word, sentiment):
+        return []
+    if word in DENIAL_CORES or word in DENIAL_WHOLE_PHRASES:
+        return []
+    for prefix in _NEGATION_PREFIXES:
+        if len(prefix) >= len(word) or not word.startswith(prefix):
+            continue
+        rest = word[len(prefix):]
+        if _is_sentiment_word(rest, sentiment):
+            return [prefix, rest]
+        split = _split_off_adverb(rest, weights, sentiment)
+        if split:
+            return [prefix, *split]
+    return []
+
+
 def _hownet_polarity(text: str) -> float | None:
     """按知网七张词表 + 口语补充词表算极性，读不出情绪词时返回 ``None``。
 
@@ -326,6 +400,7 @@ def _hownet_polarity(text: str) -> float | None:
     if word_sets is None or weights is None:
         return None
     positive, negative, denial = word_sets
+    denial = denial | _DENIAL_EXTRAS
     tables = (positive, negative)
     words = _words_to_score(text, weights, tables)
     total = 0.0
@@ -351,9 +426,13 @@ def _hownet_polarity(text: str) -> float | None:
         elif word in positive or word in negative:
             direction, magnitude = (1.0 if word in positive else -1.0), 1.0
         else:
+            # 既不是副词也不是情绪词——否定管到它为止。不截断的话
+            # "我没有说没事"里的"没有"会一路管到句尾的"没事"，把诉苦读成正向；
+            # 截断之后"没有"只否定"说"，"没事"按自己的方向算（弱负）。
+            negations = 0
             continue
         total += weight * magnitude * (-1.0 if negations % 2 else 1.0) * direction
-        # 窗口从上一个情感词之后重新开始，后面的副词不再影响这一词。
+        # 窗口从上一个情感词之后重新开始，后面的副词与否定都不再影响这一词。
         weight, negations = 1.0, 0
     if total == 0.0:
         return None
@@ -363,13 +442,56 @@ def _hownet_polarity(text: str) -> float | None:
 def _words_to_score(
     text: str, weights: dict[str, float], sentiment: tuple[frozenset[str], ...],
 ) -> list[str]:
-    """分词，并修补程度副词与情绪词被粘成一个词的情况。"""
+    """分词，修补程度副词与情绪词被粘成一个词、或口语词被拆成几个词的情况。"""
 
     words: list[str] = []
-    for word in _tokens(text):
-        split = _split_off_adverb(word, weights, sentiment)
+    for word in _merge_spoken_compounds(_tokens(text)):
+        split = _split_off_negation(word, weights, sentiment) or _split_off_adverb(word, weights, sentiment)
         words.extend(split if split else [word])
     return words
+
+
+@lru_cache(maxsize=1)
+def _spoken_span_limit() -> int:
+    """口语词最多被 jieba 拆成几段（够覆盖词表里最碎的那条），上限 4。"""
+
+    return min(4, max((len(_tokens(word)) for word in _SPOKEN_WEIGHTS), default=1))
+
+
+def _merge_spoken_compounds(words: list[str]) -> list[str]:
+    r"""把被 jieba 拆开的口语词合回去——:func:`_split_off_adverb` 的反向修补。
+
+    为什么必须有这一步：:data:`COLLOQUIAL_POSITIVE`\ :data:`COLLOQUIAL_NEGATIVE`
+    是按"学生实际会怎么说"写的词，jieba 并不认识它们。实测两张表里 25 条被拆开：
+
+    - ``"还行"`` → ``["还", "行"]``，于是"还"按程度副词加倍（2.0）、"行"按 0.5 算，
+      得到 ``+0.32``，是文档里写的弱正向（``+0.16``）的两倍；
+    - ``"心情不好"`` → ``["心情", "不好"]``、``"提不起劲"`` → ``["提不起", "劲"]``、
+      ``"想哭"`` → ``["想", "哭"]``：拆完每一段都不在词表里，整句直接读不出极性
+      （返回 ``None``），口语词表白写。
+
+    只对**本模块自己的口语词表**做这一步：拼起来必须一字不差地命中表里的词，
+    所以它不会把"不"+"错"合成别的意思，也不会碰知网/本体那两套自带分词的词典。
+    合出来的词必定在 :data:`_SPOKEN_DIRECTION` 里，:func:`_split_off_adverb`
+    因此不会再把它切开。
+    """
+
+    limit = _spoken_span_limit()
+    merged: list[str] = []
+    index = 0
+    while index < len(words):
+        span = min(limit, len(words) - index)
+        while span > 1:
+            candidate = "".join(words[index:index + span])
+            if candidate in _SPOKEN_WEIGHTS:
+                merged.append(candidate)
+                index += span
+                break
+            span -= 1
+        else:
+            merged.append(words[index])
+            index += 1
+    return merged
 
 
 def _ontology_polarity(text: str) -> float | None:
@@ -400,28 +522,37 @@ def _denial_core(text: str) -> str:
     r"""剥掉标点、人称与语气词，得到否认句的核心说法；不是整句否认时返回空串。
 
     先按 :data:`DENIAL_WHOLE_PHRASES` 整句原样匹配（"没什么大不了的"里的"了"不是
-    语气词，剥不得），再走剥头剥尾。尾部语气词里只有"呢"会改变否定应答的意思
-    （``"没呢"``\ ``"没有呢"`` 是"尚未"），所以剥掉过"呢"之后只剩
-    :data:`_NOT_YET_CORES` 的，按"拿不准"处理，返回空串。
+    语气词，剥不得），再走剥头剥尾；剥的过程里每一步也回头查一次整句短语表，
+    所以 ``"我没什么大不了的"`` 会在剥掉"我""的"之后命中。
+
+    剥头剥尾都按**从长到短**匹配，且一轮只剥一处、循环到剥不动为止：``"我没事，真的"``
+    先剥标点、再剥"我"、再剥尾部的"真的"，才剩得下"没事"。只剥单字的话
+    ``"真的"`` 会剩成一个"真"，核心匹配不上，整句就落回词典路径被读成 ``-0.32``。
+
+    尾部语气词里只有"呢"会改变否定应答的意思（``"没呢"``\ ``"没有呢"`` 是"尚未"），
+    所以剥掉过"呢"之后只剩 :data:`_NOT_YET_CORES` 的，按"拿不准"处理，返回空串。
     """
 
     stripped = "".join(ch for ch in text.strip() if ch not in _DENIAL_STRIP_CHARS)
-    if stripped in DENIAL_WHOLE_PHRASES:
-        return stripped
     core = stripped
+    if core in DENIAL_WHOLE_PHRASES or core in DENIAL_CORES:
+        return core
     dropped_yet_particle = False
-    changed = True
-    while changed and core:
-        changed = False
-        for head in _DENIAL_STRIP_HEAD:
-            if core.startswith(head) and len(core) > len(head):
-                core = core[len(head):]
-                changed = True
-        while core and core[-1] in _DENIAL_STRIP_TAIL:
-            if core[-1] == "呢":
+    while core:
+        head = next((value for value in _DENIAL_STRIP_HEAD
+                     if core.startswith(value) and len(core) > len(value)), "")
+        if head:
+            core = core[len(head):]
+        else:
+            tail = next((value for value in _DENIAL_STRIP_TAIL
+                         if core.endswith(value) and len(core) > len(value)), "")
+            if not tail:
+                break
+            if "呢" in tail:
                 dropped_yet_particle = True
-            core = core[:-1]
-            changed = True
+            core = core[:-len(tail)]
+        if core in DENIAL_WHOLE_PHRASES:
+            return core
     if core not in DENIAL_CORES:
         return ""
     if dropped_yet_particle and core in _NOT_YET_CORES:
@@ -447,6 +578,14 @@ def _denial_polarity(text: str) -> float | None:
     return _squash(DENIAL_WEIGHT, POLARITY_SCALE) if _denial_core(text) else None
 
 
+def _denied_denial_polarity(text: str) -> float | None:
+    """「否认自己的否认」（"我不是没事"）给弱负向；不是这种说法时返回 ``None``。"""
+
+    if not _DENIED_DENIAL.search(text):
+        return None
+    return -_squash(_DENIED_DENIAL_WEIGHT, POLARITY_SCALE)
+
+
 def text_polarity(text: str) -> float | None:
     """把一句自述映射到 [-1, 1]；读不出情绪时返回 ``None``。
 
@@ -459,6 +598,9 @@ def text_polarity(text: str) -> float | None:
     denial = _denial_polarity(text)
     if denial is not None:
         return denial
+    denied = _denied_denial_polarity(text)
+    if denied is not None:
+        return denied
     hownet = _hownet_polarity(text)
     if hownet is not None:
         return hownet

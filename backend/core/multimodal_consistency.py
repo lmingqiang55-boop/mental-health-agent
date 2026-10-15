@@ -208,7 +208,9 @@ def compute_consistency(
         )
 
     matched = tuple(pairs)
-    if len(matched) < limits.min_pairs:
+    # 空配对必须先拦：min_pairs 是环境变量旋钮，设成 0 时 ``0 < 0`` 不成立，
+    # 会直接走到下面的整除、抛 ZeroDivisionError（评估报告接口 500）。
+    if not matched or len(matched) < limits.min_pairs:
         return ConsistencyResult(
             score=None,
             level=ConsistencyLevel.UNKNOWN,

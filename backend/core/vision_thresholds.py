@@ -135,7 +135,9 @@ class ConsistencyThresholds:
     @classmethod
     def from_env(cls) -> "ConsistencyThresholds":
         return cls(
-            min_pairs=_int_env("CONSISTENCY_MIN_PAIRS", 2),
+            # 下限强制为 1：这个旋钮表示"至少几句话才给分"，配成 0 没有意义，
+            # 而 0 会让打分处做整除时崩掉（见 compute_consistency 的空配对拦截）。
+            min_pairs=max(1, _int_env("CONSISTENCY_MIN_PAIRS", 2)),
             high_score=_float_env("CONSISTENCY_HIGH_SCORE", 80.0),
             moderate_score=_float_env("CONSISTENCY_MODERATE_SCORE", 60.0),
             discordance_gap=_float_env("CONSISTENCY_DISCORDANCE_GAP", 0.4),
