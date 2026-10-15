@@ -43,7 +43,7 @@
 ## 证据与用量
 
 - [完整正式回放与逐轮发现](examples/healing_feedback_acceptance_20261006.json)保留12例主链、20例首次边界、一次失败例复跑、两处修复专项及9组体验的请求、响应、建议、反馈、审计和模型判断。
-- 过程证据在挂载根目录`codex_proc/healing_feedback_acceptance_20261006_bc7e3112/`：before/focused/full XML及结果、源码前快照、五个真实运行目录、逐调用用量、原始结构化决策和哈希核对。
+- 过程证据在仓库之外的过程目录下的本批子目录（不入库）：before/focused/full XML及结果、源码前快照、五个真实运行目录、逐调用用量、原始结构化决策和哈希核对。
 - 五个真实运行分别核对100个运行文件，变化列表均为空；整体相对修改前只有上述两个业务文件变化。测试及真实API均未写正常学生数据库。
 - 本批共46次评估调用、276次治愈或体验评审模型请求。成功调用报告输入1,131,900、输出106,664、总计1,238,564 token，usage均可用。此数包含独立体验评审及失败例复跑，评估trace另保留底层attempt数；不与历史批次混算，不覆盖未报告用量的失败底层尝试，不估算金额。
 
@@ -52,7 +52,7 @@
 普通边界脚本可用：
 
 ```powershell
-& 'D:\miniforge3\envs\mental-health-agent\python.exe' -X utf8 -B scripts/validate_healing_current.py --work-dir 'D:\作业\AIC\codex_proc\healing_current_next_run'
+conda run -n mental-health-agent python -X utf8 -B scripts/validate_healing_current.py --work-dir '../过程目录/本次运行'
 ```
 
-完整本批配置见过程目录的`run_tests.py`、`experience_audit.py`、`repair_live.py`；重跑请选择新的codex_proc子目录以保留当前证据。运行中的后端需要重新加载更新代码。本轮已通过的测试不表示所有真实表达、服务故障或真人体验均通过。
+完整本批配置见过程目录的`run_tests.py`、`experience_audit.py`、`repair_live.py`；重跑请在仓库之外的过程目录下另选新子目录，以保留当前证据。运行中的后端需要重新加载更新代码。本轮已通过的测试不表示所有真实表达、服务故障或真人体验均通过。

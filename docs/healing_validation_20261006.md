@@ -2,7 +2,7 @@
 
 > 后续更新：用户已确认保留prepared并另记尚未尝试，修复及专项复跑完成，最新517项离线回归通过。见[后续记录](healing_prepared_feedback_20261006.md)。下文保留前批当时的489项、失败及待确认事实；完整回放已追加修复后结果。
 
-本批使用 `D:/miniforge3/envs/mental-health-agent`（Python 3.11.16）和当前代码、127 条知识库。所有输入均为合成学生数据。真实链路的评估服务、治愈生成、条件检查和独立文字检查均调用配置模型，没有替换评估桩或裁剪知识库。业务代码、正常学生数据库、知识库和前端未修改。
+本批使用 mental-health-agent conda 环境（Python 3.11.16）和当前代码、127 条知识库。所有输入均为合成学生数据。真实链路的评估服务、治愈生成、条件检查和独立文字检查均调用配置模型，没有替换评估桩或裁剪知识库。业务代码、正常学生数据库、知识库和前端未修改。
 
 ## 结果与判定范围
 
@@ -43,7 +43,7 @@
 
 ## 用量、隔离与证据
 
-过程目录为挂载根目录 `codex_proc/healing_new_validation_20261006/`，SQLite、分词缓存、pytest 临时目录和 JUnit 全部隔离。各真实运行及检索运行均验证 100 个业务/评估/前端/知识/正常数据库文件哈希未变；离线全回归也验证正常数据库不变。没有使用学生真实数据。
+过程目录为仓库之外的过程目录下的本批子目录（不入库），SQLite、分词缓存、pytest 临时目录和 JUnit 全部隔离。各真实运行及检索运行均验证 100 个业务/评估/前端/知识/正常数据库文件哈希未变；离线全回归也验证正常数据库不变。没有使用学生真实数据。
 
 本批含首次未满足前提、补充场景及诊断重跑，共记录 **38 次评估调用、163 次治愈模型请求**；已报告输入 **711022**、输出 **83448**、总计 **794470 token**，这些成功调用记录的 usage 均可用。评估 trace 保留各调用 attempt 数；该累计不覆盖未报告用量的底层失败尝试，不估算金额，也不与历史批次混算。检索对照没有调用远程模型。
 
@@ -56,11 +56,11 @@
 
 ## 复跑
 
-使用指定环境，在项目目录执行；过程目录请选新的 `D:/作业/AIC/codex_proc/` 子目录，保留本批证据。真实接口脚本会调用配置模型；当前脚本已采用用户确认的prepared保留规则，未满足双方法前提或验证失败仍返回非零退出码。
+使用 mental-health-agent conda 环境，在项目目录执行；过程目录请在仓库之外的过程目录下另选新子目录，保留本批证据。真实接口脚本会调用配置模型；当前脚本已采用用户确认的prepared保留规则，未满足双方法前提或验证失败仍返回非零退出码。
 
 ```powershell
-& 'D:\miniforge3\envs\mental-health-agent\python.exe' -X utf8 -B scripts/validate_healing_current.py --work-dir 'D:\作业\AIC\codex_proc\healing_current_new_run'
-& 'D:\miniforge3\envs\mental-health-agent\python.exe' -X utf8 -B 'D:\作业\AIC\codex_proc\healing_new_validation_20261006\run_tests.py' replay tests/test_healing_acceptance.py -q
+conda run -n mental-health-agent python -X utf8 -B scripts/validate_healing_current.py --work-dir '../过程目录/本次运行'
+conda run -n mental-health-agent python -X utf8 -B ../过程目录/本批验收/run_tests.py replay tests/test_healing_acceptance.py -q
 ```
 
 检索脚本新增 `--retrieval-only` 以跳过独立抽取模型探测，支持 fixture 的 excluded_methods，保留方法与知识 ID、正负例、MRR 和硬条件明细。本批隔离复跑配置见过程目录 `run_retrieval.py`；需要同样的可选研究依赖和已有权重缓存。真人理解度、广泛自然表达、生产负载、并发期间新风险同步及历史回放的全部重新整理仍不在本批验收范围内。

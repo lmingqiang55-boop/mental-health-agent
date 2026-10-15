@@ -1,6 +1,6 @@
 # 治愈报告风险同步修复与背景字段评估
 
-2026-10-06。使用 `D:\miniforge3\envs\mental-health-agent\python.exe`，Python 3.11.16。本轮新增26项离线回归，全后端 **560项通过（23.50s）**。实际 FastAPI 路由及风险规则参与测试，模型使用离线模拟；本轮未重跑远程真实模型或真人验收。
+2026-10-06。使用 mental-health-agent conda 环境，Python 3.11.16。本轮新增26项离线回归，全后端 **560项通过（23.50s）**。实际 FastAPI 路由及风险规则参与测试，模型使用离线模拟；本轮未重跑远程真实模型或真人验收。
 
 ## 修复结果
 
@@ -23,7 +23,7 @@
 - 新增覆盖共26项：8项读取/恢复/幂等风险同步，2项暂停或结束后的新风险，1项分流升级，1项实际筛查聊天接口接线，6项生成期间新风险与模型成功/失败，3项新评估文本，2项局部否定对照，3项锁内读取、副本隔离、过期和工作线程并发检查。
 - 最终全后端560项通过，23.50秒；此前534项也全部通过。正常学生数据库SHA-256前后一致。交付清单核对前端、知识库、评估业务及其他后端文件未变化。
 
-修复前快照、隔离SQLite、测试临时目录、JUnit结果和交付哈希清单位于挂载项目根目录 `codex_proc/healing_risk_refresh_20261006_75eb84d2/`，包括 `before.xml`、`focused_after.xml`、`transcript_before.xml`、`full_final.xml`、`full_final_result.json` 和 `delivery_manifest.json`。这些回归覆盖固定合成输入和受控竞态，不代表生产负载或所有自然语言风险识别都已经验收。运行中的后端需重新加载代码。
+修复前快照、隔离SQLite、测试临时目录、JUnit结果和交付哈希清单位于本地过程目录（仓库之外，不入库），包括 `before.xml`、`focused_after.xml`、`transcript_before.xml`、`full_final.xml`、`full_final_result.json` 和 `delivery_manifest.json`。这些回归覆盖固定合成输入和受控竞态，不代表生产负载或所有自然语言风险识别都已经验收。运行中的后端需重新加载代码。
 
 ## 背景字段是否重要
 

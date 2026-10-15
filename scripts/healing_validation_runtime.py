@@ -15,9 +15,14 @@ PROJECT = Path(__file__).resolve().parents[1]
 class ValidationRuntime:
     def __init__(self, work_dir):
         self.work = Path(work_dir).resolve()
-        allowed = (PROJECT.parent / "codex_proc").resolve()
-        if not self.work.is_relative_to(allowed):
-            raise ValueError("验证过程目录必须位于挂载根目录的 codex_proc 下")
+        # 过程目录必须在仓库之外：临时库、分词缓存、JUnit 和证据都不该写进项目，
+        # 免得被误提交、或被哈希核对当成业务文件。仍要求落在工作区根目录内，
+        # 便于集中查找；也不接受"就是工作区根目录本身"，那样会把根目录弄乱。
+        workspace = PROJECT.parent
+        if self.work == workspace or not self.work.is_relative_to(workspace):
+            raise ValueError("验证过程目录必须位于仓库之外的工作区根目录下，且不能就是该根目录")
+        if self.work.is_relative_to(PROJECT):
+            raise ValueError("验证过程目录不能在项目仓库内部")
         self.work.mkdir(parents=True, exist_ok=True)
         sys.dont_write_bytecode = True
         tempfile.tempdir = str(self.work)

@@ -39,4 +39,4 @@ UNICEF 的 [6–10 岁交流](https://www.unicef.org/parenting/mental-health/con
 
 新增 22 篇 Nemours KidsHealth 儿童/青少年官方文章，逐篇网址、对象、抽取范围及数量见 [知识库扩充记录](healing_knowledge_expansion.md)，允许正文与许可字段同步记录在 `backend/rag/knowledge/healing_sources.json`。范围包括日常情绪、压力、普通同伴关系和睡前习惯，排除治疗、驾驶、大学/恋爱情境与具体学习技巧。
 
-新文章继续标记 `restricted_reuse; edited_online_content_not_authorized`，依据同一 [权限指南](https://kidshealth.org/en/parents/permissions-guidelines.html)；没有宣称开放许可或取得本项目公开再分发许可。源文缓存留在挂载项目根目录的 `codex_proc/`；知识文件中的新来源全部字面锚点累计每篇不超过 25 个英文词，保留摘要、位置和中文概述。来源的医学审阅日期与本轮访问日期是不同概念。
+新文章继续标记 `restricted_reuse; edited_online_content_not_authorized`，依据同一 [权限指南](https://kidshealth.org/en/parents/permissions-guidelines.html)；没有宣称开放许可或取得本项目公开再分发许可。源文缓存留在仓库之外的过程目录下（不入库）；知识文件中的新来源全部字面锚点累计每篇不超过 25 个英文词，保留摘要、位置和中文概述。来源的医学审阅日期与本轮访问日期是不同概念。

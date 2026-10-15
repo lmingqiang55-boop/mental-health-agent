@@ -16,19 +16,19 @@
 
 ## 验证证据
 
-- 环境：`D:\miniforge3\envs\mental-health-agent\python.exe`。
+- 环境：mental-health-agent conda 环境（`conda activate mental-health-agent`）。
 - 新增正式回归：`tests/test_healing_review_regressions.py`，41项，覆盖混合反馈、局部关联、否定、重试、失败回滚、风险跨上下文升级和后续成人方法的编号。
-- 全后端：**725项通过，28.17秒**；XML位于挂载根目录`codex_proc/healing_review_20261007/fix_full.xml`。
-- 原审查最小复现：**9项全部通过，2.84秒**；原复现文件保留在`codex_proc/healing_review_20261007/test_review_probes.py`，结果位于同目录`fix_original_probes.xml`。
-- 两次隔离运行均确认普通SQLite摘要未变；完整结果JSON位于`codex_proc/healing_final_acceptance_20261006_289acf97/review_fix_full_20261007_result.json`和同目录`review_fix_original_probes_20261007_result.json`。
+- 全后端：**725项通过，28.17秒**；XML位于本批过程目录（仓库之外，不入库）的 `fix_full.xml`。
+- 原审查最小复现：**9项全部通过，2.84秒**；原复现文件保留在本批过程目录（仓库之外，不入库）的 `test_review_probes.py`，结果位于同目录 `fix_original_probes.xml`。
+- 两次隔离运行均确认普通SQLite摘要未变；完整结果JSON位于本批过程目录（仓库之外，不入库）的 `review_fix_full_20261007_result.json` 和同目录 `review_fix_original_probes_20261007_result.json`。
 
 本轮只修改治愈实现、回归、接口说明、交付补充和总规划。知识、前端、评估业务与普通学生数据库未修改，没有删除或移动文件。运行中的服务需要重新加载代码才能采用修复，本轮未重启用户服务。
 
-本地复验命令在`mental-health-agent`目录运行，过程输出仍留在挂载根目录codex_proc下：
+本地复验命令在项目目录运行，过程输出仍留在仓库之外的过程目录下（不入库）：
 
 ```powershell
 conda activate mental-health-agent
-python -X utf8 -B ../codex_proc/healing_final_acceptance_20261006_289acf97/run_tests.py review_fix_recheck -q --junitxml ../codex_proc/healing_review_20261007/recheck.xml
+python -X utf8 -B ../过程目录/本批验收/run_tests.py review_fix_recheck -q --junitxml ../过程目录/本轮复验/recheck.xml
 ```
 
 本次采用离线模型桩验证接口与状态逻辑，没有重新检验真实模型的措辞、生成成功率或整体陪伴体验。

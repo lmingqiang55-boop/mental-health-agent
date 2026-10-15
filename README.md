@@ -60,7 +60,7 @@ DASHSCOPE_WORKSPACE_ID=你的业务空间ID
 
 ```powershell
 conda activate mental-health-agent
-python scripts/start_dev.py --model-package "D:\下载\policy-qwen3-8b-local-deploy.zip" --skip-install
+python scripts/start_dev.py --model-package "ZIP路径" --skip-install
 ```
 
 脚本会核验 GGUF、导入 `policy-qwen3-8b:latest` 并启动后端。以后直接运行

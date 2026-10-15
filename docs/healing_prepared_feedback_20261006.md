@@ -14,7 +14,7 @@
 
 ## 证据与隔离
 
-使用 `D:/miniforge3/envs/mental-health-agent`，Python 3.11.16。全部为合成数据；过程文件、SQLite、Jieba缓存、pytest临时目录和JUnit位于挂载根目录 `codex_proc/healing_prepared_feedback_20261006/`。正常学生数据库、知识库、前端及评估业务文件哈希保持一致。
+使用 mental-health-agent conda 环境，Python 3.11.16。全部为合成数据；过程文件、SQLite、Jieba缓存、pytest临时目录和JUnit位于仓库之外的过程目录下（不入库）。正常学生数据库、知识库、前端及评估业务文件哈希保持一致。
 
 - [完整回放](examples/healing_current_replays.json)：保留原失败和待确认历史，追加三次通过的完整请求、响应及内部状态。
 - `before.xml`：修复前反例；`focused.xml`：核心修复局部285项；`full.xml`：阶段516项；`final.xml`、`final_result.json`：最终517项和正常数据库检查。
@@ -25,10 +25,10 @@
 
 ## 复跑
 
-使用新的 `codex_proc/` 子目录保存结果，保留既有证据：
+在仓库之外的过程目录下另选新子目录保存结果，保留既有证据：
 
 ```powershell
-& 'D:\miniforge3\envs\mental-health-agent\python.exe' -X utf8 -B scripts/validate_healing_current.py --work-dir 'D:\作业\AIC\codex_proc\healing_prepared_new_run' --case specific-context-prepare-pause-resume
+conda run -n mental-health-agent python -X utf8 -B scripts/validate_healing_current.py --work-dir '../过程目录/本次运行' --case specific-context-prepare-pause-resume
 ```
 
 规划文件、接口交接和验证索引已同步这一规则。真人理解度、广泛自然表达、前端接入及跨会话反馈持久化仍保留原待办范围。

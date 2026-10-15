@@ -39,20 +39,20 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --workers 1
 
 ## 复验入口
 
-在项目目录运行，所有过程数据必须在挂载根目录 `codex_proc/` 下，建议每次使用新的子目录。真实接口脚本会调用配置模型并产生用量：
+在项目目录运行，所有过程数据必须放在仓库之外的过程目录下（不入库），建议每次使用新的子目录。真实接口脚本会调用配置模型并产生用量：
 
 ```powershell
-python -X utf8 -B scripts/run_healing_acceptance.py --work-dir "../codex_proc/healing_recheck/mainchain"
-python -X utf8 -B scripts/validate_healing_current.py --work-dir "../codex_proc/healing_recheck/boundaries"
-python -X utf8 -B scripts/validate_healing_experience.py --work-dir "../codex_proc/healing_recheck/experience"
+python -X utf8 -B scripts/run_healing_acceptance.py --work-dir "../过程目录/主链验收"
+python -X utf8 -B scripts/validate_healing_current.py --work-dir "../过程目录/边界验收"
+python -X utf8 -B scripts/validate_healing_experience.py --work-dir "../过程目录/体验验收"
 ```
 
 三个脚本均在导入 API 前隔离默认 SQLite、临时目录与分词缓存，记录逐调用模型用量并核对后端、评估、前端源码和正常数据库的摘要。`current` 的双方法案例若只生成一个方法，记为 `not_exercised` 并返回非零，不能冒充通过。体验脚本的原始模型复核不是最终人工判定；出现非零应逐轮核对回放，保留具体错误或误判依据。
 
-本轮全后端离线测试使用 `codex_proc/healing_final_acceptance_20261006_289acf97/run_tests.py` 隔离普通 SQLite 与 pytest 临时目录，输出 `final_full.xml` 和 `final_full_result.json`。在本机原项目目录可原样复现：
+本轮全后端离线测试使用本批过程目录里的 `run_tests.py`（仓库之外，不入库）隔离普通 SQLite 与 pytest 临时目录，输出 `final_full.xml` 和 `final_full_result.json`。在项目目录可复现：
 
 ```powershell
-python -X utf8 -B ../codex_proc/healing_final_acceptance_20261006_289acf97/run_tests.py recheck -q --junitxml ../codex_proc/healing_final_acceptance_20261006_289acf97/recheck.xml
+python -X utf8 -B ../过程目录/本批验收/run_tests.py recheck -q --junitxml ../过程目录/本批验收/recheck.xml
 ```
 
 ## 当前运行边界
