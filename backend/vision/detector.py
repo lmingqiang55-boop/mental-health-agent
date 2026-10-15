@@ -83,8 +83,12 @@ class EmotiEffLibVisionDetector(VisionDetector):
         self._inference_lock = RLock()
         self._recognizer = EmotiEffLibRecognizer(engine=engine, model_name=model_name)
         # 人脸检测用 YuNet（见 backend.vision.face_weights）。换掉 Haar 的原因：
-        # 它在暗光、侧脸、小脸场景漏检严重（同机实测暗光下 YuNet 187 张 vs
-        # Haar 9 张），且不输出置信度、只能靠放宽 minNeighbors 硬凑，反而引入误检。
+        # 它在暗光、侧脸、小脸场景漏检严重，又不输出置信度，只能靠放宽
+        # minNeighbors 硬凑，反而引入误检。可复现的对照（取 EmotiEffLib 仓库自带
+        # 的真人合照，逐档压暗后比对检出数）：亮度压到 30% 时 Haar 从 3 张脸掉到
+        # 1~2 张，YuNet 在各种缩放下始终稳定 3 张；正常亮度下 Haar 还多报过一张。
+        # 那段素材不是本项目自己的会话录像，只能作受控对照，真实会话上的表现
+        # 仍要按 vision_validation 的待办用真实摄像头复核。
         #
         # YuNet 权重需要一次性联网下载，所以留一条降级路：拿不到权重时回退 Haar，
         # 保证离线机器上整条视觉链路仍然能起来。降级只在"YuNet 完全不可用"时发生，

@@ -40,10 +40,17 @@ VisualTone = Literal["low", "bright"]
 VISUAL_LABELS: dict[VisualAcknowledgment, str] = {
     "happy": "开心", "sad": "难过", "fearful": "紧张", "angry": "烦躁",
 }
+"""允许口头提及的四类外观线索 → 说给学生听的说法。
+
+这张表和 :data:`TONE_LABELS` 是**全项目唯一的一份**：``backend/prompts/dialogue_prompt``
+直接 import 它们来拼提示词，不再各抄一份。以前 prompt 里另有一份内容完全相同的表，
+改文案只会改到一处，"后端允许说的"和"提示词里说的"会悄悄分家。
+"""
 TONE_LABELS: dict[VisualTone, str] = {
     "low": "偏低落（低落、疲惫、提不起劲那一类）",
     "bright": "偏轻松（放松、愉快那一类）",
 }
+"""整体语气的两档说法；与 :data:`VISUAL_LABELS` 一样只保留这一份。"""
 ALIASES = {"happiness": "happy", "sadness": "sad", "fear": "fearful", "anger": "angry"}
 
 

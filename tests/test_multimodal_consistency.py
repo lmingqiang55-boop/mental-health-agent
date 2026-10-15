@@ -29,10 +29,20 @@ def test_text_polarity_reads_direction_and_negation() -> None:
     assert text_polarity("嗯，我在") is None
 
 
-def test_text_polarity_ignores_pure_denial_answers() -> None:
-    """「没有」是回答里的否定词，不是情绪词，不该被算成负分。"""
+def test_pure_denial_reads_as_mildly_positive_not_negative() -> None:
+    """「我没事」是本人对自己状态的否认，按弱正向读，不能算成负分。
 
-    assert text_polarity("没有") is None
+    这是"嘴上说没事、脸上难过"能被核对通道抓到的前提：若读成负分或读不出，
+    文字与表情就朝同一个方向，矛盾永远发现不了。
+    """
+
+    for phrase in ("没有", "没", "没事", "没事儿", "我没事", "没什么", "没啥", "没关系"):
+        value = text_polarity(phrase)
+        assert value is not None, phrase
+        assert 0.0 < value < 0.5, phrase
+    # "还没"意思是"尚未"，不是"我没事"，别被剥成正向。
+    assert text_polarity("还没呢") is None
+    # 句中出现的否认片段不适用整句规则，仍走词典路径（这里没有情绪词）。
     assert text_polarity("没有烦心事") is None
 
 

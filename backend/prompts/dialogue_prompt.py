@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
+from backend.core.visual_acknowledgment import TONE_LABELS, VISUAL_LABELS
 from backend.models.dialogue import (
     DialogueAgentRequest,
     DialogueCurrentUserInput,
@@ -36,14 +37,10 @@ __all__ = [
     "build_dialogue_user_prompt",
 ]
 
-VISUAL_OBSERVATION_NAMES = {
-    "happy": "开心", "sad": "难过", "fearful": "紧张", "angry": "烦躁",
-}
-
-VISUAL_TONE_NAMES = {
-    "low": "偏低落（低落、疲惫、提不起劲那一类）",
-    "bright": "偏轻松（放松、愉快那一类）",
-}
+# 外观线索与语气的说法直接取视觉模块的那一份，不在本文件另抄一份：
+# 两处各存一份同样内容的表时，改文案只会改到一处，于是"后端允许说的"
+# 和"提示词里说的"会悄悄分家（VISUAL_LABELS / TONE_LABELS 见
+# backend/core/visual_acknowledgment.py）。
 
 
 def _polarity_phrase(value: float) -> str:
@@ -72,7 +69,7 @@ def _visual_section(request: DialogueAgentRequest) -> str:
         )
     if request.visual_observation:
         return (
-            f"可靠画面提供的外观线索：{VISUAL_OBSERVATION_NAMES[request.visual_observation]}。"
+            f"可靠画面提供的外观线索：{VISUAL_LABELS[request.visual_observation]}。"
             "请把这项线索自然融入执行 decision 的完整回复，例如用‘你看起来……’带出当前问题；"
             "主要问题仍必须围绕 decision.topic，不要转而追问表情或另一个情绪话题。"
             "整句由你根据上下文组织，不要套固定开头。语气保持试探，不把表情当作用户内心感受或诊断，"
@@ -80,7 +77,7 @@ def _visual_section(request: DialogueAgentRequest) -> str:
         )
     if request.visual_tone:
         return (
-            f"可靠画面显示他此刻的状态{VISUAL_TONE_NAMES[request.visual_tone]}，"
+            f"可靠画面显示他此刻的状态{TONE_LABELS[request.visual_tone]}，"
             "这是**外观线索**，不是他说的内容，也**不是**一个具体情绪，"
             "只是画面整体的轻重方向。"
             "必须用一句外观描述把它带进回复（如“你看起来有点累”“感觉你今天没什么精神”），"

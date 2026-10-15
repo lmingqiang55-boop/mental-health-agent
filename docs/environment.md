@@ -66,6 +66,7 @@ if (-not (Test-Path -LiteralPath .env)) {
 | `ASR_PROVIDER=sensevoice` | 启用真实语音转写 |
 | `ASR_DEVICE=cuda:0` | 使用 NVIDIA GPU 进行语音推理 |
 | `VISION_PROVIDER=emotiefflib` | 启用真实表情分析 |
+| `VISION_FRAME_DUMP_DIR` | 留空即关闭；给一个目录则把冻结后的逐帧情绪/置信度/效价落成 JSONL，仅供阈值重校 |
 | `TTS_PROVIDER` | 语音 provider，默认 `cosyvoice`，备选 `edge`；配置的不可用时自动退到另一个 |
 | `DASHSCOPE_API_KEY` | 阿里云百炼语音合成密钥；只在后端使用 |
 | `DASHSCOPE_WORKSPACE_ID` | 华北2（北京）业务空间 ID，例如 `ws-...` |

@@ -13,9 +13,11 @@
 1. **判断"这句话到底有没有情绪词"**。``sentiment_calculate`` 返回的 ``words``
    是 jieba 分词总数而不是命中数（"今天挺好的"与"没什么好说的"都返回 4），
    只看它无法知道句子里有没有情感词。
-2. **纯否定词不算情绪词**。HowNet 的否定词表与负向词表重叠，"没有""没事"
-   这类回答会被算成负分（实测 ``"没事"`` → ``neg=1``），可它只是在否认，
-   本身不带情绪。本模块按 jieba 分词逐个查表，跳过纯否定词。
+2. **纯否定词不算情绪词，整句否认另有读法**。HowNet 的否定词表与负向词表重叠，
+   "没有""没事"这类回答会被算成负分（实测 ``"没事"`` → ``neg=1``），可它只是在
+   否认，本身不带情绪。本模块按 jieba 分词逐个查表、跳过纯否定词；而当整句话
+   就是一句否认时（"我没事""没什么"），按**弱正向**处理，理由见
+   :data:`DENIAL_CORES`。
 3. **程度副词与情感词重叠时按副词算**。两张表有 19 个词重叠（"特别" ∈ Poss
    且 ∈ Verys 等），``sentiment_calculate`` 先判情感词，会把整句方向算反：
    实测 ``"我今天特别难过"`` → ``pos=2, neg=1``（应为 -3），而语义相同的
@@ -57,12 +59,12 @@
 "还好""还行"本身语气暧昧，本模块按**弱正向**处理——这正是"嘴上说还行、脸色
 不好"能被抓到的前提，但反过来也会把真心平气和说成弱正向。拿不准时返回 ``None``。
 
-否认句式也按词典原样处理，不做特判：``"没有"`` 因为同时是否定词（否定词表与负向
-词表重叠）而返回 ``None``；但 ``"没事"`` 在大连理工本体里被当成一个负向词，实测
-会读成 ``-0.32``。于是"嘴上说没有烦心事、脸上却难过"这种最典型的矛盾信号会被
-漏掉——这是一个待产品/伦理拍板的取舍，不是疏忽：要让"没有"也进入比对，
-需要先在规则集里单独定义否认语境下的极性（例如"没有 + 情绪词"才计负分），
-而不是把整个否定词表当成负向词。
+整句否认（"我没事""没什么"）按**弱正向**处理，就是 :data:`DENIAL_CORES` 那条
+规则。它换来的是"嘴上说没事、脸上却难过"能被核对通道抓到；代价是**症状否认**
+也会被算成弱正向——问"最近有没有失眠"、答"没有"，那句话在字面上就是"没问题"，
+会和脸上的低落构成一次假矛盾。用 0.5 的弱权重（与"还好"同档）加 0.4 的差值门槛
+把影响压到最小，核对通道也只会温和地问一次、明令不许下结论；要彻底区分"否认
+症状"与"否认情绪"必须先有对话上下文，那不是单句极性函数能做的判断。
 
 **本函数不是语义理解**：它看不见反讽、读不出上下文，拿不准时返回 ``None``，
 由调用方把这一句排除在统计之外，而不是塞一个 0 假装"中性"。
@@ -132,6 +134,43 @@ _SPOKEN_DIRECTION: dict[str, float] = {
 
 _SPOKEN_WEIGHTS: dict[str, float] = {**COLLOQUIAL_POSITIVE, **COLLOQUIAL_NEGATIVE}
 """口语词 → 基准权重。"""
+
+DENIAL_WEIGHT = 0.5
+"""整句否认的语气强度：与"还好""还行"同档（0.5），只是弱正向，不是强正向。"""
+
+DENIAL_CORES: frozenset[str] = frozenset({
+    "没事", "没事儿", "没什么", "没什么事", "没啥", "没啥事", "没关系",
+    "没有", "没",
+})
+r"""整句话只是否认时，剥掉前后缀之后剩下的核心说法。
+
+这些说法是**本人对自己状态的否认**（"我没事""没什么"），不是带情绪的描述。
+两条词典路径都读不出这层意思，反而会读错：知网把"没有"当纯否定词跳过，整句
+因此返回 ``None``；大连理工本体又把"没事"收成一个负向词，实测读成 ``-0.32``。
+于是"嘴上说没事、脸上却难过"这种最典型的矛盾信号会被漏掉。
+
+按**弱正向**处理的理由与"还好""还行"完全一样：字面上他是在说自己没问题，
+这正是核对通道能成立的前提。整句匹配而不匹配句中的否认片段，是为了避免把
+"没有烦心事"之外更长的句子也卷进来——那种句子里通常还有别的情绪词可读，
+交给正常规则处理更准。
+"""
+
+_DENIAL_STRIP_HEAD: tuple[str, ...] = (
+    "我", "也", "都", "其实", "真的", "现在", "目前",
+)
+"""否认句里可以剥掉的人称与副词前缀。故意不收"还"：``"还没"`` 意思是"尚未"，
+不是"我没事"，剥掉就会把它误读成正向。"""
+
+_DENIAL_STRIP_TAIL: tuple[str, ...] = (
+    "了", "的", "啊", "呀", "呢", "吧", "嘛", "哦", "噢",
+)
+"""否认句尾常见的语气词。剥掉"呢"之后 ``"还没呢"`` → ``"还没"`` 仍不匹配核心，
+因此这类"尚未"的说法不会被误伤。"""
+
+_DENIAL_STRIP_CHARS = frozenset(
+    "，。！？、；：,.!?;: \t\r\n\u3000～~…—-_*/\\\"'“”‘’()（）[]【】"
+)
+"""整句否认判定前先剔除的标点与空白。"""
 
 DUAL_ROLE_WORDS = frozenset({"好", "坏", "沉", "惨", "苦", "痛", "死", "老"})
 """既在程度副词表、又当情绪词用的字。
@@ -331,6 +370,29 @@ def _ontology_polarity(text: str) -> float | None:
     return _squash(lean, LEAN_SCALE)
 
 
+def _denial_core(text: str) -> str:
+    """剥掉标点、人称与语气词，得到否认句的核心说法；不是整句否认时返回空串。"""
+
+    core = "".join(ch for ch in text.strip() if ch not in _DENIAL_STRIP_CHARS)
+    changed = True
+    while changed and core:
+        changed = False
+        for head in _DENIAL_STRIP_HEAD:
+            if core.startswith(head) and len(core) > len(head):
+                core = core[len(head):]
+                changed = True
+        while core and core[-1] in _DENIAL_STRIP_TAIL:
+            core = core[:-1]
+            changed = True
+    return core if core in DENIAL_CORES else ""
+
+
+def _denial_polarity(text: str) -> float | None:
+    """整句话只是一句否认时给弱正向；否则返回 ``None`` 交给词典路径。"""
+
+    return _squash(DENIAL_WEIGHT, POLARITY_SCALE) if _denial_core(text) else None
+
+
 def text_polarity(text: str) -> float | None:
     """把一句自述映射到 [-1, 1]；读不出情绪时返回 ``None``。
 
@@ -340,6 +402,9 @@ def text_polarity(text: str) -> float | None:
 
     if not text or not text.strip():
         return None
+    denial = _denial_polarity(text)
+    if denial is not None:
+        return denial
     hownet = _hownet_polarity(text)
     if hownet is not None:
         return hownet

@@ -15,6 +15,7 @@ from PIL import Image
 
 from backend.api.errors import session_not_found
 from backend.core.session_manager import session_manager
+from backend.core.vision_frame_dump import dump_segment
 from backend.models.requests import (
     VisionCaptureRequest, VisionFrameRequest, VisionSegmentRequest, VisionUpsertRequest,
 )
@@ -196,6 +197,9 @@ def freeze_segment(request: VisionSegmentRequest) -> VisionSegmentResponse:
                              and request.end_ms - 5000 <= item.captured_at_ms < request.end_ms])
         session.vision_segments[request.utterance_id] = segment
         result["value"] = segment
+        # 只在真正新建片段时落盘（默认关闭）：重放同一区间会走上面的
+        # 早返回分支，不会把同一个片段写两遍。
+        dump_segment(request.session_id, request.utterance_id, segment)
 
     updated = session_manager.modify_session(request.session_id, mutator)
     if updated is None:

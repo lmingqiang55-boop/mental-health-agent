@@ -114,6 +114,18 @@ def test_checkin_catches_the_lukewarm_answer():
         assert checkin.discordance.text_polarity > 0
 
 
+def test_checkin_catches_the_denial_answer():
+    """"我没事""没什么"字面上是"没问题"，配上明显偏负的脸正是最典型的矛盾。"""
+
+    session, snapshot = _visual_session(valence=-0.6)
+    session.turn_count = 2
+    for text in ("没有", "没事", "我没事", "没什么", "没关系"):
+        checkin = select_visual_checkin(session, "turn", snapshot, text)
+        assert checkin.reason == "discordance", text
+        assert checkin.discordance is not None
+        assert checkin.discordance.text_polarity > 0
+
+
 def test_checkin_never_contradicts_a_self_reported_complaint():
     """文字在诉苦、表情却偏正时不核对：不能拿摄像头的猜测反驳学生自己的话。"""
 
