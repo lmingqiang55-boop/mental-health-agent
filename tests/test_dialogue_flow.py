@@ -14,6 +14,7 @@ from backend.core.screening_flow import TOPICS
 from backend.core.session_manager import session_manager
 from backend.main import app
 from backend.models.dialogue import DialogueAgentRequest, DialogueAgentResponse
+from backend.safety.schemas import SafetyLevel
 from backend.vision import detector as detection
 from backend.models.states import VisionState
 
@@ -39,7 +40,9 @@ def _natural_stub(monkeypatch):
     monkeypatch.setattr(chat.dialogue_manager, '_dialogue_agent', Stub())
 
 
-def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(monkeypatch, policy_stub):
+def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(
+    monkeypatch, policy_stub, safety_stub
+):
     _natural_stub(monkeypatch)
     policy_stub(('情绪',))
     sid = _session()
@@ -63,8 +66,12 @@ def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(monkeyp
     rejected = _send(sid, '普通新消息')
     assert rejected.status_code == 409 and rejected.json()['error']['code'] == 'SCREENING_FINISHED'
     assert session_manager.get_session(sid) == previous
+    # 安全分支优先于「已收尾」判定：高危消息仍要被处理，而不是 409
+    safety_stub.force(SafetyLevel.HIGH, message='我很担心你，请先联系身边可信任的人。')
     crisis = _send(sid, '我想自杀')
-    assert crisis.status_code == 200 and crisis.json()['current_stage'] == 'crisis'
+    assert crisis.status_code == 200
+    assert crisis.json()['current_stage'] == 'safety_stop'
+    assert crisis.json()['safety']['route'] == 'safety_stop'
     assert crisis.json()['assessment_ready'] is False
 
 

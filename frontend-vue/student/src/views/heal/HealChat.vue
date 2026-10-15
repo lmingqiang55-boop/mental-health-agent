@@ -43,7 +43,23 @@ const scroller = ref<HTMLElement | null>(null)
 const preparing = computed(() => loading.value || (starting.value && !state.value))
 const status = computed(() => state.value?.status ?? 'active')
 const ended = computed(() => status.value === 'ended' || status.value === 'referred')
-const highRisk = computed(() => state.value?.risk?.risk_level === 'high')
+/**
+ * 本会话的安全结论来自后端的新版 Safety（HealingResponse.risk 是 SafetyVerdict）。
+ * 安全支持模式（risk_level 为 high / imminent，route 为 safety_stop）才给求助方式。
+ * 枚举值大小写按后端序列化归一后比较，避免大小写差异导致判定失效。
+ */
+const riskLevel = computed(() => String(state.value?.risk?.risk_level ?? '').toLowerCase())
+const safetyRoute = computed(() => String(state.value?.risk?.route ?? '').toLowerCase())
+const highRisk = computed(() => safetyRoute.value === 'safety_stop'
+  || riskLevel.value === 'high' || riskLevel.value === 'imminent')
+/** 安全等级 → 徽章：high/imminent 需要照顾，uncertain 需要留意，normal 状态平稳。 */
+const riskBadge = computed<{ tone: 'danger' | 'warning' | 'success'; text: string }>(() => {
+  if (riskLevel.value === 'high' || riskLevel.value === 'imminent') {
+    return { tone: 'danger', text: '需要照顾' }
+  }
+  if (riskLevel.value === 'uncertain') return { tone: 'warning', text: '需要留意' }
+  return { tone: 'success', text: '状态平稳' }
+})
 const locked = computed(() => ended.value || !!blocked.value)
 
 /** 报告里的第一个提问如果没有落进消息流，就补成小晴的开场白。 */
@@ -222,11 +238,8 @@ onMounted(load)
       <PxCard tone="primary" class="hc__summary xq-fade-up">
         <div class="hc__summary-head">
           <p class="hc__summary-title">今日心情小结</p>
-          <PxTag
-            v-if="state.risk"
-            :tone="state.risk.risk_level === 'high' ? 'danger' : state.risk.risk_level === 'medium' ? 'warning' : 'success'"
-          >
-            {{ { low: '状态平稳', medium: '轻度关注', high: '需要照顾' }[state.risk.risk_level] }}
+          <PxTag v-if="state.risk" :tone="riskBadge.tone">
+            {{ riskBadge.text }}
           </PxTag>
         </div>
 

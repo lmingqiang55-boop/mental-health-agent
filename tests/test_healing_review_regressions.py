@@ -10,36 +10,38 @@ from backend.healing.conversation import question_problem
 from backend.healing.execution import feedback_targets, preparation_targets, simplification_targets
 from backend.healing.interaction import pause_signal
 from backend.healing.retriever import HealingRetriever
-from backend.healing.safety import guard_risk
 from backend.models.healing import Feedback
 from backend.models.states import RiskResult
-from test_healing import chat, client, healing, knowledge, start, support
+from backend.safety.schemas import SafetyLevel
+from test_healing import (
+    chat, client, healing, knowledge, make_verdict, start, support, update_session_safety,
+)
 
 
-@pytest.mark.parametrize("text", [
-    "现在完全无法上学，今晚准备跳楼",
-    "今晚准备跳楼，现在完全无法上学",
-    "我被同学威胁，今晚准备跳楼",
-    "今晚准备跳楼，我被同学威胁",
-])
-def test_explicit_plan_is_high_regardless_of_clause_order(support, text):
+@pytest.mark.parametrize("level", ["high", "imminent"])
+def test_safety_stop_at_entry_is_stop_regardless_of_text(support, safety_stub, level):
+    """高危/即时危险由新版 Safety 判定：治愈只消费结论，不自行判定也不调用支持模型。"""
     sid, _, _, fake = support
-    response = start(sid, background={"current_concern": text})
+    safety_stub.force(SafetyLevel(level), message="请先确保此刻有人陪着你。")
+    response = start(sid, background={"current_concern": "现在完全无法上学，今晚准备做危险的事"})
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "referred"
-    assert response.json()["risk"]["risk_level"] == "high"
-    assert any("跳楼" in evidence and evidence in text for evidence in response.json()["risk"]["key_evidence"])
-    assert not fake.calls
+    assert response.json()["risk"]["risk_level"] == level
+    assert response.json()["risk"]["route"] == "safety_stop"
+    assert response.json()["risk"]["risk_detected"] and not fake.calls
 
 
 @pytest.mark.parametrize("earlier", ["assessment", "background", "transcript", "event"])
-def test_earlier_medium_context_never_hides_later_plan(support, earlier):
-    sid, _, _, _ = support
+def test_earlier_context_never_hides_later_safety_stop(support, earlier):
+    """较早的背景/记忆（旧口径下的中等风险）不会掩盖随后建立的停止锁。"""
+    sid, _, _, fake = support
     start(sid)
+    calls = len(fake.calls)
     memory = healing.healing_store.slot(sid).state.memory.model_copy(deep=True)
     memory.background.current_concern = None
-    memory.current_session_messages = ["今晚准备跳楼"]
+    memory.current_session_messages = ["今晚准备做危险的事"]
     if earlier == "assessment":
+        # 报告字段（RiskResult）不参与安全判定，不能替代也不能掩盖安全结论。
         memory.assessment.risk = RiskResult(risk_level="medium", risk_score=.7, requires_intervention=True)
     elif earlier == "background":
         memory.background.current_concern = "现在完全无法上学"
@@ -47,20 +49,30 @@ def test_earlier_medium_context_never_hides_later_plan(support, earlier):
         memory.current_session_messages.insert(0, "现在完全无法上学")
     else:
         memory.current_session_messages = []
-        memory.background.important_events = ["现在完全无法上学", "今晚准备跳楼"]
-    risk = guard_risk(memory, session_risk=RiskResult())
-    assert risk.risk_level == "high" and risk.requires_intervention
+        memory.background.important_events = ["现在完全无法上学", "今晚准备做危险的事"]
+    healing.healing_store.slot(sid).state.memory = memory
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
+    data = client.get(f"/api/healing/{sid}").json()
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
+    assert data["risk"]["route"] == "safety_stop" and len(fake.calls) == calls
 
 
-def test_read_refreshes_medium_report_to_later_plan_once(support):
-    from backend.models.enums import MessageRole
-    from backend.models.states import Message
+@pytest.mark.parametrize("earlier,level", [("normal", "high"), ("uncertain", "high"), ("high", "imminent")])
+def test_more_severe_safety_conclusion_always_wins(earlier, level):
+    """等级序 NORMAL < UNCERTAIN < HIGH < IMMINENT：更严重的结论一定被采用。"""
+    from backend.healing.safety_bridge import most_severe_verdict, verdict_is_more_severe
+    higher, lower = make_verdict(level), make_verdict(earlier)
+    assert most_severe_verdict(lower, higher) == higher
+    assert verdict_is_more_severe(higher, lower) and not verdict_is_more_severe(lower, higher)
 
+
+def test_read_refreshes_review_report_to_later_safety_stop_once(support, safety_stub):
+    """已有报告先在澄清阶段暂停，随后升级为停止；刷新只发生一次。"""
     sid, _, _, fake = support
+    safety_stub.force(SafetyLevel.UNCERTAIN, message="我想再确认一下你现在的状况。")
     initial = start(sid, background={"current_concern": "现在完全无法上学"}).json()
-    assert initial["risk"]["risk_level"] == "medium"
-    session_manager.modify_session(sid, lambda state: state.conversation_history.append(
-        Message(role=MessageRole.USER, content="今晚准备跳楼")))
+    assert initial["status"] == "referred" and initial["risk"]["risk_level"] == "uncertain"
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
     refreshed = client.get(f"/api/healing/{sid}")
     assert refreshed.status_code == 200 and refreshed.json()["risk"]["risk_level"] == "high"
     assert client.get(f"/api/healing/{sid}").json() == refreshed.json()

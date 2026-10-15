@@ -15,6 +15,7 @@ from backend.models.enums import MessageRole, SessionStage
 from backend.models.requests import TriggerAssessmentRequest
 from backend.models.responses import AssessmentResponse
 from backend.models.states import Message, SessionState, SessionVisionSummary
+from backend.safety.projection import verdict_is_more_severe
 
 router = APIRouter(prefix="/api", tags=["assessment"])
 
@@ -74,6 +75,13 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
         session.assessment_result_id = result.result_id
         session.current_stage = SessionStage.COMPLETED
         session.vision_summary = working.vision_summary
+        # 评估侧算出的安全结论必须落回真实会话，否则只走本接口的直接提交路径
+        # 不会在会话上留下任何安全状态，Healing 等入口会按普通流程继续（安全空窗）。
+        # 只在更严重时覆盖，安全状态单向往严。
+        if working.latest_safety is not None and (
+                session.latest_safety is None
+                or verdict_is_more_severe(working.latest_safety, session.latest_safety)):
+            session.latest_safety = working.latest_safety
         if request.evaluation_input is not None:
             data = request.evaluation_input
             _validate_speech_history(session, data.dialogue_history)
@@ -115,7 +123,8 @@ def _prepare_history(session: SessionState, incoming) -> list[Message]:
     prepared = []
     seen_ids = set()
     for index, item in enumerate(incoming):
-        data = item.model_dump(mode="json", exclude_none=True)
+        # safety 由后端计算，**永不采信客户端提交的值**。
+        data = item.model_dump(mode="json", exclude_none=True, exclude={"safety"})
         if same:
             original = session.conversation_history[index]
             supplied_id = data.get("utterance_id")
@@ -140,6 +149,10 @@ def _prepare_history(session: SessionState, incoming) -> list[Message]:
                          "speech": original.speech, "audio_snapshot": original.audio_snapshot})
             if original.vision_snapshot is not None:
                 data["vision_snapshot"] = original.vision_snapshot
+            # 必须恢复权威安全结论：本函数会用 prepared_history 覆盖会话历史，
+            # 漏掉这一项会让「提交评估输入」把整个会话的安全记录抹掉，
+            # 造成安全检测空窗。
+            data["safety"] = original.safety
         message = Message.model_validate(data)
         if message.speech is not None and message.utterance_id is None:
             raise ValueError("录音元数据需要 utterance_id")

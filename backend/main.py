@@ -3,6 +3,7 @@
 只负责中间件、异常处理和路由注册，不写业务逻辑。
 """
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,10 +35,23 @@ from backend.api import (
 )
 
 from backend.audio.transcriber import get_transcription_service
+from backend.safety.hotlines import hotline_configuration_warning
+
+
+def _warn_if_hotlines_unconfigured() -> None:
+    """部署地区未配置时把「安全支持话术里不会有号码」这件事显式打出来。
+
+    未配置是刻意支持的部署形态（不假定未知地区适用任何国家的号码），
+    但它绝不应该是静默的：一旦上线，高危学生看到的话术里就没有可拨号码。
+    """
+    warning = hotline_configuration_warning()
+    if warning:
+        logging.getLogger("uvicorn.error").warning(warning)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _warn_if_hotlines_unconfigured()
     service = get_transcription_service()
     await service.start()
     try:

@@ -154,19 +154,31 @@ def test_invalid_frame_timing_rejected(timing):
         "session_id": session(), "image_base64": FRAME, **timing}).status_code == 422
 
 
-def test_expired_or_explicitly_missing_vision_is_not_borrowed(policy_stub):
+def test_expired_or_explicitly_missing_vision_is_not_borrowed(policy_stub, dialogue_stub):
+    """过期、显式缺失、未采集三种情况下，视觉都不得被借用到本轮。
+
+    旧断言用 ``risk_score == 0.1`` 作代理（视觉曾参与风险分级）；
+    新版 Safety 不再看视觉，因此直接断言「没有视觉观察被送进对话生成」。
+    """
     policy_stub()
     sid = session()
     client.post("/api/vision", json={"session_id": sid, "state": {
         "face_detected": True, "valence": -0.9, "engagement": 0.1,
         "timestamp": (_now() - timedelta(seconds=10)).isoformat()}})
-    assert client.post("/api/chat", json={"session_id": sid, "text": "还好"}).json()["risk"]["risk_score"] == 0.1
+    body = client.post("/api/chat", json={"session_id": sid, "text": "还好"}).json()
+    assert dialogue_stub.requests[-1].visual_observation is None
+    # 本轮没有可用的冻结片段，因此视觉通道没有观察到任何内容
+    assert body["visual_feedback"]["reason"] == "missing_segment"
+
     client.post("/api/vision", json={"session_id": sid, "state": {
         "face_detected": True, "valence": -0.9, "engagement": 0.1, "timestamp": _now().isoformat()}})
-    assert client.post("/api/chat", json={"session_id": sid, "text": "还好",
-                                        "vision_snapshot": None}).json()["risk"]["risk_score"] == 0.1
+    client.post("/api/chat", json={"session_id": sid, "text": "还好",
+                                   "vision_snapshot": None})
+    assert dialogue_stub.requests[-1].visual_observation is None
+
     capture(sid, active=False)
-    assert client.post("/api/chat", json={"session_id": sid, "text": "还好"}).json()["risk"]["risk_score"] == 0.1
+    client.post("/api/chat", json={"session_id": sid, "text": "还好"})
+    assert dialogue_stub.requests[-1].visual_observation is None
 
 
 @pytest.mark.parametrize("full", [False, True])

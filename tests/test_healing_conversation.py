@@ -16,6 +16,24 @@ from backend.healing.interaction import repeated_answer
 from backend.healing.knowledge import load_knowledge
 from backend.healing.retriever import HealingRetriever
 from backend.models.healing import Feedback, HealingBackground, HealingMessage, HealingState
+from backend.safety.schemas import SafetyVerdict
+
+
+def migrated_replay_state(raw, sid):
+    """把历史回放快照迁移到新版契约：risk 从 RiskResult 改为 SafetyVerdict。
+
+    回放文件记录的是旧口径（risk=RiskResult、memory.risk_input_issues），
+    安全结论现在只由新版 Safety 产出，因此这里显式注入一份中性的
+    SafetyVerdict，并去掉已删除的旧字段，其余内容保持逐字不变。
+    """
+    state = {**raw, "memory": {key: value for key, value in raw["memory"].items()
+                               if key != "risk_input_issues"}}
+    state["risk"] = SafetyVerdict(
+        risk_detected=False, risk_level="normal", route="continue",
+        model_status="ok", engine="graph_safety_v1")
+    assert state["memory"]["session_id"]
+    state["memory"] = {**state["memory"], "session_id": sid}
+    return HealingState.model_validate(state)
 
 
 @pytest.mark.parametrize('question', [
@@ -346,8 +364,7 @@ def test_four_boundaries_with_stable_real_two_method_precondition(support, actio
     records_before = store.list_by_student(healing.session_manager.get_session(sid).student_ref)
     replay = json.loads((Path(__file__).parents[1] / 'docs/examples/healing_feedback_acceptance_20261006.json').read_text(encoding='utf-8'))
     original = next(case for case in replay['current_first_run'] if case['case']['id'] == 'specific-context-negated-simplification')
-    state = HealingState.model_validate(original['final_state'])
-    state.memory.session_id = sid
+    state = migrated_replay_state(original['final_state'], sid)
     assert len(state.suggestions) == 2 and all(item.active for item in state.suggestions)
     healing.healing_store.slot(sid).state = state
     healing.healing_agent.retriever = HealingRetriever(load_knowledge())

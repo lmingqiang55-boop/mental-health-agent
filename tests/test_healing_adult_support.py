@@ -8,6 +8,7 @@ from backend.api import healing
 from backend.core.session_manager import session_manager
 from backend.healing.adult_support import ADULT_QUESTION, support_signal
 from backend.healing.retriever import HealingRetriever
+from backend.safety.schemas import SafetyLevel
 from test_healing import chat, client, knowledge, support
 
 
@@ -168,12 +169,24 @@ def test_adult_answer_failure_and_retry_commit_once(support):
     assert healing.healing_store.slot(sid).state == state and state.turn_count == 1
 
 
-@pytest.mark.parametrize("text,status", [("不想聊了", "ended"), ("先暂停", "paused"), ("我想自杀", "referred")])
-def test_support_question_cannot_block_stop_pause_or_risk(support, text, status):
+@pytest.mark.parametrize("text,status", [("不想聊了", "ended"), ("先暂停", "paused")])
+def test_support_question_cannot_block_stop_or_pause(support, text, status):
     sid, _, _, _ = support
     first = enter(sid).json()
     response = chat(sid, first["healing_id"], text)
     assert response.status_code == 200 and response.json()["status"] == status
+    assert response.json()["report"]["question"] is None
+    assert not any(item.active for item in healing.healing_store.slot(sid).state.suggestions)
+
+
+def test_support_question_cannot_block_new_safety_stop(support, safety_stub):
+    """成人支持提问不得挡住新版 Safety 判定出的安全停止（判定不再来自关键词）。"""
+    sid, _, _, _ = support
+    first = enter(sid).json()
+    safety_stub.force(SafetyLevel.HIGH, message="请先确保此刻有人陪着你。")
+    response = chat(sid, first["healing_id"], "我想自杀")
+    assert response.status_code == 200 and response.json()["status"] == "referred"
+    assert response.json()["risk"]["risk_level"] == "high"
     assert response.json()["report"]["question"] is None
     assert not any(item.active for item in healing.healing_store.slot(sid).state.suggestions)
 
@@ -233,11 +246,11 @@ def test_simplification_method_scope_does_not_change_global_adult_condition(supp
     assert [item.active for item in state.suggestions] == [False, True]
 
 
-def test_new_risk_after_question_blocks_method_confirmation(support):
-    from test_healing import update_screening_risk
+def test_new_safety_stop_after_question_blocks_method_confirmation(support):
+    from test_healing import update_session_safety
     sid, _, _, fake = support
     first = enter(sid).json()
-    update_screening_risk(sid)
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
     calls = len(fake.calls)
     response = chat(sid, first["healing_id"], "有")
     assert response.status_code == 200 and response.json()["status"] == "referred"

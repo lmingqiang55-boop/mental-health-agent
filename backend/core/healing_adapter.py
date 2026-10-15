@@ -6,8 +6,6 @@ from backend.models.healing import HealingBackground, HealingBackgroundInput, He
 from backend.models.evaluation import EvaluationRecord
 from backend.models.states import RiskResult, SessionState
 
-RISK_FIELDS = {"risk_level", "risk_score", "requires_intervention"}
-
 
 class HealingBackgroundInvalid(ValueError):
     """Recorded demographics cannot be used by the current support module."""
@@ -27,32 +25,28 @@ def grade_to_school_stage(grade: str | None) -> SchoolStage | None:
     return None
 
 
-def support_record(payload: dict) -> tuple[EvaluationRecord, list[str]]:
-    """Defaults are only a parsing placeholder; issues block ordinary support."""
+def support_record(payload: dict) -> EvaluationRecord:
+    """Persisted assessment record; its risk field is an **evaluation report** field.
+
+    这里不判定安全：旧代码会检查持久记录的 risk 字段是否完整
+    （``RISK_FIELDS`` / ``risk_input_fields``）并据此阻断普通支持，
+    新版 Safety 之后治愈的安全输入只有 SafetyVerdict，是否继续普通治愈
+    由 ``safety_blocks_normal_flow`` 决定，与报告字段是否缺失无关。
+    缺失字段仍然要补齐，否则 EvaluationRecord 无法解析。
+    """
     payload = {**payload, "result": dict(payload["result"])}
     raw = payload["result"].get("risk")
-    issues = []
-    if not isinstance(raw, dict):
-        issues.append("assessment_risk_missing")
-        raw = {}
-    missing = RISK_FIELDS - raw.keys()
-    recorded_fields = payload.get("risk_input_fields")
-    if recorded_fields is not None:
-        missing |= RISK_FIELDS - set(recorded_fields)
-    issues.extend("assessment_risk_field_missing:" + field for field in sorted(missing))
     try:
         risk = RiskResult.model_validate(raw)
     except ValueError:
-        issues.append("assessment_risk_invalid")
         risk = RiskResult()
     payload["result"]["risk"] = risk.model_dump(mode="json")
-    return EvaluationRecord.model_validate(payload), issues
+    return EvaluationRecord.model_validate(payload)
 
 
 def build_healing_memory(session: SessionState, store, background: HealingBackgroundInput) -> HealingMemory:
-    inspected = [support_record(payload) for payload in
-                 store.list_payloads_by_student(session.student_ref or session.session_id)]
-    records = [record for record, _ in inspected]
+    records = [support_record(payload) for payload in
+               store.list_payloads_by_student(session.student_ref or session.session_id)]
     if not records:
         raise ValueError("请先完成一次筛查，再进入心理支持陪伴。")
     latest = records[-1]
@@ -72,12 +66,15 @@ def build_healing_memory(session: SessionState, store, background: HealingBackgr
         assessment=latest.result.model_copy(deep=True),
         recent_assessments=[record.result.model_copy(deep=True) for record in records],
         background=resolved_background,
-        risk_input_issues=inspected[-1][1],
+        # 安全输入是会话上的新版 Safety 结论本身，不做任何加工或降级。
+        safety=session.latest_safety.model_copy(deep=True) if session.latest_safety is not None else None,
         current_session_messages=[message.content for message in session.conversation_history
                                   if message.role.value == "user"][-20:],
         provenance={
             "assessment": "persistent_evaluation_record",
-            "risk": "serialized_assessment_fields_inspected_before_defaults; missing_blocks_support",
+            "risk": "assessment_report_field_only; safety_conclusion_comes_from_backend.safety",
+            "safety": ("session.latest_safety_from_backend_safety_agent" if session.latest_safety is not None
+                       else "session.latest_safety_absent; ordinary_flow_gated_by_safety_blocks_normal_flow"),
             "recent_assessments": "persistent_last_three_evaluation_records",
             "background": "explicit_caller_context; demographics_from_persistent_assessment",
             "background.age": "persistent_evaluation_record.age" if latest.result.age is not None else "unknown",

@@ -59,8 +59,10 @@
 ### 枚举
 
 ```text
-RiskLevel          low | medium | high
-SessionStage       exploration | crisis | assessment_ready | assessment | completed
+RiskLevel          low | medium | high            （评估报告字段，由安全结论单向投影）
+SafetyLevel        normal | uncertain | high | imminent
+SafetyRoute        continue | safety_review | safety_stop
+SessionStage       exploration | safety_review | safety_stop | assessment_ready | assessment | completed
 MessageRole        user | assistant | counselor | system
 ConsentStatus      not_provided | granted | withdrawn
 FollowUpStatus     none | pending | in_progress | resolved
@@ -125,6 +127,11 @@ FollowUpStatus     none | pending | in_progress | resolved
 
 ### RiskResult
 
+**评估报告专用字段**。它不再是实时对话的安全结论，而是由当轮安全结论
+（`SafetyVerdict`）**单向投影**而来（`backend/safety/projection.py`）：
+`normal→low`、`uncertain→medium`、`high`/`imminent→high`。
+反向映射（从 RiskResult 推回安全等级）是被禁止的。
+
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `risk_level` | enum | low/medium/high |
@@ -133,6 +140,23 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `risk_types` | string[] | 风险类型 |
 | `key_evidence` | string[] | 关键对话/行为证据 |
 | `requires_intervention` | bool | 是否需要立即干预 |
+
+### SafetyVerdict
+
+系统**唯一**的安全结论来源，由新版 Safety Agent 每轮产出。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `risk_detected` | bool | 是否有风险（`risk_level != normal`） |
+| `risk_level` | enum | normal/uncertain/high/imminent |
+| `route` | enum | continue/safety_review/safety_stop，由等级派生 |
+| `messages` | string[] | 面向用户的消息（≤3 条）；不含任何号码 |
+| `hotline_numbers` | string[] | 已核实号码，仅 `safety_stop` 时非空 |
+| `model_status` | enum | ok/timeout/parse_error/unavailable |
+| `keyword_signals` | SafetySignal[] | 关键词线索（含否定标记），**不决定等级** |
+| `rationale` | string \| null | 判定理由（面向人工复核，不展示给学生） |
+| `evidence_quotes` | string[] | 原文证据 |
+| `engine` | string | 判定引擎标识 |
 
 ### Message
 
@@ -143,6 +167,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `created_at` | datetime | 时间 |
 | `vision_snapshot` | VisionState \| null | 该消息对应的视觉快照 |
 | `audio_snapshot` | AudioState \| null | 现有可选字段；新评估 Agent 不读取 |
+| `safety` | SafetyVerdict \| null | 该条用户消息的安全结论（后端计算，客户端不可写入） |
 | `utterance_id` | string \| null | 客户端发言唯一标识，重试复用 |
 | `speech` | SpeechMetadata \| null | 客户端单调时间轴上的实际录音区间 |
 
@@ -165,8 +190,9 @@ FollowUpStatus     none | pending | in_progress | resolved
 | `audio_state_log` | AudioState[] | 音频状态日志 |
 | `vision_summary` | Summary \| null | 会话级视觉汇总 |
 | `audio_summary` | Summary \| null | 会话级音频汇总 |
-| `latest_risk` | RiskResult | 最新风险结果 |
-| `crisis_mode` | bool | 危机模式标志 |
+| `latest_safety` | SafetyVerdict \| null | 最新安全结论（系统唯一安全状态来源） |
+| `safety_halted` | bool | 是否已进入安全支持模式；**会话内不会自动解除**，仅人工/管理端可解除 |
+| `safety_stage` | enum | none/review/stopped（`stopped` 不可回退） |
 | `consent` | ConsentRecord | 知情同意记录 |
 | `assessment_result_id` | string \| null | 关联的评估结果 ID |
 | `created_at` / `updated_at` | datetime | 时间戳 |
@@ -246,7 +272,19 @@ FollowUpStatus     none | pending | in_progress | resolved
   "reply": "最近睡觉时，主要是入睡困难还是容易醒？",
   "next_strategy": "睡眠",
   "current_stage": "exploration",
-  "risk": { "risk_level": "low", "risk_score": 0.1, ... },
+  "safety": {
+    "risk_detected": false,
+    "risk_level": "normal",
+    "route": "continue",
+    "messages": [],
+    "hotline_numbers": [],
+    "model_status": "ok",
+    "keyword_signals": [],
+    "rationale": "未出现人身安全相关线索。",
+    "evidence_quotes": [],
+    "engine": "graph_safety_v1"
+  },
+  "messages": ["最近睡觉时，主要是入睡困难还是容易醒？"],
   "turn_count": 1
 }
 ```
@@ -254,17 +292,27 @@ FollowUpStatus     none | pending | in_progress | resolved
 `vision_snapshot` 可选；语音模块提供转写文本，视觉模块完成该句话的对齐后
 填写视觉快照。省略时消息的视觉快照保持为空，不自动取最近一帧。
 `next_strategy` 是经过话题次数约束后的最终动作，普通对话取上面 11 个动作之一，
-危机时为 `crisis_support`，收尾时为 `结束本次筛查`。
+安全分支为 `safety_support` / `safety_review`，收尾时为 `结束本次筛查`。
 
 约定：
 
-- 普通对话将截至当前用户发言的历史交给本机决策模型，再应用话题次数约束。
-  危机与收尾在此之前处理，不调用策略模型。
+- **每个用户消息先做安全判定**（新版 Safety Agent，系统唯一安全来源），
+  普通对话才继续把截至当前的历史交给本机决策模型，再应用话题次数约束。
+  安全分支与收尾在此之前处理，不调用策略模型。
 - 每次成功请求保存一条 user + 一条 assistant 消息，`turn_count` +1。
-- 前端显示 `reply`，读取 `assessment_ready` 控制收尾；不得根据关键词自行决定下一问。
+- 前端显示 `reply`（安全分支为 1~3 条 `messages` 的首条），读取
+  `assessment_ready` 控制收尾；不得根据关键词自行决定下一问。
 - 决策模型不可用（服务未启动、超时、输出不符合约定）时返回
   `503 POLICY_UNAVAILABLE`，本轮不落库，不会退回规则提问。
-- 检测到高风险时进入 `crisis` 阶段并只给出现实支持话术。
+- 安全判定不可用时**不放行**：按 fail-to-REVIEW 口径进入 `safety_review`。
+- `risk_level` 为 `normal` / `uncertain` / `high` / `imminent`，
+  `route` 由后端按等级派生（`normal→continue`、`uncertain→safety_review`、
+  `high`/`imminent→safety_stop`），模型无法自行指定路由。
+- `hotline_numbers` 只来自后端已核实的部署地区配置，仅在 `safety_stop` 时非空；
+  面向学生的 `messages` 中不出现任何号码。
+- `uncertain` 进入 `safety_review`（暂停普通评估，下一轮 `normal` 可恢复）；
+  `high` / `imminent` 进入 `safety_stop` 并置 `safety_halted`，
+  **会话内永不自动解除**，后续正常的表达也不会恢复普通评估。
 - 主要话题交流完成、达到轮数上限或用户明确要求停止时，返回
   `assessment_ready=true`，停止追问。最终评估仍由用户点击按钮后
   `POST /api/assessment` 显式触发。完整响应字段及阈值见本文开头。

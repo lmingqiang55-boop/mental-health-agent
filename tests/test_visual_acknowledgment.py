@@ -18,6 +18,7 @@ from backend.models.states import (
     Message, SessionState, VisionFrameObservation, VisionSegment, VisionState,
 )
 from backend.policy.client import DialogueAction, PolicyDecision
+from backend.safety.schemas import SafetyLevel
 from backend.vision.aggregation import aggregate_frames
 
 
@@ -120,9 +121,27 @@ def test_dialogue_manager_says_the_qualified_observation(monkeypatch):
     assert dialogue.request.visual_observation == "sad"
     assert session.last_visual_observation_turn == 2
 
-    crisis = DialogueManager(policy_client=Policy(), dialogue_agent=Dialogue()).process_turn(
-        "我想自杀", session, snapshot, use_latest_states=False, utterance_id="turn")
-    assert "你看起来" not in crisis.reply
+
+def test_safety_branch_never_mentions_appearance(policy_stub, dialogue_stub, safety_stub) -> None:
+    """安全分支不得出现外观评论，且视觉通道完全不被使用。
+
+    旧实现靠 ``DialogueManager`` 内部识别危机后改写回复；现在安全判定在 API 层
+    先行，安全分支根本不会调用 ``DialogueManager`` 与视觉通道。这条保护因此
+    必须锁在 API 层，否则「高危轮次不谈外观」就没有守卫了。
+    """
+    policy_stub(("情绪",))
+    safety_stub.force(SafetyLevel.HIGH, message="我很担心你，请先联系身边可信任的人。")
+    session_id = session_manager.create_session().session_id
+    result = chat.chat(ChatRequest(
+        session_id=session_id, text="我想自杀",
+        vision_snapshot=VisionState(emotion="sad", valence=-0.8, face_detected=True)))
+
+    assert result.safety.route == "safety_stop"
+    assert result.reply == "我很担心你，请先联系身边可信任的人。"
+    assert "你看起来" not in result.reply
+    assert result.visual_feedback.reason == "safety_stop"
+    # 视觉通道没有被触发，冷却计时也没有被推进
+    assert session_manager.get_session(session_id).last_visual_observation_turn is None
 
 
 def test_chat_route_passes_frozen_turn_to_visual_frequency_gate(

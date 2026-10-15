@@ -12,7 +12,13 @@ export interface ApiErrorShape {
 }
 
 export type RiskLevel = 'low' | 'medium' | 'high'
-export type Stage = 'exploration' | 'crisis' | 'assessment_ready' | 'assessment' | 'completed'
+export type Stage =
+  | 'exploration'
+  | 'safety_review'
+  | 'safety_stop'
+  | 'assessment_ready'
+  | 'assessment'
+  | 'completed'
 
 export interface RiskResult {
   risk_level: RiskLevel
@@ -21,6 +27,37 @@ export interface RiskResult {
   risk_types: string[]
   key_evidence: string[]
   requires_intervention: boolean
+}
+
+// ---------------- 心理安全（新版 Safety，系统唯一安全状态来源） ----------------
+
+export type SafetyLevel = 'normal' | 'uncertain' | 'high' | 'imminent'
+export type SafetyRoute = 'continue' | 'safety_review' | 'safety_stop'
+export type SafetyModelStatus = 'ok' | 'timeout' | 'parse_error' | 'unavailable'
+/** none：普通评估；review：安全澄清中；stopped：安全支持中（会话内不会自动解除）。 */
+export type SafetyStage = 'none' | 'review' | 'stopped'
+
+/** 危险表达关键词线索。仅作线索，不决定风险等级。 */
+export interface SafetySignal {
+  term: string
+  negated: boolean
+  source: 'latest_message' | 'history'
+}
+
+export interface SafetyVerdict {
+  risk_detected: boolean
+  risk_level: SafetyLevel
+  /** 路由由等级在后端派生，前端不应自行推导。 */
+  route: SafetyRoute
+  /** 面向用户的消息（≤3 条）。号码不在这里，见 hotline_numbers。 */
+  messages: string[]
+  /** 已核实的热线号码；仅在 route 为 safety_stop 时非空。 */
+  hotline_numbers: string[]
+  model_status: SafetyModelStatus
+  keyword_signals: SafetySignal[]
+  rationale: string | null
+  evidence_quotes: string[]
+  engine: string
 }
 
 export interface VisionState {
@@ -94,8 +131,11 @@ export interface SessionState {
   audio_state_log: AudioState[]
   vision_summary: Record<string, unknown> | null
   audio_summary: Record<string, unknown> | null
-  latest_risk: RiskResult
-  crisis_mode: boolean
+  /** 本轮的安全结论（新版 Safety），每轮都有。 */
+  latest_safety: SafetyVerdict | null
+  /** 已进入安全支持模式；会话内不会自动解除，仅人工/管理端可解除。 */
+  safety_halted: boolean
+  safety_stage: SafetyStage
   consent: ConsentRecord
   assessment_result_id: string | null
   created_at: string
@@ -138,7 +178,10 @@ export interface ChatResponse {
   reply: string
   next_strategy: string
   current_stage: Stage
-  risk: RiskResult
+  /** 本轮安全结论。安全分支下 reply 为 messages[0]。 */
+  safety: SafetyVerdict | null
+  /** 面向用户的消息：安全分支 1~3 条；普通对话 1 条且等于 reply。 */
+  messages: string[]
   turn_count: number
   /** 本轮是否收尾：true 表示停止普通追问、可生成结果。 */
   assessment_ready: boolean
@@ -335,7 +378,8 @@ export interface HealingResponse {
   turn_count: number
   report: HealingReport
   messages: { role: 'user' | 'assistant'; content: string; created_at: string }[]
-  risk: RiskResult
+  /** 本会话当前生效的安全结论：后端 HealingResponse.risk 现在是 SafetyVerdict。 */
+  risk: SafetyVerdict
   notice: string
 }
 

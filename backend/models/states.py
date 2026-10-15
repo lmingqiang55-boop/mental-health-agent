@@ -14,6 +14,7 @@ from backend.models.enums import (
     RiskLevel,
     SessionStage,
 )
+from backend.safety.schemas import SafetyStage, SafetyVerdict
 
 
 def _now() -> datetime:
@@ -162,6 +163,8 @@ class Message(BaseModel):
     # 该消息对应的句级多模态快照（可选），不存原始音视频
     vision_snapshot: VisionState | None = None
     audio_snapshot: AudioState | None = None
+    # 该条用户消息的安全结论（新版 Safety）。评估报告由它投影出风险字段。
+    safety: SafetyVerdict | None = None
     utterance_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r"\S")
     speech: SpeechMetadata | None = None
 
@@ -214,9 +217,10 @@ class SessionState(BaseModel):
     vision_summary: SessionVisionSummary | None = None
     audio_summary: SessionAudioSummary | None = None
 
-    # 风险与危机模式
-    latest_risk: RiskResult = Field(default_factory=RiskResult)
-    crisis_mode: bool = False
+    # 心理安全结论（新版 Safety，系统唯一安全状态来源；不参与评估报告口径）
+    latest_safety: SafetyVerdict | None = None
+    safety_halted: bool = False
+    safety_stage: SafetyStage = "none"
 
     # 知情同意
     consent: ConsentRecord = Field(default_factory=ConsentRecord)

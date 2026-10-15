@@ -1,22 +1,32 @@
-"""Healing API: independent history, fixed assessment binding and retry receipts."""
+"""Healing API: independent history, fixed assessment binding and retry receipts.
 
+安全口径（新版 Safety）：
+- Healing **不做任何风险判定**，也不再有自己的一套关键词/正则规则；
+- 每个进入普通治愈的入口都先判断会话安全状态
+  （``safety_blocks_normal_flow``）与本轮 Safety 结论（``SafetyVerdict.halted``），
+  为真时只返回安全支持/澄清状态，绝不继续普通治愈；
+- 拿不到安全结论时**不当作低风险放行**：是否继续只以上述判断为准。
+"""
+
+import asyncio
 import hashlib
 import json
 from time import perf_counter
 
 from fastapi import APIRouter, HTTPException
 
+from backend.api.chat import safety_runner
 from backend.core.healing_adapter import HealingBackgroundInvalid, build_healing_memory
 from backend.core.memory_store import memory_store
 from backend.core.session_manager import session_manager
 from backend.healing.agent import HealingAgent
 from backend.healing.client import HealingUnavailable
-from backend.healing.safety import guard_risk, referral_text
+from backend.healing.safety_bridge import most_severe_verdict, session_safety_verdict
 from backend.healing.store import healing_store
-from backend.llm.prompts import QUESTIONS
-from backend.models.enums import MessageRole, RiskLevel
 from backend.models.healing import HealingChatRequest, HealingMessage, HealingResponse, StartHealingRequest, student_view
 from backend.models.states import _now
+from backend.safety.schemas import SafetyVerdict
+from backend.safety.support import safety_blocks_normal_flow
 
 router = APIRouter(prefix="/api/healing", tags=["healing"])
 healing_agent = HealingAgent()
@@ -45,48 +55,57 @@ def get_slot(session_id):
         raise error(503, "HEALING_BUSY", "陪伴服务繁忙，请稍后重试。") from None
 
 
-def risk_priority(risk):
-    return ({RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2}[risk.risk_level],
-            risk.risk_score)
+async def evaluate_safety(text: str, history) -> SafetyVerdict | None:
+    """本轮治愈发言的安全结论，来自系统唯一的安全判定调用点。
+
+    ``safety_runner`` 就是 ``/api/chat`` 使用的那个实例（chat.py 声明它是
+    安全判定的唯一调用点），因此测试用同一处替换即可注入离线结论，
+    Healing 侧不会再出现第二套判定实现。判定本身是同步的，放进线程执行，
+    避免在事件循环里触发内部 ``asyncio.run``。空文本不产生结论（返回 None）。
+    """
+    if not text.strip():
+        return None
+    return await asyncio.to_thread(safety_runner.evaluate, text, list(history))
 
 
-def publish_state(session_id, slot, candidate=None, *, answer=None,
+def safe_to_continue(session) -> bool:
+    """普通治愈是否可以继续：只看会话安全状态（统一守卫，不看报告风险字段）。"""
+    return not safety_blocks_normal_flow(safety_halted=session.safety_halted,
+                                         safety_stage=session.safety_stage)
+
+
+def publish_state(session_id, slot, candidate=None, *, answer=None, safety=None,
                   start_receipt=None, message_receipt=None):
-    """Under the slot lock, check current screening risk and commit without an await.
+    """Under the slot lock, check the current safety conclusion and commit without an await.
 
-    The session read lock also serializes this commit with screening updates from
-    worker threads. Ordinary replies produced while risk changed are discarded;
-    their feedback and recommendations must not become accepted progress.
+    The session read lock also serializes this commit with safety updates from
+    worker threads. Ordinary replies produced while a safety stop/review arrived
+    are discarded; their feedback and recommendations must not become accepted
+    progress.
     """
     def publish(session):
         state = candidate if candidate is not None else slot.state
         if state is None:
             raise error(404, "HEALING_NOT_FOUND", "本次陪伴记录不可恢复，请重新进入陪伴。")
-        # Direct assessment imports may update the transcript without latest_risk.
-        # Inspect its current user text without changing the report's binding.
-        contexts = list(dict.fromkeys([*state.memory.current_session_messages,
-            *(message.content for message in session.conversation_history if message.role == MessageRole.USER)]))
-        risk_memory = state.memory.model_copy(update={"current_session_messages": contexts})
-        risk = guard_risk(risk_memory, answer or "", session.latest_risk, session.crisis_mode)
-        if risk is not None and (state.status != "referred" or (
-                risk_priority(risk) >= risk_priority(state.risk) and risk != state.risk)):
-            if candidate is not None and answer is not None and state.status != "referred":
-                state = slot.state.model_copy(deep=True)
-                state.turn_count += 1
-                state.messages.append(HealingMessage(role="user", content=answer))
-            else:
-                state = state.model_copy(deep=True)
-            previous_text = (state.messages[-1].content if state.messages and
-                             state.messages[-1].role == "assistant" else state.report.understanding)
-            if state.status != "referred" or previous_text != referral_text(risk, QUESTIONS["crisis_support"]):
-                healing_agent.refer(state, risk, initial=candidate is not None and answer is None)
-            else:
-                state.risk = risk
-                state.audit.append({"phase": "risk_refresh", "at": _now().isoformat(),
-                                    "risk": risk.model_dump(mode="json")})
-        elif risk is None and risk_priority(session.latest_risk) > risk_priority(state.risk):
-            state = state.model_copy(deep=True)
-            state.risk = session.latest_risk.model_copy(deep=True)
+        # 安全暂停/中止必须阻断普通治愈：本轮的 Safety 结论与会话上的
+        # 安全状态取更严重的一份，任一要求停止都不得继续普通治愈。
+        session_safety = session_safety_verdict(session)
+        blocked = not safe_to_continue(session)
+        governing = most_severe_verdict(safety, session_safety)
+        if blocked or governing.halted:
+            if state.status != "referred" or governing != state.risk:
+                if candidate is not None and answer is not None and state.status != "referred":
+                    # 安全结论在生成期间变化：丢弃这条普通治愈回复，
+                    # 只保留这条用户回答，且不写入任何普通治愈进度。
+                    state = slot.state.model_copy(deep=True)
+                    state.turn_count += 1
+                    state.messages.append(HealingMessage(role="user", content=answer))
+                else:
+                    state = state.model_copy(deep=True)
+                healing_agent.enter_safety_mode(
+                    state, governing,
+                    initial=candidate is not None and answer is None and state.status != "referred",
+                    already_halted=blocked or state.status == "referred")
         response = student_view(state)
         if message_receipt is not None:
             message_id, digest = message_receipt
@@ -136,15 +155,24 @@ async def start_healing(request: StartHealingRequest):
             raise error(422, "VALIDATION_ERROR", str(exc)) from None
         except ValueError:
             raise error(409, "HEALING_ASSESSMENT_REQUIRED", "请先完成一次筛查，再进入心理支持陪伴。") from None
+        # 进入普通治愈前的安全判定：学生本轮带来的文本（关注点/最近发言）
+        # 由新版 Safety 判定，再与会话已有的安全结论取更严重的一份。
+        entry = memory.background.current_concern or "\n".join(memory.current_session_messages[-8:])
+        transcript = [(message.role.value, message.content)
+                      for message in session.conversation_history[-20:]]
+        safety = most_severe_verdict(await evaluate_safety(entry, transcript),
+                                     session_safety_verdict(session))
         try:
-            new_state = await healing_agent.start(memory, session.latest_risk, session.crisis_mode)
+            new_state = await healing_agent.start(
+                memory, safety,
+                safety_halted=session.safety_halted, safety_stage=session.safety_stage)
             if new_state.audit:
                 new_state.audit[-1]["adapter_ms"] = adapter_ms
         except HealingUnavailable:
             if slot.state is not None:
-                publish_state(request.session_id, slot)
+                publish_state(request.session_id, slot, safety=safety)
             raise error(503, "HEALING_UNAVAILABLE", "支持服务暂时不可用，请稍后重试；已有陪伴记录会保留。") from None
-        return publish_state(request.session_id, slot, new_state,
+        return publish_state(request.session_id, slot, new_state, safety=safety,
                              start_receipt=(request.request_id, digest))
 
 
@@ -179,10 +207,20 @@ async def healing_chat(request: HealingChatRequest):
             raise error(409, "HEALING_ENDED", "这轮陪伴已经结束，可以重新生成一轮支持。")
         if state.turn_count >= 80:
             raise error(409, "HEALING_TURN_LIMIT", "这轮陪伴已达到保存上限，请重新生成一轮支持。")
+        if state.status == "referred" or not safe_to_continue(session):
+            # 安全暂停/中止（或本轮陪伴已在安全模式）：不得继续普通治愈，
+            # 不调用支持模型、不写普通治愈进度，只返回安全状态。
+            return publish_state(request.session_id, slot)
+        # 本条治愈发言的安全结论（新版 Safety），与会话已有的安全结论取更严重的。
+        history = [(message.role, message.content) for message in state.messages[-20:]]
+        turn_safety = await evaluate_safety(request.text, history)
+        safety = most_severe_verdict(turn_safety, session_safety_verdict(session))
         try:
-            new_state = await healing_agent.reply(state, request.text, session.latest_risk, session.crisis_mode)
+            new_state = await healing_agent.reply(
+                state, request.text, safety,
+                safety_halted=session.safety_halted, safety_stage=session.safety_stage)
         except HealingUnavailable:
-            publish_state(request.session_id, slot)
+            publish_state(request.session_id, slot, safety=safety)
             raise error(503, "HEALING_UNAVAILABLE", "陪伴服务暂时不可用，请重试本次回答；此前进度会保留。") from None
-        return publish_state(request.session_id, slot, new_state, answer=request.text,
+        return publish_state(request.session_id, slot, new_state, answer=request.text, safety=safety,
                              message_receipt=(request.message_id, digest))

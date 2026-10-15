@@ -81,7 +81,12 @@ def test_policy_failure_can_retry_same_speech_id(policy_stub):
     assert client.get(f"/api/session/{request['session_id']}").json()["turn_count"] == 1
 
 
-def test_speech_missing_modalities_do_not_use_stale_states(policy_stub):
+def test_speech_missing_modalities_do_not_use_stale_states(policy_stub, dialogue_stub):
+    """语音轮次缺少模态时，不得借用会话级的陈旧视听觉状态。
+
+    旧断言用 ``risk_level == "low"`` 作代理（视觉/听觉曾参与风险分级）；
+    新版 Safety 不看多模态状态，因此直接断言「没有陈旧视觉被借用」。
+    """
     policy_stub()
     request = new_request()
     client.post("/api/vision", json={"session_id": request["session_id"], "state": {
@@ -90,9 +95,11 @@ def test_speech_missing_modalities_do_not_use_stale_states(policy_stub):
         "energy": 0.01, "pause_ratio": 0.99, "audio_available": True}})
     response = client.post("/api/chat", json=request)
     assert response.status_code == 200
-    assert response.json()["risk"]["risk_level"] == "low"
     message = client.get(f"/api/session/{request['session_id']}").json()["conversation_history"][1]
     assert message["vision_snapshot"] is None and message["audio_snapshot"] is None
+    # 本轮带了语音，必须用本句对齐结果，不能回退到会话级陈旧状态
+    assert dialogue_stub.requests[-1].visual_observation is None
+    assert response.json()["safety"]["route"] == "continue"
 
 
 @pytest.mark.parametrize("speech", [

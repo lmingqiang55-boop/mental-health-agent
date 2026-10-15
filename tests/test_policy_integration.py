@@ -18,6 +18,7 @@ from backend.policy.client import (
     get_policy_client,
     parse_policy_content,
 )
+from backend.safety.schemas import SafetyLevel
 
 
 def test_policy_output_contract_and_local_endpoint() -> None:
@@ -91,20 +92,27 @@ def test_policy_actions_drive_chat_and_receive_current_turn(monkeypatch) -> None
     )
 
 
-def test_crisis_preempts_policy(monkeypatch) -> None:
+def test_high_risk_turn_preempts_policy(monkeypatch, safety_stub) -> None:
+    """高风险轮次必须被安全分支拦下，不得调用决策模型。"""
     def must_not_call(request: httpx.Request) -> httpx.Response:
-        raise AssertionError("Crisis turn must not call the policy model")
+        raise AssertionError("Safety branch must not call the policy model")
 
     policy = HttpPolicyClient(client=httpx.Client(
         transport=httpx.MockTransport(must_not_call)
     ))
     monkeypatch.setattr(chat.dialogue_manager, "_policy", policy)
+    safety_stub.force(SafetyLevel.HIGH, message="我很担心你，请先联系身边可信任的人。")
     client = TestClient(app)
     session_id = client.post("/api/session").json()["session_id"]
     response = client.post("/api/chat", json={"session_id": session_id, "text": "我想自杀"})
     assert response.status_code == 200
-    assert response.json()["current_stage"] == "crisis"
-    assert "急救" in response.json()["reply"]
+    body = response.json()
+    assert body["current_stage"] == "safety_stop"
+    assert body["safety"]["route"] == "safety_stop"
+    assert body["reply"] == "我很担心你，请先联系身边可信任的人。"
+    # 判定确实发生且只发生一次
+    assert len(safety_stub.calls) == 1
+    assert safety_stub.calls[0][0] == "我想自杀"
 
 
 def test_policy_failure_does_not_append_partial_turn(monkeypatch) -> None:

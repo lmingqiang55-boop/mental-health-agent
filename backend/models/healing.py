@@ -6,7 +6,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.models.evaluation import EvaluationResult
-from backend.models.states import RiskResult, _now
+from backend.models.states import _now
+from backend.safety.schemas import SafetyVerdict
 
 SchoolStage = Literal["primary", "middle", "high"]
 Scene = Literal["low_mood", "study_stress", "relationships", "sleep", "general"]
@@ -57,7 +58,9 @@ class HealingMemory(StrictModel):
     background: HealingBackground = Field(default_factory=HealingBackground)
     current_session_messages: list[str] = Field(default_factory=list)
     provenance: dict[str, str] = Field(default_factory=dict)
-    risk_input_issues: list[str] = Field(default_factory=list)
+    # 治愈的安全输入：新版 Safety 结论（会话级）。Healing 不自行判定风险，
+    # 旧的关键词规则输入 risk_input_issues 已随规则引擎一起删除。
+    safety: SafetyVerdict | None = None
 
 
 class KnowledgeWording(StrictModel):
@@ -213,7 +216,8 @@ class HealingState(StrictModel):
     adult_support: AdultSupportState = Field(default_factory=AdultSupportState)
     turn_count: int = 0
     status: Literal["active", "paused", "ended", "referred"] = "active"
-    risk: RiskResult
+    # 本会话当前生效的安全结论（新版 Safety，唯一安全状态来源）。
+    risk: SafetyVerdict
     # Kept in process memory, never in the student response or assessment database.
     audit: list[dict] = Field(default_factory=list)
     memory_update_suggestions: list[dict] = Field(default_factory=list)
@@ -271,7 +275,8 @@ class HealingResponse(StrictModel):
     turn_count: int
     report: StudentReport
     messages: list[HealingMessage]
-    risk: RiskResult
+    # 本会话当前生效的安全结论（新版 Safety）。学生视图不暴露引擎元数据以外的判据。
+    risk: SafetyVerdict
     notice: str | None = None
 
 

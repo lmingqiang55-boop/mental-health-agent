@@ -41,7 +41,7 @@ def test_locked_read_uses_a_copy_without_writing_or_extending_ttl():
     original = manager.create_session()
 
     def reader(snapshot):
-        snapshot.crisis_mode = True
+        snapshot.safety_halted = True
         snapshot.conversation_history.clear()
         return snapshot.session_id
 
@@ -71,11 +71,11 @@ def test_locked_read_commit_serializes_with_screening_worker_update():
     def reader(snapshot):
         entered.set()
         assert release.wait(timeout=3)
-        return snapshot.crisis_mode
+        return snapshot.safety_halted
 
     def write():
         attempted.set()
-        manager.modify_session(session.session_id, lambda state: setattr(state, "crisis_mode", True))
+        manager.modify_session(session.session_id, lambda state: setattr(state, "safety_halted", True))
         written.set()
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -89,4 +89,4 @@ def test_locked_read_commit_serializes_with_screening_worker_update():
             release.set()
         assert reading.result(timeout=3) is False
         writing.result(timeout=3)
-    assert manager.read_session(session.session_id, lambda state: state.crisis_mode) is True
+    assert manager.read_session(session.session_id, lambda state: state.safety_halted) is True

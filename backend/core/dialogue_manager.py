@@ -3,8 +3,6 @@
 import asyncio
 
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
-from backend.core.multimodal_fusion import fuse_turn
-from backend.core.risk_engine import assess_risk
 from backend.core.screening_flow import completion_reason, limit_topic, record_answer
 from backend.core.multimodal_consistency import TurnDiscordance
 from backend.core.visual_acknowledgment import (
@@ -13,14 +11,13 @@ from backend.core.visual_acknowledgment import (
 )
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
-from backend.llm.prompts import QUESTIONS
 from backend.models.dialogue import (
     DialogueAgentRequest, DialogueCurrentUserInput, DialogueDecision,
     DialogueHistoryMessage, DialogueVisual, DialogueVisualDiscordance,
 )
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.responses import DialogueResponsePayload, VisualFeedback
-from backend.models.states import RiskResult, SessionState, VisionState, _now
+from backend.models.states import SessionState, VisionState, _now
 from backend.policy.client import (
     HttpPolicyClient,
     PolicyClientError,
@@ -36,7 +33,10 @@ class ScreeningFinished(RuntimeError):
 
 
 class DialogueManager:
-    """决策模型决定下一步动作，危机消息优先走现实支持话术。
+    """决策模型决定下一步动作，对话 Agent 生成真正的下一句。
+
+    **本类不做任何安全判定。** 安全由 ``backend/safety`` 的 Safety Agent
+    在进入本类之前完成（见 ``backend/api/chat.py``）：安全分支不会走到这里。
 
     Args:
         policy_client: 决策模型客户端；测试可注入模拟响应，不注入时首次
@@ -60,21 +60,6 @@ class DialogueManager:
             if not 0 <= age <= 5:
                 latest = None
         current_vision = vision_snapshot if vision_snapshot is not None else latest
-        fused = fuse_turn(
-            user_text,
-            current_vision,
-            session.latest_audio_state if use_latest_states else None,
-        )
-        risk = assess_risk(fused)
-        session.latest_risk = risk
-
-        # 危机模式：高风险后不再提问评估内容，只给出现实支持指引
-        if risk.requires_intervention:
-            session.crisis_mode = True
-            session.current_stage = SessionStage.CRISIS
-            return self._reply(session, "crisis_support", risk)
-        if session.crisis_mode:
-            return self._reply(session, "crisis_support", risk)
 
         if session.current_stage in (SessionStage.ASSESSMENT_READY, SessionStage.COMPLETED):
             raise ScreeningFinished("本次筛查已收尾，请生成结果或重新开始。")
@@ -87,7 +72,7 @@ class DialogueManager:
             session.screening_progress.end_reason = ending
             return DialogueResponsePayload(
                 reply=reply, next_strategy="结束本次筛查",
-                current_stage=session.current_stage.value, risk=risk,
+                current_stage=session.current_stage.value,
                 assessment_ready=True, completion_reason=ending,
                 screening_progress=session.screening_progress,
                 visual_feedback={"reason": "closing"},
@@ -130,7 +115,6 @@ class DialogueManager:
             reply=reply,
             next_strategy=decision.actions[-1].value,
             current_stage=session.current_stage.value,
-            risk=risk,
             screening_progress=session.screening_progress,
             visual_feedback=visual,
         )
@@ -210,17 +194,6 @@ class DialogueManager:
             raise DialogueUnavailable("对话 Agent 生成失败") from exc
 
     # -- 回复生成 --------------------------------------------------------
-
-    def _reply(self, session: SessionState, strategy: str,
-               risk: RiskResult) -> DialogueResponsePayload:
-        return DialogueResponsePayload(
-            reply=QUESTIONS["crisis_support"],
-            next_strategy=strategy,
-            current_stage=session.current_stage.value,
-            risk=risk,
-            screening_progress=session.screening_progress,
-            visual_feedback={"reason": "crisis"},
-        )
 
 
 def _dialogue_visual(state: VisionState | None) -> DialogueVisual | None:

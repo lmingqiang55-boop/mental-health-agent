@@ -80,7 +80,8 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
         "session_id": session_id, "text": "经常凌晨醒",
     })
     assert first.status_code == second.status_code == 200
-    assert first.json()["risk"]["risk_level"] == "medium"
+    # 普通对话正常进行（安全结论为 continue 才会走决策/对话链路）
+    assert first.json()["safety"]["route"] == "continue"
     assert second.json()["turn_count"] == 2
     assert len(policy_requests) == 2
     assert "用户：最近睡不好" in policy_requests[0]["messages"][1]["content"]
@@ -89,7 +90,12 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
     assessment = client.post("/api/assessment", json={"session_id": session_id})
     assert assessment.status_code == 200, assessment.json()
     result = assessment.json()["result"]
-    assert result["risk"]["risk_level"] == "medium"
+    # 报告风险字段由「已存储的逐条安全结论」单向投影而来；
+    # 普通对话（NORMAL）应投影为低风险且无需干预。
+    # 非低风险的投影（UNCERTAIN/HIGH/IMMINENT）由
+    # tests/test_safety_agent.py 与 test_evaluation_integration.py 覆盖。
+    assert result["risk"]["risk_level"] == "low"
+    assert result["risk"]["requires_intervention"] is False
     assert result["concern_index"] > 0
     assert result["assessment_method"] == "evaluation_agent"
     report = result["report"]

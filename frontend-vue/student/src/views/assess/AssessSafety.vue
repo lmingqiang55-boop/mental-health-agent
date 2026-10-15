@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { assessmentApi, sessionApi } from '@/api'
 import { isApiError } from '@/api/http'
-import type { RiskResult } from '@/api/types'
+import type { SafetyVerdict } from '@/api/types'
 import { useAssessStore } from '@/stores/assess'
 import { toastWarn } from '@/utils/toast'
 import PxButton from '@/components/base/PxButton.vue'
@@ -18,14 +18,19 @@ const assess = useAssessStore()
 
 const loading = ref(true)
 const running = ref(false)
-const risk = ref<RiskResult | null>(null)
+const safety = ref<SafetyVerdict | null>(null)
 
-/** 命中风险：需要干预、或达到中/高风险等级。 */
-const hit = computed(() => {
-  const r = risk.value
-  if (!r) return false
-  return r.requires_intervention || r.risk_level === 'high' || r.risk_level === 'medium'
-})
+/** 命中安全提示：Safety 判定有风险（需澄清或需支持）。 */
+const hit = computed(() => safety.value?.risk_detected === true)
+
+/** 安全支持模式：HIGH / IMMINENT，需要给出即时求助入口。 */
+const stopped = computed(() => safety.value?.route === 'safety_stop')
+
+/**
+ * 地区适用热线由后端按部署地区下发并已核实，前端不硬编码号码。
+ * 部署地区未配置时为空数组，此时不展示任何号码。
+ */
+const hotlines = computed(() => safety.value?.hotline_numbers ?? [])
 
 onMounted(async () => {
   if (!assess.sessionId) {
@@ -35,7 +40,7 @@ onMounted(async () => {
   loading.value = true
   try {
     const state = await sessionApi.get(assess.sessionId)
-    risk.value = state.latest_risk
+    safety.value = state.latest_safety
   } catch (e) {
     if (isApiError(e, 'SESSION_NOT_FOUND')) {
       toastWarn('会话已过期，请重新开始')
@@ -46,8 +51,8 @@ onMounted(async () => {
   }
 })
 
-function callHotline() {
-  window.location.href = 'tel:12356'
+function callHotline(number: string) {
+  window.location.href = `tel:${number}`
 }
 
 async function generate() {
@@ -77,15 +82,20 @@ async function generate() {
     <template v-else>
       <h1 class="xq-page-title">对话结束了</h1>
 
-      <PxCard v-if="hit" tone="warn" title="先照顾好自己">
+      <PxCard v-if="hit" tone="warn" :title="stopped ? '先照顾好自己' : '想再确认一件事'">
         <p class="safety__lead">
-          谢谢你愿意说出来。刚才聊到的一些情况，值得有人在身边陪着你一起看看。
-          如果现在心里的感觉很难受，请第一时间告诉身边可信任的成年人（家人、老师），
-          或者拨打下方的心理援助热线。
+          {{
+            stopped
+              ? '谢谢你愿意说出来。刚才聊到的情况，需要有人在身边陪着你一起看看。如果现在很难受，请第一时间告诉身边可信任的成年人（家人、老师）。'
+              : '谢谢你愿意说出来。我还想再确认一下你现在的状态，先别急着继续下面的内容。'
+          }}
         </p>
-        <ul v-if="risk?.risk_reasons?.length" class="safety__reasons">
-          <li v-for="(r, i) in risk.risk_reasons" :key="i">{{ r }}</li>
+        <ul v-if="safety?.messages?.length" class="safety__reasons">
+          <li v-for="(m, i) in safety.messages" :key="i">{{ m }}</li>
         </ul>
+        <p v-if="stopped && !hotlines.length" class="safety__lead">
+          请尽快联系身边可信任的成年人，或当地急救服务，确保自己此刻有人陪伴。
+        </p>
         <p class="xq-muted safety__note">
           这不是「确诊」，只是提醒我们可以多关注一下自己，也记得寻求身边人的支持。
         </p>
@@ -100,7 +110,15 @@ async function generate() {
 
       <div class="safety__actions">
         <PxButton size="lg" block :loading="running" @click="generate">生成我的报告</PxButton>
-        <PxButton v-if="hit" variant="hotline" block @click="callHotline">拨打 12356 心理援助热线</PxButton>
+        <PxButton
+          v-for="number in hotlines"
+          :key="number"
+          variant="hotline"
+          block
+          @click="callHotline(number)"
+        >
+          拨打 {{ number }} 心理援助热线
+        </PxButton>
       </div>
 
       <p class="xq-disclaimer">

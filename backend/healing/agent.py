@@ -25,15 +25,15 @@ from backend.healing.interaction import (
     uninformative_answer,
 )
 from backend.healing.retriever import get_healing_retriever
-from backend.healing.safety import guard_risk, referral_text
+from backend.healing.safety_bridge import most_severe_verdict, review_verdict, safety_text
 from backend.healing.suitability import filter_context, remember_context
-from backend.llm.prompts import QUESTIONS
-from backend.models.enums import RiskLevel
 from backend.models.healing import (
     AdultSupportState, Feedback, HealingContextUpdate, HealingMemory, HealingMessage, HealingState, KnowledgeHit,
     Scene, StrictModel, Suggestion, SupportReport,
 )
-from backend.models.states import RiskResult, _now
+from backend.models.states import _now
+from backend.safety.schemas import SafetyStage, SafetyVerdict
+from backend.safety.support import safety_blocks_normal_flow
 
 INITIAL_QUESTIONS = {
     "study_stress": "最近最让你感到压力的是哪件事？",
@@ -465,7 +465,8 @@ class HealingAgent:
                            "repair": "重写本轮 JSON。具体方法只选择候选 knowledge_id，自由文字仅共情与关注方向；问题只问一件事。"}
 
     @measure_model_calls
-    async def start(self, memory: HealingMemory, session_risk: RiskResult, crisis_mode=False) -> HealingState:
+    async def start(self, memory: HealingMemory, safety: SafetyVerdict, *,
+                    safety_halted: bool = False, safety_stage: SafetyStage = "none") -> HealingState:
         started = perf_counter()
         concern = memory.background.current_concern or ""
         context = concern or "\n".join(memory.current_session_messages[-8:])
@@ -473,15 +474,14 @@ class HealingAgent:
         scene = goal.scene
         report = SupportReport(understanding="", focus="")
         state = HealingState(healing_id=str(uuid4()), memory=memory, scene=scene, goal=goal, report=report,
-                             risk=memory.assessment.risk.model_copy(deep=True),
+                             risk=safety.model_copy(deep=True),
                              adult_support=AdultSupportState(available=memory.background.adult_support_available,
                                  source="caller" if memory.background.adult_support_available is not None else None))
         timings = {}
-        risk_started = perf_counter()
-        risk = guard_risk(memory, session_risk=session_risk, crisis_mode=crisis_mode)
-        timings["risk_ms"] = (perf_counter()-risk_started)*1000
-        if risk is not None:
-            self.refer(state, risk, initial=True)
+        # 安全暂停/中止必须阻断普通治愈：只看会话安全状态与本轮安全结论。
+        if safety_blocks_normal_flow(safety_halted=safety_halted,
+                                     safety_stage=safety_stage) or safety.halted:
+            self.enter_safety_mode(state, safety, initial=True, already_halted=safety_halted)
             return state
         if state.adult_support.source is None:
             for evidence in [*memory.current_session_messages, *memory.background.constraints, concern]:
@@ -519,9 +519,11 @@ class HealingAgent:
                 "output_schema": AgentDraft.model_json_schema(),
             }, memory_for_generation, hits, initial=True, timings=timings)
             if draft.safety_referral:
-                self.refer(state, RiskResult(risk_level=RiskLevel.MEDIUM, risk_score=.7,
-                                            requires_intervention=True,
-                                            risk_reasons=["支持阶段发现需由可信成人或专业人员跟进的安全信号"]), initial=True)
+                # 支持阶段模型显式标记了需要人工跟进的安全信号：按 fail-to-review
+                # 进入**澄清**（UNCERTAIN/SAFETY_REVIEW），Healing 不自行判定高危，
+                # 也不自行构造评估报告用的 RiskResult。
+                self.enter_safety_mode(state, review_verdict(
+                    "支持阶段发现需由可信成人或专业人员跟进的安全信号"), initial=True)
                 return state
             picked = set(draft.recommendation_ids)
             selected = self.defer_adult_hits(state, [hit for hit in hits if hit.item.knowledge_id in picked])
@@ -543,12 +545,19 @@ class HealingAgent:
                             "degraded_reason": state.report.degraded_reason})
         return state
 
-    def refer(self, state, risk, *, initial=False):
+    def enter_safety_mode(self, state, safety: SafetyVerdict, *, initial=False, already_halted=False):
+        """安全支持/澄清：停止普通治愈，只呈现新版 Safety 的文案。
+
+        这里是「安全暂停/中止阻断普通治愈」的落点。调用方必须先用
+        ``safety_blocks_normal_flow`` / ``SafetyVerdict.halted`` 判断；
+        本方法不做任何风险判定，也不构造评估报告使用的 ``RiskResult``。
+        文案来自 Safety 结论的 ``messages``，为空时用 support.py 的兜底文案。
+        """
         state.status = "referred"
         state.adult_support.waiting = False
-        state.risk = risk
-        # Same existing crisis help copy; no automated contact/notification claim.
-        text = referral_text(risk, QUESTIONS["crisis_support"])
+        state.risk = safety.model_copy(deep=True)
+        # 只展示 Safety 给出的面向用户文案；不声称已自动联系任何人。
+        text = safety_text(safety, already_halted=already_halted)
         for suggestion in state.suggestions:
             suggestion.active = False
         if initial:
@@ -556,12 +565,12 @@ class HealingAgent:
                                          cautions=[], question=None)
         else:
             state.messages.append(HealingMessage(role="assistant", content=text))
-        state.audit.append({"phase": "risk_referral", "at": _now().isoformat(),
-                            "risk": risk.model_dump(mode="json")})
+        state.audit.append({"phase": "safety_mode", "at": _now().isoformat(),
+                            "safety": safety.model_dump(mode="json")})
 
     @measure_model_calls
-    async def reply(self, previous: HealingState, text: str, session_risk: RiskResult,
-                    crisis_mode=False) -> HealingState:
+    async def reply(self, previous: HealingState, text: str, safety: SafetyVerdict, *,
+                    safety_halted: bool = False, safety_stage: SafetyStage = "none") -> HealingState:
         state = previous.model_copy(deep=True)
         for index, item in enumerate(state.suggestions, 1):
             if item.display_number is None:
@@ -569,12 +578,17 @@ class HealingAgent:
         started = perf_counter()
         state.turn_count += 1
         state.messages.append(HealingMessage(role="user", content=text))
-        risk_started = perf_counter()
-        risk = guard_risk(state.memory, text, session_risk, crisis_mode)
-        risk_ms = (perf_counter()-risk_started)*1000
-        if risk is not None or state.status == "referred":
-            self.refer(state, risk or state.risk)
+        # 安全暂停/中止必须阻断普通治愈：会话安全状态或本轮安全结论任一要求
+        # 停止时，都不得继续普通治愈。
+        blocked = safety_blocks_normal_flow(safety_halted=safety_halted,
+                                            safety_stage=safety_stage) or safety.halted
+        if blocked or state.status == "referred":
+            # 已经处于安全模式的会话保持在同一模式；同时保留更严重的既有结论文案。
+            governing = most_severe_verdict(safety, state.risk)
+            self.enter_safety_mode(state, governing,
+                                   already_halted=safety_halted or state.status == "referred")
             return state
+        state.risk = safety.model_copy(deep=True)
         remember_context(state, text)
         requested_goal = resolve_goal(text, previous=state.goal)
         declined_answer = previous.adult_support.waiting and re.sub(r"[\s，,。.!！?？]", "", text) in {
@@ -636,7 +650,7 @@ class HealingAgent:
         # Current suggestions are available separately for feedback; candidate
         # knowledge contains only genuinely new methods.
         known_methods = {item.method_key for item in state.suggestions}
-        timings = {"risk_ms": risk_ms}
+        timings = {}
         reference_suggestions = [item.model_dump(mode="json") for item in state.suggestions]
         memory = current_memory(state)
         hits, failure, retrieval_ms, removed, fit_ms = await self.retrieve_suitable(
@@ -666,8 +680,9 @@ class HealingAgent:
             "retrieval_failure": failure, "output_schema": AgentDraft.model_json_schema(),
         }, memory, hits, text=text, previous=previous, timings=timings, initial=new_report)
         if draft.safety_referral:
-            self.refer(state, RiskResult(risk_level=RiskLevel.MEDIUM, risk_score=.7, requires_intervention=True,
-                                        risk_reasons=["支持阶段出现需人工跟进的安全信号"]))
+            # 同 start：支持阶段模型标记的安全信号只进入澄清（fail-to-review）。
+            self.enter_safety_mode(state, review_verdict(
+                "支持阶段出现需人工跟进的安全信号"))
             return state
         accepted = self.apply_feedback(state, draft.feedback, text, previous.suggestions)
         self.record_preparation(state, prepared_ids, text)

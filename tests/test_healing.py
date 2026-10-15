@@ -20,6 +20,11 @@ from backend.healing.store import HealingStore
 from backend.main import app
 from backend.models.healing import Evidence, Feedback, HealingBackground, KnowledgeItem, student_view
 from backend.models.states import RiskResult
+from backend.healing.safety_bridge import session_safety_verdict
+from backend.safety.projection import project_to_risk_result
+from backend.safety.schemas import (
+    ModelStatus, SafetyLevel, SafetyRoute, SafetyVerdict, derive_risk_detected, derive_route,
+)
 
 client = TestClient(app)
 SOURCE = "适用于儿童青少年，其中本条面向初中学生，学生在成人指导下先说出困扰。"
@@ -97,17 +102,62 @@ def chat(sid, hid, text, message_id=None):
                       "message_id": message_id or str(uuid4()), "text": text})
 
 
-def update_screening_risk(sid, *, crisis=False, level="high", score=.9):
+def make_verdict(level="normal", *, message=None, model_status=ModelStatus.ok):
+    """构造一份新版 Safety 结论：测试直接注入，绝不调用任何模型。"""
+    level = SafetyLevel(level)
+    messages = [message] if message else ([] if level is SafetyLevel.NORMAL
+                                          else [f"安全分支回应：{level.value}"])
+    return SafetyVerdict(
+        risk_detected=derive_risk_detected(level), risk_level=level, route=derive_route(level),
+        messages=messages,
+        hotline_numbers=["12356"] if level in (SafetyLevel.HIGH, SafetyLevel.IMMINENT) else [],
+        model_status=model_status)
+
+
+def update_session_safety(sid, *, level="high", message=None, halted=None, stage=None):
+    """把会话安全状态改成本轮新版 Safety 结论（旧用例改的是 latest_risk/crisis_mode）。"""
     def update(session):
-        session.latest_risk = RiskResult(risk_level=level, risk_score=score,
-            requires_intervention=level == "high", risk_reasons=["合成风险更新"])
-        session.crisis_mode = crisis
+        verdict = make_verdict(level, message=message)
+        session.latest_safety = verdict
+        session.safety_halted = (verdict.route is SafetyRoute.SAFETY_STOP) if halted is None else halted
+        session.safety_stage = stage if stage is not None else (
+            "stopped" if verdict.route is SafetyRoute.SAFETY_STOP
+            else "review" if verdict.route is SafetyRoute.SAFETY_REVIEW else "none")
     assert session_manager.modify_session(sid, update) is not None
 
 
+def test_reconstructed_stop_is_not_reported_as_model_failure(support):
+    """从会话状态复原的停止结论不得被标成「安全判定服务不可用」。
+
+    停止锁当初由一次**成功**的 Safety 判定建立。若复原时标成 failure，
+    ``project_to_risk_result`` 会往报告的风险原因里写入
+    「安全判定服务状态：unavailable」，对复核该学生的人是误导。
+    """
+    sid, _, _, _ = support
+    start(sid)
+    # 只留停止锁、去掉结论本身，逼出「从会话状态复原」这条分支。
+    def strip(session):
+        session.latest_safety = None
+        session.safety_halted = True
+        session.safety_stage = "stopped"
+    assert session_manager.modify_session(sid, strip) is not None
+
+    state = healing.healing_store.slot(sid).state
+    assert state is not None
+    state.risk = session_safety_verdict(session_manager.get_session(sid))
+    assert state.risk.route is SafetyRoute.SAFETY_STOP
+    assert state.risk.risk_level is SafetyLevel.HIGH
+    assert state.risk.model_status is ModelStatus.ok
+
+    projected = project_to_risk_result(state.risk)
+    assert projected.risk_level.value == "high"
+    assert not any("unavailable" in reason for reason in projected.risk_reasons)
+    assert not any("服务状态" in reason for reason in projected.risk_reasons)
+
+
 @pytest.mark.parametrize("access", ["get", "restore", "start_retry", "chat_retry"])
-@pytest.mark.parametrize("signal", ["high", "crisis"])
-def test_existing_report_refreshes_screening_risk_without_duplicate_turns(support, access, signal):
+@pytest.mark.parametrize("level", ["high", "imminent"])
+def test_existing_report_refreshes_to_safety_stop_without_duplicate_turns(support, access, level):
     sid, result, store, fake = support
     request = {"session_id": sid, "request_id": "risk-enter",
                "background": {"school_stage": "middle", "current_concern": "考试压力"}}
@@ -116,12 +166,10 @@ def test_existing_report_refreshes_screening_risk_without_duplicate_turns(suppor
         assert chat(sid, first["healing_id"], "还没试", "risk-answer").status_code == 200
     before = healing.healing_store.slot(sid).state.model_copy(deep=True)
     calls = len(fake.calls)
-    update_screening_risk(sid, crisis=signal == "crisis",
-                          level="low" if signal == "crisis" else "high",
-                          score=0 if signal == "crisis" else .9)
+    update_session_safety(sid, level=level, message="请先确保此刻有人陪着你。")
     screening = session_manager.get_session(sid)
     records = store.list_by_student(screening.student_ref)
-    fake.fail = True  # Recovery and retries must not need a model for referral.
+    fake.fail = True  # Safety support and retries must not need a model.
     if access == "get":
         response = client.get(f"/api/healing/{sid}")
     elif access == "restore":
@@ -132,8 +180,8 @@ def test_existing_report_refreshes_screening_risk_without_duplicate_turns(suppor
         response = chat(sid, first["healing_id"], "还没试", "risk-answer")
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
-    assert data["risk"]["requires_intervention"]
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == level
+    assert data["risk"]["risk_detected"] and data["risk"]["route"] == "safety_stop"
     assert data["report"]["suggestions"] == [] and data["report"]["question"] is None
     assert data["healing_id"] == first["healing_id"]
     assert data["assessment_result_id"] == result["result_id"]
@@ -149,42 +197,45 @@ def test_existing_report_refreshes_screening_risk_without_duplicate_turns(suppor
 
 
 @pytest.mark.parametrize("previous_status", ["paused", "ended"])
-def test_paused_or_ended_report_still_observes_new_screening_risk(support, previous_status):
+def test_paused_or_ended_report_still_observes_new_safety_conclusion(support, previous_status):
     sid, _, _, fake = support
     first = start(sid).json()
     text = "先暂停" if previous_status == "paused" else "不想继续聊了"
     assert chat(sid, first["healing_id"], text).json()["status"] == previous_status
-    update_screening_risk(sid)
+    update_session_safety(sid, level="uncertain", message="我想再确认一下你现在的状况。")
     assert client.get(f"/api/healing/{sid}").json()["status"] == "referred"
-    update_screening_risk(sid, level="low", score=0)
+    # 澄清阶段结束也不会自动恢复普通治愈：已经发生的安全暂停保留。
+    update_session_safety(sid, level="normal", halted=False, stage="none")
     fake.fail = True
     data = start(sid).json()
-    assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == "uncertain"
     assert not data["report"]["suggestions"]
 
 
-def test_referral_escalates_to_new_high_risk_only_once(support):
+def test_safety_referral_escalates_to_stop_only_once(support):
     sid, _, _, fake = support
-    fake.referral = True
+    fake.referral = True  # 支持阶段模型标记安全信号：只进入澄清，不自行判定高危。
     first = start(sid).json()
-    assert first["status"] == "referred" and first["risk"]["risk_level"] == "medium"
-    update_screening_risk(sid)
+    assert first["status"] == "referred" and first["risk"]["risk_level"] == "uncertain"
+    assert first["risk"]["route"] == "safety_review" and first["risk"]["risk_detected"]
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
     data = client.get(f"/api/healing/{sid}").json()
-    assert data["risk"]["risk_level"] == "high"
+    assert data["risk"]["risk_level"] == "high" and data["risk"]["route"] == "safety_stop"
     assert data["report"]["understanding"] != first["report"]["understanding"]
     state = healing.healing_store.slot(sid).state.model_copy(deep=True)
     assert start(sid).json() == data
     assert healing.healing_store.slot(sid).state == state
 
 
-def test_screening_chat_risk_is_seen_by_existing_healing_report(support, policy_stub):
+def test_screening_chat_safety_stop_is_seen_by_existing_healing_report(support, safety_stub):
     sid, result, store, fake = support
     first = start(sid).json()
-    policy_stub()
-    response = client.post("/api/chat", json={"session_id": sid, "text": "我想自杀"})
+    safety_stub.force(SafetyLevel.HIGH, message="请先确保此刻有人陪着你。")
+    response = client.post("/api/chat", json={"session_id": sid, "text": "我不想活了"})
     assert response.status_code == 200, response.text
     screening = session_manager.get_session(sid)
-    assert screening.latest_risk.requires_intervention and screening.crisis_mode
+    assert screening.safety_halted and screening.safety_stage == "stopped"
+    assert screening.latest_safety.risk_level is SafetyLevel.HIGH
     records = store.list_by_student(screening.student_ref)
     calls = len(fake.calls)
     data = client.get(f"/api/healing/{sid}").json()
@@ -194,43 +245,36 @@ def test_screening_chat_risk_is_seen_by_existing_healing_report(support, policy_
     assert store.list_by_student(screening.student_ref) == records
 
 
-@pytest.mark.parametrize("access", ["get", "restore", "chat_retry"])
-def test_new_assessment_transcript_risk_is_seen_without_rebinding_report(support, access):
+def test_submitted_assessment_transcript_flags_report_and_session_safety(support, safety_stub):
+    """直接提交转写也必须留下**权威安全状态**，治愈侧不得出现安全空窗。
+
+    这条路径不经过 ``/api/chat``。旧实现只把安全结论单向投影成报告字段，
+    会话上没有任何安全状态，Healing 的守卫因此把高危会话当作普通会话继续。
+    现在评估侧会把最严重的那份 ``SafetyVerdict`` 回写会话（回写的是结论本身，
+    不是反向还原的 ``RiskResult``，单向投影约定不破），治愈必须立刻进入安全支持。
+    """
     sid, result, store, fake = support
     first = start(sid).json()
-    if access == "chat_retry":
-        assert chat(sid, first["healing_id"], "还没试", "assessment-risk-answer").status_code == 200
+    safety_stub.force(SafetyLevel.HIGH, message="请先确保此刻有人陪着你。")
     assessment_response = client.post("/api/assessment", json={"session_id": sid, "evaluation_input": {
-        "dialogue_history": [{"role": "user", "content": "我想自杀"}],
+        "dialogue_history": [{"role": "user", "content": "我不想活了"}],
     }})
     assert assessment_response.status_code == 200, assessment_response.text
     latest = assessment_response.json()["result"]
     assert latest["risk"]["requires_intervention"] and latest["result_id"] != result["result_id"]
-    # Assessment accepts transcripts without writing risk into latest_risk.
+    # 报告字段与会话安全状态同源：不能只有报告被标记、会话仍是普通状态。
     screening = session_manager.get_session(sid)
-    assert screening.latest_risk.risk_level == "low"
-    records = store.list_by_student(screening.student_ref)
-    calls = len(fake.calls)
-    fake.fail = True
-    if access == "get":
-        response = client.get(f"/api/healing/{sid}")
-    elif access == "restore":
-        response = start(sid)
-    else:
-        response = chat(sid, first["healing_id"], "还没试", "assessment-risk-answer")
-    assert response.status_code == 200, response.text
-    data = response.json()
+    assert screening.latest_safety is not None
+    assert screening.latest_safety.risk_level is SafetyLevel.HIGH
+    data = client.get(f"/api/healing/{sid}").json()
     assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
     assert data["assessment_result_id"] == result["result_id"] and data["healing_id"] == first["healing_id"]
     assert data["report"]["suggestions"] == [] and data["report"]["question"] is None
-    assert start(sid).json() == data and len(fake.calls) == calls
-    assert session_manager.get_session(sid) == screening
-    assert store.list_by_student(screening.student_ref) == records
 
 
 @pytest.mark.parametrize("operation", ["initial", "regenerate", "chat"])
 @pytest.mark.parametrize("fails", [False, True])
-def test_risk_update_during_generation_cannot_publish_active_methods(support, monkeypatch, operation, fails):
+def test_safety_update_during_generation_cannot_publish_active_methods(support, monkeypatch, operation, fails):
     sid, _, _, fake = support
     first = start(sid).json() if operation != "initial" else None
     previous = healing.healing_store.slot(sid).state
@@ -260,7 +304,7 @@ def test_risk_update_during_generation_cannot_publish_active_methods(support, mo
                     "expected_healing_id": first["healing_id"] if first else None,
                     "background": {"school_stage": "middle", "current_concern": "考试压力"}}))
             await asyncio.wait_for(generating.wait(), timeout=3)
-            update_screening_risk(sid)
+            update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
             screening = session_manager.get_session(sid)
             released.set()
             response = await asyncio.wait_for(pending, timeout=3)
@@ -290,8 +334,13 @@ def test_risk_update_during_generation_cannot_publish_active_methods(support, mo
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("text,refers", [("我没有想自杀", False), ("我没有想自杀，但我被同学威胁", True)])
-def test_current_screening_text_risk_keeps_negation_local(support, text, refers):
+@pytest.mark.parametrize("text", ["我没有想自杀", "我没有想自杀，但我被同学威胁"])
+def test_ordinary_transcript_text_cannot_change_the_bound_report(support, text):
+    """Healing 不再有自己的一套关键词/否定规则：普通文本不会改写已绑定的报告。
+
+    否定与威胁的判定现在完全属于新版 Safety（见 tests/test_safety_agent.py），
+    治愈只消费会话安全结论；导入普通文本不产生安全结论，也不改报告。
+    """
     sid, result, _, fake = support
     first = start(sid).json()
     assert client.post("/api/assessment", json={"session_id": sid, "evaluation_input": {
@@ -299,10 +348,8 @@ def test_current_screening_text_risk_keeps_negation_local(support, text, refers)
     }}).status_code == 200
     calls = len(fake.calls)
     data = client.get(f"/api/healing/{sid}").json()
-    assert (data["status"] == "referred") == refers
+    assert data == first
     assert data["assessment_result_id"] == result["result_id"] and len(fake.calls) == calls
-    if not refers:
-        assert data == first  # Updating ordinary text cannot change the bound report.
 
 
 def test_report_uses_record_and_hides_evidence_without_modifying_screening(support):
@@ -453,21 +500,23 @@ def test_unsubstantiated_feedback_and_methods_are_rejected(support):
     assert healing.healing_store.slot(sid).state == before
 
 
-def test_new_crisis_blocks_methods_and_retains_screening(support):
+def test_new_crisis_blocks_methods_and_retains_screening(support, safety_stub):
     sid, _, _, fake = support
     response = start(sid).json()
     before = session_manager.get_session(sid)
     calls = len(fake.calls)
-    data = chat(sid, response["healing_id"], "我想自杀").json()
-    assert data["status"] == "referred" and data["risk"]["requires_intervention"]
+    safety_stub.force(SafetyLevel.HIGH, message="请尽快联系身边可信任的成人，或拨打 110 / 120。")
+    data = chat(sid, response["healing_id"], "我不想活了").json()
+    assert data["status"] == "referred" and data["risk"]["risk_detected"]
+    assert data["risk"]["route"] == "safety_stop"
     assert "联系" in data["messages"][-1]["content"] and "？" not in data["messages"][-1]["content"]
     assert len(fake.calls) == calls and session_manager.get_session(sid) == before
     assert data["report"]["suggestions"] == [] and data["report"]["question"] is None
 
 
-def test_existing_crisis_and_model_safety_flag_route_without_interview(support):
+def test_existing_safety_stop_routes_without_interview(support):
     sid, _, _, fake = support
-    session_manager.modify_session(sid, lambda session: setattr(session, "crisis_mode", True))
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
     data = start(sid).json()
     assert data["status"] == "referred" and data["report"]["question"] is None
     assert data["report"]["suggestions"] == [] and not fake.calls
@@ -530,15 +579,17 @@ def test_ordinal_feedback_does_not_reject_another_method(support):
     assert second.active
 
 
-def test_bullying_uses_existing_help_flow_and_wanting_less_stress_is_not_a_stop(support):
+def test_bullying_safety_stop_uses_safety_message_and_normal_chat_continues(support, safety_stub):
     sid, _, _, fake = support
     hid = start(sid).json()["healing_id"]
     assert chat(sid, hid, "我不想继续这么紧张").json()["status"] == "active"
     assert chat(sid, hid, "没有被威胁，也没有霸凌").json()["status"] == "active"
     before = len(fake.calls)
+    safety_stub.force(SafetyLevel.HIGH, message="请联系身边可信任的成人帮你处理此刻的处境。")
     response = chat(sid, hid, "我被同学威胁，不交钱就殴打我").json()
     assert response["status"] == "referred" and len(fake.calls) == before
     assert response["report"]["suggestions"] == []
+    assert "联系" in response["messages"][-1]["content"]
 
 
 def test_pause_alone_does_not_invent_action_preparation(support):
@@ -587,7 +638,12 @@ def test_age_specific_expression_does_not_infer_source_ages(support, age, expect
 
 
 @pytest.mark.parametrize("change", ["missing_object", "missing_score", "missing_intervention", "defaults_on_save"])
-def test_incomplete_stored_risk_blocks_support_without_false_crisis(support, change):
+def test_incomplete_report_risk_is_never_a_safety_input(support, change):
+    """评估报告的 risk 字段只服务报告：缺失/不完整既不放行也不制造危机。
+
+    旧代码用 risk 字段的来源信息阻断普通支持；新版 Safety 之后治愈的安全门
+    只看会话安全结论，报告字段缺失不再决定是否暂停，也**不能**绕过安全门。
+    """
     import json
     sid, _, store, fake = support
     record = store.list_by_student(sid)[-1]
@@ -606,11 +662,15 @@ def test_incomplete_stored_risk_blocks_support_without_false_crisis(support, cha
         with store._connection() as connection:
             connection.execute("UPDATE assessment_records SET payload = ? WHERE record_id = ?",
                                (json.dumps(raw), record.record_id))
+    # 1) 没有会话安全结论时，报告字段不完整不会阻断普通治愈（安全门不看它）。
     data = start(sid).json()
-    assert data["status"] == "referred" and not fake.calls
+    assert data["status"] != "referred"
+    assert data["risk"]["risk_level"] == "normal" and not data["risk"]["risk_detected"]
+    # 2) 安全门仍然生效：会话安全结论要求停止时，报告字段再矛盾也不能放行。
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
+    data = client.get(f"/api/healing/{sid}").json()
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
     assert data["report"]["suggestions"] == [] and data["report"]["question"] is None
-    assert "不表示" in data["report"]["understanding"]
-    assert data["risk"]["risk_level"] == "medium"
 
 
 @pytest.mark.parametrize("updates", [
@@ -619,34 +679,54 @@ def test_incomplete_stored_risk_blocks_support_without_false_crisis(support, cha
     {"risk_level": "low", "risk_score": .1, "requires_intervention": True},
     {"risk_level": "low", "risk_score": .1, "requires_intervention": False, "key_evidence": ["我想自杀"]},
 ])
-def test_conflicting_risk_values_never_admit_ordinary_methods(support, updates):
-    from backend.healing.safety import guard_risk
+def test_conflicting_report_risk_values_never_admit_ordinary_methods(support, updates):
+    """报告字段互相矛盾时既不能自行制造危机，也不能绕过安全门。
+
+    旧代码用 RiskResult 的一致性规则决定是否暂停；现在是否暂停只由新版
+    Safety 结论决定，报告字段被改写不会改变安全结论，也不会松开安全门。
+    """
     sid, _, _, _ = support
     start(sid)
     state = healing.healing_store.slot(sid).state
     memory = state.memory.model_copy(deep=True)
     memory.assessment.risk = RiskResult(**updates)
-    risk = guard_risk(memory)
-    assert risk is not None and risk.requires_intervention
+    state.memory = memory
+    assert state.risk.risk_level is SafetyLevel.NORMAL
+    update_session_safety(sid, level="high", message="请先确保此刻有人陪着你。")
+    data = client.get(f"/api/healing/{sid}").json()
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
+    assert data["report"]["suggestions"] == [] and data["report"]["question"] is None
 
 
-@pytest.mark.parametrize("text,refers", [
-    ("我计划今晚跳楼", True), ("我今晚不打算跳楼", False),
-    ("我不打算今晚跳楼", False), ("我没有计划明天吞药", False),
-    ("我今晚不打算跳楼，但明天准备吞药", True),
-    ("我已经完全无法上学", True), ("我没有完全无法上学，今天只是迟到", False),
-    ("连续三天没睡", True), ("我越来越难受", True), ("我不是越来越难受", False),
-    ("朋友和我因为座位吵架了", False),
-])
-def test_plan_function_and_worsening_routes_with_negative_controls(support, text, refers):
+@pytest.mark.parametrize("level", ["high", "imminent"])
+def test_safety_stop_blocks_methods_and_never_claims_contact(support, safety_stub, level):
+    """高危/即时危险必须走安全支持：不继续方法推荐，也不声称已自动联系他人。"""
     sid, _, _, fake = support
     hid = start(sid).json()["healing_id"]
     before = len(fake.calls)
-    data = chat(sid, hid, text).json()
-    assert (data["status"] == "referred") == refers
-    if refers:
-        assert len(fake.calls) == before and data["report"]["suggestions"] == []
-        assert "已经联系" not in data["messages"][-1]["content"]
+    safety_stub.force(SafetyLevel(level), message="请尽快联系身边可信任的成人，确保此刻有人陪伴。")
+    data = chat(sid, hid, "我计划今晚做危险的事").json()
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == level
+    assert data["risk"]["route"] == "safety_stop" and data["risk"]["hotline_numbers"] == ["12356"]
+    assert len(fake.calls) == before and data["report"]["suggestions"] == []
+    assert "已经联系" not in data["messages"][-1]["content"]
+
+
+def test_healing_has_no_keyword_risk_rules_of_its_own(support, safety_stub):
+    """Healing 不再有任何正则/关键词风险规则：风险结论完全来自新版 Safety。
+
+    同一个句子（旧的关键词规则会因“完全无法上学”升级为风险并暂停方法）
+    在新版 Safety 判 NORMAL 时普通治愈继续；判 HIGH 时立即停止。
+    """
+    sid, _, _, fake = support
+    hid = start(sid).json()["healing_id"]
+    severity_text = "我已经完全无法上学"
+    assert chat(sid, hid, severity_text).json()["status"] == "active"
+    assert len(fake.calls) == 2
+    safety_stub.force(SafetyLevel.HIGH, message="请先确保此刻有人陪着你。")
+    data = chat(sid, hid, severity_text + "，现在还是这样").json()
+    assert data["status"] == "referred" and data["risk"]["risk_level"] == "high"
+    assert data["report"]["suggestions"] == []
 
 
 def test_explicit_constraints_and_previous_failures_filter_before_generation(support):
@@ -891,23 +971,24 @@ def test_initial_history_is_never_converted_to_current_feedback(support):
     assert all(item.execution == "unconfirmed" for item in state.suggestions)
 
 
-@pytest.mark.parametrize("text,refers", [
-    ("我并不担心考试但现在已经完全无法上学", True),
-    ("我并没有和同学吵架可是连续三天没睡", True),
-    ("我没有出现考试焦虑但是越来越难受", True),
-    ("我现在并没有完全无法上学", False),
-    ("我不是一直无法上学", False),
-    ("我并没有连续三天没睡", False),
-    ("我没有感到越来越难受", False),
-    ("我没有完全无法上学但现在完全无法吃饭", True),
-])
-def test_severe_risk_negation_only_applies_to_its_own_statement(support, text, refers):
+def test_entry_text_is_submitted_to_new_safety_without_local_rules(support, safety_stub):
+    """旧的关键词/否定规则已删除：进入治愈的文本只由新版 Safety 判定。
+
+    同一句话（旧规则会因“完全无法上学”自行升级为风险）在 Safety 判 NORMAL 时
+    正常生成报告；会话安全结论要求澄清时立即暂停普通治愈。
+    """
     sid, _, _, fake = support
+    text = "我并不担心考试但现在已经完全无法上学"
     data = start(sid, background={"current_concern": text}).json()
-    assert (data["status"] == "referred") == refers
-    assert data["report"]["suggestions"] == [] and not fake.calls
-    if refers:
-        assert data["report"]["question"] is None
+    assert data["status"] != "referred" and data["risk"]["risk_level"] == "normal"
+    assert safety_stub.calls[-1][0] == text  # 文本确实交给了新版 Safety。
+    # NORMAL 时普通治愈继续：照常生成报告并只问一个问题。
+    assert data["report"]["question"] and data["report"]["question"].count("？") == 1
+    update_session_safety(sid, level="uncertain", message="我想再确认一下你现在的状况。")
+    refreshed = client.get(f"/api/healing/{sid}").json()
+    assert refreshed["status"] == "referred" and refreshed["risk"]["risk_level"] == "uncertain"
+    assert refreshed["risk"]["route"] == "safety_review"
+    assert refreshed["report"]["suggestions"] == [] and refreshed["report"]["question"] is None
 
 
 def test_new_constraint_survives_later_turns_and_explicit_correction(support):
@@ -1082,30 +1163,21 @@ def test_persisted_ordinal_constraint_keeps_original_method_reference(support):
         assert sum(item.active for item in state.suggestions) == 2
 
 
-@pytest.mark.parametrize("text,refers", [
-    ("我不开心想自杀", True),
-    ("我没有朋友想自杀", True),
-    ("我没有希望想自杀", True),
-    ("我不是不想自杀", True),
-    ("我不想自杀", False),
-    ("我并没有想要伤害自己", False),
-    ("I don't want to kill myself", False),
-    ("I am not happy and want to kill myself", True),
-    ("我今晚准备跳楼", True),
-    ("我今晚没有准备跳楼", False),
-    ("我没有准备今晚跳楼", False),
-    ("我今晚并未打算跳楼", False),
-    ("我今晚不打算从楼上跳下去", False),
-    ("我今晚没有准备跳楼但明天打算吞药", True),
-    ("我今晚没有准备但现在想跳楼", True),
-])
-def test_review_risk_negation_unknown_age_never_needs_model(support, text, refers):
+@pytest.mark.parametrize("level", ["high", "imminent"])
+def test_entry_text_safety_stop_never_needs_model(support, safety_stub, level):
+    """进入治愈时的文本安全结论由新版 Safety 给出：要求停止时不调用支持模型。
+
+    旧的关键词/否定规则（含中英混写、否定与计划表述）已整体删除，
+    判定与否定处理都在新版 Safety 内完成，见 tests/test_safety_agent.py。
+    """
     sid, _, _, fake = support
-    data = start(sid, background={"current_concern": text}).json()
-    assert (data["status"] == "referred") == refers
-    assert not data["report"]["suggestions"] and not fake.calls
-    if refers:
-        assert data["risk"]["requires_intervention"] and data["report"]["question"] is None
+    safety_stub.force(SafetyLevel(level), message="请先确保此刻有人陪着你。")
+    data = start(sid, background={"current_concern": "我今晚准备做危险的事"}).json()
+    assert data["status"] == "referred"
+    assert data["risk"]["risk_level"] == level and data["risk"]["risk_detected"]
+    assert data["risk"]["route"] == "safety_stop"
+    assert data["report"]["question"] is None and data["report"]["suggestions"] == []
+    assert not fake.calls
 
 
 @pytest.mark.parametrize("text,evidence,effect,accepted", [

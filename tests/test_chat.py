@@ -8,6 +8,8 @@ from PIL import Image
 
 from backend.main import app
 from backend.models.states import VisionState
+from backend.safety.schemas import SafetyLevel
+from backend.safety.support import SUPPORT_MODE_CONTINUATION_MESSAGE
 from backend.vision.detector import MockVisionDetector, VisionDetector, set_detector
 
 client = TestClient(app)
@@ -32,7 +34,11 @@ def test_chat_without_multimodal_or_api_key() -> None:
     body = first.json()
     assert body["reply"]
     assert body["next_strategy"] == "情绪"
-    assert body["risk"]["risk_level"] == "low"
+    # 安全结论来自新版 Safety，且普通对话必须给出 continue 路由
+    assert body["safety"]["risk_level"] == "normal"
+    assert body["safety"]["route"] == "continue"
+    assert body["safety"]["risk_detected"] is False
+    assert body["messages"] == [body["reply"]]
     assert body["turn_count"] == 1
 
     second = client.post("/api/chat", json={
@@ -124,7 +130,31 @@ def test_chat_uses_aligned_vision_for_current_turn() -> None:
         },
     })
     assert response.status_code == 200, response.json()
-    assert response.json()["risk"]["risk_level"] == "medium"
+    # 本句视觉快照必须绑定到本轮用户消息（对齐，不串句）
+    message = client.get(f"/api/session/{session_id}").json()["conversation_history"][1]
+    assert message["vision_snapshot"]["valence"] == -0.7
+    assert message["vision_snapshot"]["engagement"] == 0.1
+
+
+def test_safety_level_ignores_vision_and_depends_on_text(safety_stub) -> None:
+    """新版 Safety 只做文本语义判定，视觉信号不再参与风险分级。
+
+    旧实现用 ``assess_risk(fuse_turn(text, vision))``，负面效价会把等级
+    抬到 medium。新版由 LLM 结合文本与对话历史判定，视觉不再进入风险结论。
+    这里锁定该行为，避免日后误以为视觉仍在参与分级。
+    """
+    session_id = new_session()
+    body = client.post("/api/chat", json={
+        "session_id": session_id,
+        "text": "我最近睡不好",
+        "vision_snapshot": {
+            "face_detected": True, "valence": -0.9, "engagement": 0.05,
+        },
+    }).json()
+    assert body["safety"]["risk_level"] == "normal"
+    assert body["safety"]["route"] == "continue"
+    # Safety 只收到文本，且收到的是本轮文本
+    assert safety_stub.calls[-1][0] == "我最近睡不好"
 
 
 def test_vision_merge_does_not_reset_other_fields() -> None:
@@ -245,31 +275,108 @@ def test_unknown_session_and_invalid_text() -> None:
     assert invalid.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_high_risk_message_enters_crisis_mode() -> None:
+def test_high_risk_message_enters_safety_stop_and_never_auto_resumes(
+        safety_stub, dialogue_stub) -> None:
+    """HIGH 进入安全支持模式；后续正常表达**不得**自动恢复普通评估。"""
+    safety_stub.force(SafetyLevel.HIGH, message="我很担心你，请先联系身边可信任的人。")
     session_id = new_session()
-    response = client.post("/api/chat", json={
+    body = client.post("/api/chat", json={
         "session_id": session_id, "text": "我想自杀"
-    })
-    assert response.status_code == 200
-    body = response.json()
-    assert body["risk"]["requires_intervention"] is True
-    assert body["current_stage"] == "crisis"
-    assert "急救" in body["reply"]
+    }).json()
 
-    # 危机模式后继续发消息，仍然只走危机支持话术
+    assert body["safety"]["risk_level"] == "high"
+    assert body["safety"]["route"] == "safety_stop"
+    assert body["safety"]["risk_detected"] is True
+    # 号码只来自后端已核实配置，且仅在 STOP 时下发
+    assert body["safety"]["hotline_numbers"] == ["12356"]
+    assert body["current_stage"] == "safety_stop"
+    assert body["reply"] == "我很担心你，请先联系身边可信任的人。"
+    assert body["messages"] == ["我很担心你，请先联系身边可信任的人。"]
+    assert body["next_strategy"] == "safety_support"
+    assert body["assessment_ready"] is False
+    assert body["visual_feedback"]["reason"] == "safety_stop"
+    assert body["turn_count"] == 1
+
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["safety_halted"] is True
+    assert session["safety_stage"] == "stopped"
+    assert session["latest_safety"]["route"] == "safety_stop"
+    # 安全分支也要落库，保持 user/assistant 成对（外加 1 条开场消息）
+    assert len(session["conversation_history"]) == 3
+    assert session["conversation_history"][1]["role"] == "user"
+    assert session["conversation_history"][2]["content"] == body["reply"]
+
+    # 关键：下一轮 Safety 判为 NORMAL，也不得自动恢复普通评估
+    safety_stub.force(SafetyLevel.NORMAL)
+    dialogue_calls = len(dialogue_stub.requests)
     follow = client.post("/api/chat", json={
-        "session_id": session_id, "text": "我真的很难受"
-    })
-    assert follow.json()["current_stage"] == "crisis"
-    assert "急救" in follow.json()["reply"]
+        "session_id": session_id, "text": "我今天心情还不错"
+    }).json()
+    # safety 反映的是**本轮判定**，current_stage 反映的是**会话锁定状态**
+    assert follow["safety"]["risk_level"] == "normal"
+    assert follow["safety"]["route"] == "continue"
+    assert follow["current_stage"] == "safety_stop"
+    assert follow["next_strategy"] == "safety_support"
+    assert follow["assessment_ready"] is False
+    # 支持模式持续对话：该轮 Safety 未给出文案，必须回落到支持模式续接文案，
+    # 而不是空气泡、也不是普通问诊话术。
+    assert follow["reply"] == SUPPORT_MODE_CONTINUATION_MESSAGE
+    assert follow["messages"] == [SUPPORT_MODE_CONTINUATION_MESSAGE]
+    # 并且完全没有进入普通对话链路
+    assert len(dialogue_stub.requests) == dialogue_calls
+    assert follow["turn_count"] == 2
+
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["safety_halted"] is True
+    assert session["current_stage"] == "safety_stop"
 
 
-def test_negation_does_not_trigger_high_risk() -> None:
+def test_uncertain_message_enters_review_and_can_resume_on_normal(safety_stub) -> None:
+    """UNCERTAIN 进入安全澄清模式：暂停普通评估，下一轮 NORMAL 可恢复。"""
+    safety_stub.force(SafetyLevel.UNCERTAIN, message="我想先确认一下你现在是否安全。")
     session_id = new_session()
-    response = client.post("/api/chat", json={
+    body = client.post("/api/chat", json={
+        "session_id": session_id, "text": "有时候觉得活着真没意思"
+    }).json()
+    assert body["safety"]["risk_level"] == "uncertain"
+    assert body["safety"]["route"] == "safety_review"
+    assert body["current_stage"] == "safety_review"
+    assert body["next_strategy"] == "safety_review"
+    assert body["visual_feedback"]["reason"] == "safety_review"
+    # 澄清不等于停止：不下发号码，也不置停止锁
+    assert body["safety"]["hotline_numbers"] == []
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["safety_halted"] is False
+    assert session["safety_stage"] == "review"
+
+    # 澄清后恢复正常表达，可以回到普通评估
+    safety_stub.force(SafetyLevel.NORMAL)
+    follow = client.post("/api/chat", json={
+        "session_id": session_id, "text": "我最近就是睡不好"
+    }).json()
+    assert follow["current_stage"] == "exploration"
+    assert follow["next_strategy"] == "情绪"
+    session = client.get(f"/api/session/{session_id}").json()
+    assert session["safety_halted"] is False
+    assert session["safety_stage"] == "none"
+
+
+def test_normal_verdict_does_not_enter_safety_branch(safety_stub) -> None:
+    """结论为 NORMAL 时不进入安全分支。
+
+    「否定的自杀表述不得判为高风险」这条保护现在由 Safety Agent 的
+    语义判定承担（提示词明确要求处理否定与转述），相应断言在
+    ``tests/test_safety_agent.py`` 中锁定；这里只锁定路由契约。
+    """
+    session_id = new_session()
+    body = client.post("/api/chat", json={
         "session_id": session_id, "text": "我不想自杀，我只是有点难过"
-    })
-    assert response.json()["risk"]["risk_level"] != "high"
+    }).json()
+    assert body["safety"]["route"] == "continue"
+    assert body["current_stage"] == "exploration"
+    assert body["assessment_ready"] is False
+    # Safety 收到的是本轮原文，未被截断或改写
+    assert safety_stub.calls[-1][0] == "我不想自杀，我只是有点难过"
 
 
 def test_short_chat_does_not_auto_assess_and_manual_assessment_is_explicit(

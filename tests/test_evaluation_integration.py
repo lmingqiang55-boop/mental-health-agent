@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 
 from evaluation_agent.llm_client import LLMConfigurationError
 
+from backend.core.session_manager import session_manager
 from backend.main import app
+from backend.safety.schemas import SafetyLevel
 
 client = TestClient(app)
 
@@ -125,7 +127,13 @@ def test_default_service_connects_configured_evaluation_agent_without_network(
     assert evaluation_stub.inputs[0].dialogue_history[0].content == "最近睡不好"
 
 
-def test_direct_input_preserves_independent_crisis_signal(evaluation_stub) -> None:
+def test_direct_input_preserves_independent_crisis_signal(evaluation_stub, safety_stub) -> None:
+    """直接提交的转写文本也必须经过安全判定，不得绕过。
+
+    判定器已换成新版 Safety Agent；这里强制 HIGH 结论，验证下游
+    （评估报告的风险字段与安全提示）仍然完整保留。
+    """
+    safety_stub.force(SafetyLevel.HIGH, message="我很担心你，请先联系身边可信任的人。")
     session_id = new_session()
     response = client.post("/api/assessment", json={
         "session_id": session_id,
@@ -134,10 +142,118 @@ def test_direct_input_preserves_independent_crisis_signal(evaluation_stub) -> No
         },
     })
     assert response.status_code == 200
+    # 直接提交的文本被送去做了安全判定
+    assert any(call[0] == "我想自杀" for call in safety_stub.calls)
     assert response.json()["result"]["risk"]["risk_level"] == "high"
+    assert response.json()["result"]["risk"]["requires_intervention"] is True
     assert response.json()["result"]["report"]["key_findings"][0]["title"] == "安全提示"
     assert "安全风险" in response.json()["result"]["report"]["overall_status"]["summary"]
     assert "可信任的成年人" in response.json()["result"]["report"]["trend_and_suggestions"]["suggestions"][0]
+
+
+def test_direct_input_writes_the_security_conclusion_back_to_the_session(
+        evaluation_stub, safety_stub) -> None:
+    """直接提交转写也必须把安全结论回写到会话，不能只标记报告字段。
+
+    回归保护：这条路径不经过 ``/api/chat``。旧实现只把结论单向投影进报告的
+    ``risk`` 字段，会话上没有任何安全状态，于是 Healing 等只看会话安全状态的
+    入口会把高危会话当成普通会话继续 —— 安全检测空窗。
+    """
+    safety_stub.force(SafetyLevel.HIGH, message="我很担心你，请先联系身边可信任的人。")
+    session_id = new_session()
+    assert client.post("/api/assessment", json={
+        "session_id": session_id,
+        "evaluation_input": {"dialogue_history": [{"role": "user", "content": "我想自杀"}]},
+    }).status_code == 200
+
+    session = session_manager.get_session(session_id)
+    # 回写的是 SafetyVerdict 本身，不是从 RiskResult 反推出来的等级。
+    assert session.latest_safety is not None
+    assert session.latest_safety.risk_level is SafetyLevel.HIGH
+    assert session.latest_safety.route.value == "safety_stop"
+
+
+def test_normal_direct_input_records_a_normal_conclusion(evaluation_stub, safety_stub) -> None:
+    """普通转写也要留下结论：会话有权威结论，而不是「查不到结论」。"""
+    session_id = new_session()
+    assert client.post("/api/assessment", json={
+        "session_id": session_id,
+        "evaluation_input": {"dialogue_history": [{"role": "user", "content": "最近睡不好"}]},
+    }).status_code == 200
+
+    session = session_manager.get_session(session_id)
+    assert session.latest_safety is not None
+    assert session.latest_safety.risk_level is SafetyLevel.NORMAL
+    # 普通结论不触发停止锁
+    assert session.safety_halted is False
+
+
+def test_assessment_never_downgrades_an_existing_safety_conclusion(
+        evaluation_stub, policy_stub, safety_stub) -> None:
+    """安全状态只允许变严：后续一次普通评估不得冲淡已建立的停止结论。"""
+    policy_stub()
+    safety_stub.force(SafetyLevel.HIGH, message="请先确保此刻有人陪着你。")
+    session_id = new_session()
+    assert client.post("/api/chat", json={
+        "session_id": session_id, "text": "我不想活了"}).status_code == 200
+    assert session_manager.get_session(session_id).latest_safety.risk_level is SafetyLevel.HIGH
+
+    safety_stub.force(SafetyLevel.NORMAL, message="")
+    assert client.post("/api/assessment", json={
+        "session_id": session_id,
+        "evaluation_input": {"dialogue_history": [{"role": "user", "content": "今天挺好的"}]},
+    }).status_code == 200
+
+    session = session_manager.get_session(session_id)
+    assert session.latest_safety.risk_level is SafetyLevel.HIGH
+    assert session.safety_halted is True
+
+
+def test_assessment_does_not_wipe_stored_safety_verdicts(evaluation_stub, policy_stub) -> None:
+    """提交完整转写做评估，不得抹掉会话里已存储的逐条安全结论。
+
+    回归保护：``_prepare_history`` 重建消息时曾只恢复视觉/录音元数据而漏掉
+    ``safety``，而该函数的结果会覆盖会话历史，于是「提交一次评估输入」就能把
+    整个会话的安全记录清空——即安全检测空窗。
+    """
+    policy_stub()
+    session_id = new_session()
+    assert client.post("/api/chat", json={
+        "session_id": session_id, "text": "最近睡不好"}).status_code == 200
+    history = client.get(f"/api/session/{session_id}").json()["conversation_history"]
+    assert any(message["safety"] for message in history), "聊天轮次必须留下安全结论"
+
+    response = client.post("/api/assessment", json={
+        "session_id": session_id,
+        "evaluation_input": {"dialogue_history": [
+            {"role": message["role"], "content": message["content"]}
+            for message in history]},
+    })
+    assert response.status_code == 200, response.json()
+    after = client.get(f"/api/session/{session_id}").json()["conversation_history"]
+    assert [message["safety"] for message in after] == [
+        message["safety"] for message in history]
+
+
+def test_client_cannot_inject_a_safety_verdict(evaluation_stub, policy_stub) -> None:
+    """安全结论由后端计算，客户端提交的值必须被忽略。"""
+    policy_stub()
+    session_id = new_session()
+    assert client.post("/api/chat", json={
+        "session_id": session_id, "text": "最近睡不好"}).status_code == 200
+    history = client.get(f"/api/session/{session_id}").json()["conversation_history"]
+    trusted = [message["safety"] for message in history]
+
+    forged = [{"role": message["role"], "content": message["content"],
+               "safety": {"risk_detected": False, "risk_level": "normal",
+                          "route": "continue", "model_status": "ok"}}
+              for message in history]
+    response = client.post("/api/assessment", json={
+        "session_id": session_id, "evaluation_input": {"dialogue_history": forged},
+    })
+    assert response.status_code == 200, response.json()
+    after = client.get(f"/api/session/{session_id}").json()["conversation_history"]
+    assert [message["safety"] for message in after] == trusted
 
 
 def test_assessment_result_can_be_read_by_its_public_id(evaluation_stub) -> None:

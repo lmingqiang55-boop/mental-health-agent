@@ -11,13 +11,13 @@ from backend.models.profile import EmergencyContact, StudentProfile
 from backend.models.states import (
     AudioState,
     ConsentRecord,
-    RiskResult,
     ScreeningProgress,
     SessionState,
     SpeechMetadata,
     VisionSegment,
     VisionState,
 )
+from backend.safety.schemas import SafetyVerdict
 
 
 class CreateSessionResponse(BaseModel):
@@ -34,11 +34,15 @@ class VisualFeedback(BaseModel):
 
 
 class DialogueResponsePayload(BaseModel):
-    """对话 Agent 给系统负责人的标准输出。"""
+    """对话 Agent 给系统负责人的标准输出。
+
+    **不含风险字段**：对话安全由 ``backend/safety`` 的 Safety Agent 单独产出，
+    见 :class:`ChatResponse` 的 ``safety`` 字段。评估报告的风险字段由
+    ``backend/safety/projection.py`` 从安全结论单向投影，与本响应无关。
+    """
     reply: str
     next_strategy: str
     current_stage: str
-    risk: RiskResult
     assessment_ready: bool = False
     completion_reason: str | None = None
     screening_progress: ScreeningProgress = Field(default_factory=ScreeningProgress)
@@ -48,6 +52,10 @@ class DialogueResponsePayload(BaseModel):
 class ChatResponse(DialogueResponsePayload):
     session_id: str
     turn_count: int
+    #: 本轮的安全结论（系统唯一安全状态来源），每轮都有。
+    safety: SafetyVerdict | None = None
+    #: 面向用户的消息（安全分支 1~3 条；普通对话为 1 条且等于 reply）。
+    messages: list[str] = Field(default_factory=list)
 
 
 class TranscriptionResponse(BaseModel):

@@ -1,8 +1,18 @@
 """对话 API（C 编排，A 决策）。
 
-路由层只做编排：
-1. 原子地完成「加用户消息 → DialogueManager 决策 → 加助手消息」。
-2. 决策模型或对话 Agent 不可用时返回 503，本轮不落库。
+路由层只做编排。
+
+【执行顺序】每个用户消息：
+1. 幂等与冻结校验（沿用原有逻辑，未改动）；
+2. 落一条 USER 消息；
+3. **新版 Safety 判定（系统唯一安全来源，每轮恰好一次）**；
+4. 安全分支（UNCERTAIN / HIGH / IMMINENT，或会话已处于支持模式）：
+   不进入普通对话，不调用 Decision / Dialogue / 视觉通道，直接给出澄清或支持消息；
+5. 普通分支：DialogueManager 决策并生成回复；
+6. 落一条 ASSISTANT 消息、``turn_count`` +1、写幂等回执（**各仅一次**）。
+
+决策模型或对话 Agent 不可用时返回 503，本轮不落库。
+安全判定失败时**不放行**，按 Safety 的 fail-to-REVIEW 口径进入安全澄清。
 
 会话控制器根据话题交流和轮数上限发送收尾信号。收尾不自动生成报告，
 前端显示按钮，用户点击后通过 ``POST /api/assessment`` 生成结果。
@@ -16,14 +26,36 @@ from fastapi import APIRouter, HTTPException
 from backend.api.errors import session_not_found
 from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable, ScreeningFinished
 from backend.core.session_manager import session_manager
-from backend.models.enums import MessageRole
+from backend.models.enums import MessageRole, SessionStage
 from backend.models.requests import ChatRequest
-from backend.models.responses import ChatResponse
+from backend.models.responses import ChatResponse, VisualFeedback
 from backend.models.states import ChatReceipt, Message, SessionState
 from backend.policy.client import PolicyClientError
+from backend.safety import agent as safety_agent_module
+from backend.safety.schemas import SafetyRoute
+from backend.safety.support import (
+    safety_next_strategy,
+    safety_reply_messages,
+    safety_session_stage,
+    safety_stage_value,
+)
 
 router = APIRouter(prefix="/api", tags=["chat"])
 dialogue_manager = DialogueManager()
+
+
+class _SafetyRunner:
+    """安全判定的唯一调用点。
+
+    测试通过替换本实例的 ``evaluate`` 注入离线结论，
+    与 ``dialogue_manager._dialogue_agent`` 的注入方式保持一致。
+    """
+
+    def evaluate(self, text: str, history: list[tuple[str, str]]):
+        return safety_agent_module.evaluate_safety(text, history)
+
+
+safety_runner = _SafetyRunner()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -68,17 +100,69 @@ def chat(request: ChatRequest) -> ChatResponse:
             vision_snapshot=request.vision_snapshot,
             utterance_id=request.utterance_id, speech=request.speech,
         ))
-        kwargs = {"vision_snapshot": request.vision_snapshot,
-                  "utterance_id": request.utterance_id}
-        if request.speech is not None or "vision_snapshot" in request.model_fields_set:
-            kwargs["use_latest_states"] = False
-        payload = dialogue_manager.process_turn(text, session, **kwargs)
+
+        # ── 第一道闸门：新版 Safety（每轮恰好一次）─────────────────────
+        history = [(message.role.value, message.content)
+                   for message in session.conversation_history[:-1]]
+        safety = safety_runner.evaluate(text, history)
+        session.conversation_history[-1].safety = safety
+        session.latest_safety = safety
+
+        # 安全状态推进**每轮无条件执行**，包括「恢复正常」的那一轮；
+        # 只在安全分支内更新会让 safety_stage 永远停在 review，
+        # 从而让 Healing 等入口的守卫永久误判为安全暂停中。
+        already_halted = session.safety_halted
+        session.safety_stage = safety_stage_value(safety, session.safety_stage)
+        if safety.route is SafetyRoute.SAFETY_STOP:
+            session.safety_halted = True
+
+        # 已在支持模式时，后续任何一条正常表达都不得自动恢复普通评估。
+        in_safety_branch = session.safety_halted or safety.route is not SafetyRoute.CONTINUE
+
+        if in_safety_branch:
+            stage = safety_session_stage(session.safety_stage)
+            if stage is not None:
+                session.current_stage = stage
+            messages = safety_reply_messages(safety, already_halted=already_halted)
+            reply = messages[0]
+            next_strategy = safety_next_strategy(safety, already_halted=already_halted)
+            assessment_ready = False
+            completion_reason = None
+            visual_feedback = VisualFeedback(
+                reason="safety_stop" if session.safety_stage == "stopped" else "safety_review")
+        else:
+            # 澄清结束且未落入停止锁：结束安全模式，回到普通评估。
+            # 不还原会话阶段会让学生永久卡在安全澄清页。
+            if session.current_stage is SessionStage.SAFETY_REVIEW:
+                session.current_stage = SessionStage.EXPLORATION
+            kwargs = {"vision_snapshot": request.vision_snapshot,
+                      "utterance_id": request.utterance_id}
+            if request.speech is not None or "vision_snapshot" in request.model_fields_set:
+                kwargs["use_latest_states"] = False
+            payload = dialogue_manager.process_turn(text, session, **kwargs)
+            messages = [payload.reply]
+            reply = payload.reply
+            next_strategy = payload.next_strategy
+            assessment_ready = payload.assessment_ready
+            completion_reason = payload.completion_reason
+            visual_feedback = payload.visual_feedback
+
+        # ── 落库与计数：各只做一次 ────────────────────────────────────
         session.conversation_history.append(Message(
-            role=MessageRole.ASSISTANT, content=payload.reply))
+            role=MessageRole.ASSISTANT, content=reply))
         session.turn_count += 1
         response = ChatResponse(
-            session_id=request.session_id, turn_count=session.turn_count,
-            **payload.model_dump(),
+            session_id=request.session_id,
+            turn_count=session.turn_count,
+            reply=reply,
+            next_strategy=next_strategy,
+            current_stage=session.current_stage.value,
+            assessment_ready=assessment_ready,
+            completion_reason=completion_reason,
+            screening_progress=session.screening_progress,
+            visual_feedback=visual_feedback,
+            safety=safety,
+            messages=messages,
         )
         response_holder["value"] = response
         if request.utterance_id is not None:
