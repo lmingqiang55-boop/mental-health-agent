@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 
+from backend.core.agent_trace import summarize_scheduling
 from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable
 from backend.graph.state import GRAPH_RECURSION_LIMIT, TurnState
 from backend.models.responses import DialogueResponsePayload
@@ -135,4 +136,14 @@ class DialogueTurnRunner:
         payload = final.get("payload")
         if payload is None:  # pragma: no cover - 拓扑保证不会发生
             raise DialogueUnavailable("对话图未产生响应载荷。")
+        # 演示轨迹：把本轮已经算出来的图内调度事实摘成一小份结论挂在载荷上。
+        # 只是搬运，不改判定、不额外调用；没开 trace 时前端也不会看到它。
+        payload.scheduling = summarize_scheduling(
+            engine=ENGINE_GRAPH,
+            routed=final.get("route") is not None,
+            need_decision=bool(final.get("need_decision")),
+            route_reason_code=final.get("route_reason") or "",
+            forced_reason=final.get("forced_reason"),
+            channels=final.get("channels"),
+        )
         return payload

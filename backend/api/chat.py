@@ -26,12 +26,21 @@ import json
 from fastapi import APIRouter, HTTPException
 
 from backend.api.errors import session_not_found
+from backend.core.agent_trace import build_agent_trace, trace_enabled
 from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable, ScreeningFinished
 from backend.core.session_manager import session_manager
-from backend.graph.engine import DialogueEngineConfigError, DialogueTurnRunner, EngineSessionMismatch
+from backend.graph.engine import (
+    DEFAULT_ENGINE,
+    DialogueEngineConfigError,
+    DialogueTurnRunner,
+    EngineSessionMismatch,
+    dialogue_engine,
+)
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.requests import ChatRequest
-from backend.models.responses import ChatResponse, VisualFeedback
+from backend.models.responses import (
+    ChatResponse, DialogueResponsePayload, VisualFeedback,
+)
 from backend.models.states import ChatReceipt, Message, SessionState
 from backend.policy.client import PolicyClientError
 from backend.safety import agent as safety_agent_module
@@ -61,6 +70,18 @@ class _SafetyRunner:
 
 
 safety_runner = _SafetyRunner()
+
+
+def _trace_engine() -> str:
+    """演示面板上标注的对话引擎名。
+
+    环境变量写错时按默认引擎标注即可——**不能**让一块展示面板把整轮请求拖垮，
+    所以这里不像对话链路那样直接抛出 ``DialogueEngineConfigError``。
+    """
+    try:
+        return dialogue_engine()
+    except DialogueEngineConfigError:
+        return DEFAULT_ENGINE
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -124,6 +145,10 @@ def chat(request: ChatRequest) -> ChatResponse:
         # 已在支持模式时，后续任何一条正常表达都不得自动恢复普通评估。
         in_safety_branch = session.safety_halted or safety.route is not SafetyRoute.CONTINUE
 
+        # 普通分支才有对话载荷；安全分支下保持 None，演示轨迹据此如实标出
+        # "Dialogue / Decision / 视觉通道本轮都没有执行"。
+        payload: DialogueResponsePayload | None = None
+
         if in_safety_branch:
             stage = safety_session_stage(session.safety_stage)
             if stage is not None:
@@ -159,6 +184,13 @@ def chat(request: ChatRequest) -> ChatResponse:
         session.conversation_history.append(Message(
             role=MessageRole.ASSISTANT, content=reply, messages=messages))
         session.turn_count += 1
+        # Agent 运行轨迹：**默认关闭**（AGENT_TRACE 未开启时为 None）。
+        # 只是把本轮已经算好的结论搬运出来，不额外调用任何模型、不改任何判定。
+        trace = (
+            build_agent_trace(safety=safety, payload=payload, messages=messages,
+                              engine=_trace_engine())
+            if trace_enabled() else None
+        )
         response = ChatResponse(
             session_id=request.session_id,
             turn_count=session.turn_count,
@@ -171,6 +203,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             visual_feedback=visual_feedback,
             safety=safety,
             messages=messages,
+            trace=trace,
         )
         response_holder["value"] = response
         if request.utterance_id is not None:

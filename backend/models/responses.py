@@ -1,5 +1,7 @@
 """API 响应体模型。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from backend.models.assessment import (
@@ -33,6 +35,98 @@ class VisualFeedback(BaseModel):
     emotion: str | None = None
 
 
+# ---------------------------------------------------------------------------
+# Agent 运行轨迹（演示面板用，默认关闭）
+# ---------------------------------------------------------------------------
+#
+# ``state`` 是五段共用的统一词表，让前端一眼分出"已调用 / 跳过 / 安全分支提前
+# 结束 / 该引擎不提供"，而不必去理解每一段的业务含义：
+TraceState = Literal["ran", "skipped", "short_circuit", "unavailable"]
+
+
+class TurnScheduling(BaseModel):
+    """图内调度事实（只有 graph 引擎会填）。
+
+    **这是内部搬运字段，不进 HTTP 响应**（见 :class:`DialogueResponsePayload`
+    上的 ``exclude=True``）：它对外的形态是 :class:`AgentTrace`。
+    """
+
+    engine: str
+    #: Dialogue 本轮是否真的被问过"要不要新策略"。后端强制换策略时会短路掉
+    #: 这次模型调用，因此 ``routed=False`` 而 ``need_decision=True`` 是合法组合。
+    routed: bool
+    need_decision: bool
+    route_reason_code: str = ""
+    forced_reason: str | None = None
+    #: 本轮选中的视觉关怀通道（emotion / discordance / tone）与线索名。
+    visual_channel: str | None = None
+    visual_cue: str | None = None
+
+
+class TraceSafety(BaseModel):
+    """前置安全检查（**LangGraph 之外**执行，每轮恰好一次）。"""
+
+    placement: Literal["pre_graph"] = "pre_graph"
+    placement_label: str = "前置安全检查（LangGraph 之外）"
+    engine: str
+    risk_level: str
+    route: str
+    model_status: str
+    state: TraceState = "ran"
+    #: continue / review / stop，供前端着色。
+    outcome: str
+
+
+class TraceDialogue(BaseModel):
+    """Dialogue Agent：本轮是否执行自主路由，以及结论是继续还是换策略。"""
+
+    state: TraceState
+    routed: bool | None = None
+    need_decision: bool | None = None
+    reason_code: str = ""
+    reason_label: str = ""
+    forced_reason: str | None = None
+    forced_label: str | None = None
+
+
+class TraceDecision(BaseModel):
+    """Decision Agent：本轮真的调用了，还是复用已有效策略。"""
+
+    state: TraceState
+    called: bool | None = None
+    label: str = ""
+    strategy: str = ""
+
+
+class TraceVision(BaseModel):
+    """视觉感知：本轮线索是否有效，以及是否真的被说出口。"""
+
+    state: TraceState
+    cue_valid: bool = False
+    channel: str | None = None
+    channel_label: str | None = None
+    cue: str | None = None
+    spoken: bool = False
+    reason: str = ""
+
+
+class TraceOutput(BaseModel):
+    """本轮最终生成几条聊天气泡。"""
+
+    bubbles: int = 0
+
+
+class AgentTrace(BaseModel):
+    """一轮对话的 Agent 运行轨迹，只含结论、不含原始数据与推理文本。"""
+
+    engine: str
+    safety: TraceSafety
+    dialogue: TraceDialogue
+    decision: TraceDecision
+    vision: TraceVision
+    output: TraceOutput
+
+
 class DialogueResponsePayload(BaseModel):
     """对话 Agent 给系统负责人的标准输出。
 
@@ -53,6 +147,9 @@ class DialogueResponsePayload(BaseModel):
     visual_feedback: VisualFeedback = Field(default_factory=VisualFeedback)
     #: 本轮面向学生的消息（1~3 条）。为空时按单条 ``reply`` 处理，见校验器。
     messages: list[str] = Field(default_factory=list)
+    #: 图内调度事实（只有 graph 引擎填）。**刻意用 exclude 挡在 HTTP 之外**：
+    #: 对外只暴露 :class:`AgentTrace` 这个简化结论，不把图内状态直接给前端。
+    scheduling: TurnScheduling | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def _messages_fall_back_to_reply(self) -> "DialogueResponsePayload":
@@ -73,6 +170,9 @@ class ChatResponse(DialogueResponsePayload):
     safety: SafetyVerdict | None = None
     #: 面向用户的消息（安全分支 1~3 条；普通对话为 1 条且等于 reply）。
     messages: list[str] = Field(default_factory=list)
+    #: Agent 运行轨迹，**默认关闭**（``AGENT_TRACE`` 开启且处于演示模式时才有值）。
+    #: 只含节点级结论：不含提示词、模型推理文本、密钥或视觉原始数据。
+    trace: AgentTrace | None = None
 
 
 class TranscriptionResponse(BaseModel):
