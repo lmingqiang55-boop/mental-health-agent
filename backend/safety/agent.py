@@ -62,7 +62,14 @@ __all__ = [
 #: Safety 专属超时。比 Dialogue 的 60s 短得多：安全判定必须快速返回，
 #: 卡住时应当尽快进入 REVIEW，而不是让学生干等。
 DEFAULT_SAFETY_TIMEOUT_SECONDS = 12.0
-DEFAULT_SAFETY_MAX_TOKENS = 500
+
+#: Safety 的输出上限。这个值是**按 schema 的字段上限算出来的**，不是拍的：
+#: rationale ≤ 600 字 + support_message ≤ 600 字 + 5 条 evidence_quotes，
+#: 合计约 1200 汉字 ≈ 800~1000 token，再加 JSON 结构。
+#: 之所以必须留足余量：输出一旦在上限处被截断，JSON 就是残缺的，
+#: 整轮判定会从 ok 掉成 parse_error -> 人工复核。上限是天花板而不是开销，
+#: 模型写得简洁时并不会真的生成这么多。
+DEFAULT_SAFETY_MAX_TOKENS = 1600
 
 #: 模型失败时给学生的安全侧模板。不含号码（判定未完成，不给号码）。
 SAFETY_FALLBACK_MESSAGE = (
@@ -119,6 +126,11 @@ def scan_keywords(text: str, source: str = "latest_message") -> list[SafetySigna
 def parse_safety_content(content: str) -> SafetyModelOutput:
     """解析 Safety 模型输出，容忍 Markdown 代码块围栏。
 
+    ``strict=False`` 是刻意的：支持文本现在要求写成 2~3 段（段间换行），
+    模型偶尔不转义 ``\\n`` 而是直接在 JSON 字符串里换行。那在 RFC 8259 里
+    不合法，但语义毫无歧义——为此把整轮判定降级成人工复核（fail-to-REVIEW）
+    并不划算，所以这里放宽控制字符。字段校验仍然照旧严格执行。
+
     Raises:
         SafetyAgentError: 找不到 JSON 对象，或字段不符合约定。
     """
@@ -133,7 +145,7 @@ def parse_safety_content(content: str) -> SafetyModelOutput:
     payload = text[start:end + 1]
 
     try:
-        raw: Any = json.loads(payload)
+        raw: Any = json.loads(payload, strict=False)
     except json.JSONDecodeError as exc:
         raise SafetyAgentError("Safety 模型输出不是合法 JSON") from exc
     if not isinstance(raw, dict):

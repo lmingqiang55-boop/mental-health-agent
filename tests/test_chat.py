@@ -320,8 +320,10 @@ def test_high_risk_message_enters_safety_stop_and_never_auto_resumes(
     assert follow["assessment_ready"] is False
     # 支持模式持续对话：该轮 Safety 未给出文案，必须回落到支持模式续接文案，
     # 而不是空气泡、也不是普通问诊话术。
+    # 续接文案是两句话，按气泡协议拆成 2 条；reply 是它们的全文投影。
     assert follow["reply"] == SUPPORT_MODE_CONTINUATION_MESSAGE
-    assert follow["messages"] == [SUPPORT_MODE_CONTINUATION_MESSAGE]
+    assert follow["messages"] == SUPPORT_MODE_CONTINUATION_MESSAGE.splitlines()
+    assert len(follow["messages"]) == 2
     # 并且完全没有进入普通对话链路
     assert len(dialogue_stub.requests) == dialogue_calls
     assert follow["turn_count"] == 2

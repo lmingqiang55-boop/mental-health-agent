@@ -154,7 +154,9 @@ def chat(request: ChatRequest) -> ChatResponse:
             if stage is not None:
                 session.current_stage = stage
             messages = safety_reply_messages(safety, already_halted=already_halted)
-            reply = messages[0]
+            # reply 是 messages 的全文投影，与普通分支一致：安全支持可能是 2~3 条，
+            # 只取第一条会让落库历史和 TTS 丢掉后面的安全提醒。
+            reply = "\n".join(messages)
             next_strategy = safety_next_strategy(safety, already_halted=already_halted)
             assessment_ready = False
             completion_reason = None

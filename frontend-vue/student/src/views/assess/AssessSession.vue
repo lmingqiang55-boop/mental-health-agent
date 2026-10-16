@@ -3,16 +3,16 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { audioApi, chatApi, sessionApi } from '@/api'
 import { isApiError } from '@/api/http'
-import type { AgentTrace, ChatResponse, SpeechMetadata, VisionState } from '@/api/types'
+import type { ChatResponse, SpeechMetadata, VisionState } from '@/api/types'
 import { useRecorder, type RecordingResult } from '@/composables/useRecorder'
 import { useVision } from '@/composables/useVision'
 import { useTts } from '@/composables/useTts'
 import { useAssessStore } from '@/stores/assess'
 import { newUtteranceId } from '@/utils/id'
 import { toastError, toastWarn } from '@/utils/toast'
-import AgentFlow from '@/components/business/AgentFlow.vue'
 import PxButton from '@/components/base/PxButton.vue'
 import PxBubble from '@/components/base/PxBubble.vue'
+import PxCard from '@/components/base/PxCard.vue'
 import PxEmpty from '@/components/base/PxEmpty.vue'
 
 const DEFAULT_OPENER = '你好呀，我是小晴～ 我们随便聊聊最近的心情和状态，好吗？'
@@ -64,11 +64,16 @@ const lastUtteranceId = ref<string | null>(null)
 // 已收尾（后端 assessment_ready）：停止普通追问，等待用户点「生成结果」。
 const closing = ref(false)
 /**
- * 多智能体运行轨迹（演示面板）。
- * 后端未开启 AGENT_TRACE 时恒为 null，此时整块面板不渲染、布局与原来完全一致。
+ * 安全支持热线。
+ *
+ * 【只走后端】号码来自 `/api/chat` 的 `safety.hotline_numbers`，由后端按部署地区
+ * 从**已核实注册表**下发；前端不硬编码、也不猜地区。未配置地区时后端下发空列表，
+ * 这里就什么都不显示，绝不套用中国大陆号码。
+ *
+ * 【只增不减】支持模式是单向锁：后续某一轮若被判为 normal，后端不再下发号码，
+ * 但学生仍处在支持模式里，号码不应该跟着消失。因此只在拿到号码时更新。
  */
-const trace = ref<AgentTrace | null>(null)
-const traceTurn = ref(0)
+const safetyHotlines = ref<string[]>([])
 // 摄像头开启但起流/上报失败（begin() 里兜底为仅语音）。
 const camFailed = ref(false)
 // 【演示用】手动输入文字直接送给后端决策模型（跳过语音转写）。
@@ -177,6 +182,14 @@ async function init() {
     if (state.current_stage === 'assessment_ready' || state.current_stage === 'completed') {
       closing.value = true
     }
+    // 续测时恢复安全支持热线：从历史里找一条带号码的安全结论。
+    // 只看 last_safety 不够——中途若有一轮判为 normal，那一轮就不会带号码。
+    if (state.safety_halted || state.safety_stage === 'stopped') {
+      const fromHistory = state.conversation_history
+        .map((m) => m.safety?.hotline_numbers ?? [])
+        .find((numbers) => numbers.length)
+      safetyHotlines.value = fromHistory ?? state.latest_safety?.hotline_numbers ?? []
+    }
   } catch (e) {
     if (isApiError(e, 'SESSION_NOT_FOUND')) {
       toastWarn('测评会话不存在或已过期，请重新开始')
@@ -237,6 +250,10 @@ async function stopCapture() {
   await stopVision()
 }
 
+function callHotline(number: string) {
+  window.location.href = `tel:${number}`
+}
+
 /**
  * 统一处理 /api/chat 结果：逐条上屏气泡 → 同步轮次 → 检测收尾 → 播报。
  * 收尾（assessment_ready）时停止输入与录音、关闭摄像头，并保留收尾语音。
@@ -248,9 +265,9 @@ async function applyChatResult(res: ChatResponse) {
   const bubbles = toBubbles(res.reply, res.messages)
   pushAssistantMessage(res.reply, bubbles)
   assess.setSession(sid, res.turn_count)
-  // 演示面板：只用后端真实返回的轨迹，前端不推断、不补全。
-  trace.value = res.trace ?? null
-  traceTurn.value = res.turn_count
+  // 安全支持热线：只取后端下发的已核实号码。只在拿到号码时更新（见 safetyHotlines 注释）。
+  const hotlines = res.safety?.hotline_numbers ?? []
+  if (hotlines.length) safetyHotlines.value = hotlines
   if (res.assessment_ready) {
     closing.value = true
     await stopCapture()
@@ -409,133 +426,148 @@ onBeforeRouteLeave(() => {
 </script>
 
 <template>
-  <div class="xq-page session" :class="{ 'session--split': !!trace }">
+  <div class="xq-page session">
     <PxEmpty v-if="loading" icon="…" text="正在准备你的测评…" />
 
     <template v-else>
-      <!-- 演示模式（后端开启 AGENT_TRACE）下右侧多一列轨迹面板；
-           未开启时 trace 恒为 null，这里的结构退化成原来的单列。 -->
-      <div class="session__body">
-        <div class="session__col">
-          <!-- 顶部：对话式测评（不按固定题号） -->
-          <header class="session__head">
-            <div class="session__head-row">
-              <div class="session__head-main">
-                <p class="session__title">对话测评</p>
-                <p class="session__sub">和小晴聊聊最近的心情和状态就好</p>
-              </div>
-              <button type="button" class="session__pause" @click="router.push({ name: 'assess' })">
-                暂停
-              </button>
-            </div>
-
-            <!-- 采集状态：区分「未开启（仅语音）」与「已开启但未上传/上传中」 -->
-            <div
-              v-if="started && !closing"
-              class="session__vision"
-              :class="`is-${visionStatus.tone}`"
-            >
-              <i class="session__vision-dot" />
-              <span>{{ visionStatus.text }}</span>
-            </div>
-          </header>
-
-          <!-- 采集用 video：正式测评不显示预览（设备检查页已确认过），仅用于取帧上报。 -->
-          <video ref="videoRef" class="session__cam" muted playsinline autoplay />
-
-          <!-- 消息区：一轮可有多条气泡，同一轮的气泡贴得更近 -->
-          <div class="session__chat">
-            <div
-              v-for="(m, i) in messages"
-              :key="i"
-              class="session__turn"
-              :class="`session__turn--${m.role}`"
-            >
-              <PxBubble
-                v-for="(b, j) in m.bubbles.slice(0, m.shown)"
-                :key="`${i}-${j}`"
-                class="xq-fade-up"
-                :role="m.role"
-                :speaking="
-                  speaking && m.role === 'assistant' && i === messages.length - 1 && j === m.shown - 1
-                "
-              >
-                {{ b }}
-              </PxBubble>
-            </div>
-            <div ref="chatEndRef" class="session__chat-end" aria-hidden="true" />
+      <!-- 顶部：对话式测评（不按固定题号） -->
+      <header class="session__head">
+        <div class="session__head-row">
+          <div class="session__head-main">
+            <p class="session__title">对话测评</p>
+            <p class="session__sub">和小晴聊聊最近的心情和状态就好</p>
           </div>
-
-          <!-- 录音区：收尾后切换为「生成结果」 -->
-          <div class="session__dock">
-            <template v-if="closing">
-              <p class="session__hint session__hint--done">
-                我们已经聊得差不多啦～ 点下面按钮，为你生成一份状态评估。
-              </p>
-              <PxButton size="lg" @click="goGenerate">生成结果</PxButton>
-            </template>
-
-            <template v-else>
-              <span v-if="recording" class="session__pill">
-                <i class="session__pill-dot" />语音转写 · {{ recordSeconds }}s
-              </span>
-
-              <button
-                type="button"
-                class="session__mic"
-                :class="{ 'is-recording xq-pulse': recording }"
-                :disabled="!recording && (busy || speaking)"
-                :aria-label="recording ? '结束说话' : '开始说话'"
-                @click="!started ? begin() : recording ? finishRecord() : startRecord()"
-              >
-                <span class="session__mic-ico">{{ recording ? '■' : '🎙' }}</span>
-              </button>
-
-              <p v-if="!started" class="session__hint">
-                {{ busy ? '小晴正在准备…' : '点一下麦克风开始，小晴会先跟你打个招呼' }}
-              </p>
-              <p v-else-if="recording" class="session__hint session__hint--live">
-                正在聆听… 说完点这里结束
-              </p>
-              <p v-else-if="busy" class="session__hint">小晴正在思考…</p>
-              <p v-else-if="speaking" class="session__hint">小晴正在说话…</p>
-              <p v-else class="session__hint">准备好了就点麦克风，慢慢说</p>
-
-              <!-- 【演示用】文字输入通道：与语音通道等价，绕开 ASR 抖动 -->
-              <div class="session__manual">
-                <input
-                  v-model="manualText"
-                  class="session__manual-input"
-                  type="text"
-                  placeholder="在这里说说你想说的事…"
-                  :disabled="busy || speaking || recording"
-                  @keyup.enter="sendManualText"
-                />
-                <PxButton
-                  size="sm"
-                  :disabled="!manualText.trim() || busy || speaking || recording"
-                  @click="sendManualText"
-                >
-                  发送
-                </PxButton>
-              </div>
-
-              <PxButton v-if="started" variant="ghost" size="sm" @click="endSession">
-                提前结束对话
-              </PxButton>
-            </template>
-          </div>
-
-          <p class="xq-disclaimer">
-            语音仅用于当场转写、不留存；视频仅提取特征。本测评为初步筛查，不构成医学诊断。
-          </p>
+          <button type="button" class="session__pause" @click="router.push({ name: 'assess' })">
+            暂停
+          </button>
         </div>
 
-        <!-- 演示专用面板：后端未开启 AGENT_TRACE 时不渲染，也不占位 -->
-        <aside v-if="trace" class="session__aside">
-          <AgentFlow :trace="trace" :turn="traceTurn" />
-        </aside>
+        <!-- 采集状态：区分「未开启（仅语音）」与「已开启但未上传/上传中」 -->
+        <div
+          v-if="started && !closing"
+          class="session__vision"
+          :class="`is-${visionStatus.tone}`"
+        >
+          <i class="session__vision-dot" />
+          <span>{{ visionStatus.text }}</span>
+        </div>
+      </header>
+
+      <!-- 采集用 video：正式测评不显示预览（设备检查页已确认过），仅用于取帧上报。 -->
+      <video ref="videoRef" class="session__cam" muted playsinline autoplay />
+
+      <!-- 消息区：一轮可有多条气泡，同一轮的气泡贴得更近 -->
+      <div class="session__chat">
+        <div
+          v-for="(m, i) in messages"
+          :key="i"
+          class="session__turn"
+          :class="`session__turn--${m.role}`"
+        >
+          <PxBubble
+            v-for="(b, j) in m.bubbles.slice(0, m.shown)"
+            :key="`${i}-${j}`"
+            class="xq-fade-up"
+            :role="m.role"
+            :speaking="
+              speaking && m.role === 'assistant' && i === messages.length - 1 && j === m.shown - 1
+            "
+          >
+            {{ b }}
+          </PxBubble>
+        </div>
+        <div ref="chatEndRef" class="session__chat-end" aria-hidden="true" />
       </div>
+
+      <!-- 安全支持热线：号码只来自后端已核实配置（未配置地区时后端不下发，这里不显示） -->
+      <PxCard
+        v-if="safetyHotlines.length"
+        class="session__safety"
+        tone="danger"
+        title="现在最重要的一件事"
+      >
+        <p class="session__safety-lead">
+          我很在意你现在的安全。如果此刻很难受，请立刻联系专业帮助：
+        </p>
+        <div class="session__safety-calls">
+          <PxButton
+            v-for="number in safetyHotlines"
+            :key="number"
+            variant="hotline"
+            block
+            @click="callHotline(number)"
+          >
+            心理援助热线：{{ number }}
+          </PxButton>
+        </div>
+        <p class="session__safety-note">
+          也可以马上告诉身边可信任的家人、老师，或直接去最近的医院急诊。
+        </p>
+      </PxCard>
+
+      <!-- 录音区：收尾后切换为「生成结果」 -->
+      <div class="session__dock">
+        <template v-if="closing">
+          <p class="session__hint session__hint--done">
+            我们已经聊得差不多啦～ 点下面按钮，为你生成一份状态评估。
+          </p>
+          <PxButton size="lg" @click="goGenerate">生成结果</PxButton>
+        </template>
+
+        <template v-else>
+          <span v-if="recording" class="session__pill">
+            <i class="session__pill-dot" />语音转写 · {{ recordSeconds }}s
+          </span>
+
+          <button
+            type="button"
+            class="session__mic"
+            :class="{ 'is-recording xq-pulse': recording }"
+            :disabled="!recording && (busy || speaking)"
+            :aria-label="recording ? '结束说话' : '开始说话'"
+            @click="!started ? begin() : recording ? finishRecord() : startRecord()"
+          >
+            <span class="session__mic-ico">{{ recording ? '■' : '🎙' }}</span>
+          </button>
+
+          <p v-if="!started" class="session__hint">
+            {{ busy ? '小晴正在准备…' : '点一下麦克风开始，小晴会先跟你打个招呼' }}
+          </p>
+          <p v-else-if="recording" class="session__hint session__hint--live">
+            正在聆听… 说完点这里结束
+          </p>
+          <p v-else-if="busy" class="session__hint">小晴正在思考…</p>
+          <p v-else-if="speaking" class="session__hint">小晴正在说话…</p>
+          <p v-else class="session__hint">准备好了就点麦克风，慢慢说</p>
+
+          <!-- 【演示用】文字输入通道：与语音通道等价，绕开 ASR 抖动 -->
+          <div class="session__manual">
+            <input
+              v-model="manualText"
+              class="session__manual-input"
+              type="text"
+              placeholder="在这里说说你想说的事…"
+              :disabled="busy || speaking || recording"
+              @keyup.enter="sendManualText"
+            />
+            <PxButton
+              size="sm"
+              :disabled="!manualText.trim() || busy || speaking || recording"
+              @click="sendManualText"
+            >
+              发送
+            </PxButton>
+          </div>
+
+          <PxButton v-if="started" variant="ghost" size="sm" @click="endSession">
+            提前结束对话
+          </PxButton>
+        </template>
+      </div>
+
+      <p class="xq-disclaimer">
+        语音仅用于当场转写、不留存；视频仅提取特征。本测评为初步筛查，不构成医学诊断。
+      </p>
     </template>
   </div>
 </template>
@@ -546,27 +578,6 @@ onBeforeRouteLeave(() => {
   flex-direction: column;
   gap: var(--xq-sp-4);
   min-height: 100dvh;
-}
-
-/* ---- 两列外壳 ----
-   手机/平板仍是单列（面板靠 CSS 隐藏）；桌面端才让出右侧一列放演示面板。
-   未开启 AGENT_TRACE 时 trace 为 null，aside 不存在，这里自然退化成原布局。 */
-.session__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--xq-sp-4);
-  flex: 1;
-  min-height: 0;
-}
-.session__col {
-  display: flex;
-  flex-direction: column;
-  gap: var(--xq-sp-4);
-  flex: 1;
-  min-width: 0;
-}
-.session__aside {
-  display: none;
 }
 
 /* ---- 顶部进度 ---- */
@@ -666,6 +677,26 @@ onBeforeRouteLeave(() => {
 .session__chat-end {
   height: 1px;
   flex: 0 0 auto;
+}
+
+/* ---- 安全支持热线 ----
+   进入安全支持模式后才出现（号码由后端按部署地区下发）；layout 上放在对话区与
+   录音区之间，学生一抬眼就能看到，且不需要离开当前对话去另一个页面。 */
+.session__safety-lead {
+  margin: 0;
+  line-height: 1.7;
+}
+.session__safety-calls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xq-sp-3);
+  margin-top: var(--xq-sp-3);
+}
+.session__safety-note {
+  margin: var(--xq-sp-3) 0 0;
+  color: var(--xq-text-2);
+  font-size: var(--xq-fs-sm);
+  line-height: 1.7;
 }
 
 /* ---- 录音区 ---- */
@@ -771,27 +802,6 @@ onBeforeRouteLeave(() => {
   .session__mic {
     width: 96px;
     height: 96px;
-  }
-
-  /* 有轨迹面板时把整页放宽，左侧对话仍居中、右侧固定一列。 */
-  .session--split {
-    max-width: 1120px;
-  }
-  .session--split .session__body {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: var(--xq-sp-6);
-  }
-  .session--split .session__col {
-    max-width: 720px;
-    margin: 0 auto;
-  }
-  .session--split .session__aside {
-    display: block;
-    flex: 0 0 320px;
-    width: 320px;
-    position: sticky;
-    top: var(--xq-sp-5);
   }
 }
 </style>

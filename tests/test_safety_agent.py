@@ -15,6 +15,7 @@ import pytest
 
 from backend.safety import agent as agent_module
 from backend.safety.agent import (
+    DEFAULT_SAFETY_MAX_TOKENS,
     SAFETY_FALLBACK_MESSAGE,
     SAFETY_SYSTEM_PROMPT,
     SafetyAgent,
@@ -35,6 +36,7 @@ from backend.safety.projection import (
     verdict_is_more_severe,
 )
 from backend.safety.schemas import (
+    MAX_SUPPORT_MESSAGES,
     ModelStatus,
     SafetyLevel,
     SafetyModelOutput,
@@ -44,6 +46,7 @@ from backend.safety.schemas import (
     assemble_verdict,
     build_failed_verdict,
     derive_route,
+    split_support_message,
 )
 from backend.safety.support import (
     SUPPORT_MODE_CONTINUATION_MESSAGE,
@@ -508,8 +511,9 @@ def test_support_mode_always_produces_a_reply() -> None:
     """支持模式持续对话：即使本轮判 NORMAL，也要有面向用户的回应。"""
     normal = assemble_verdict(
         output=SafetyModelOutput(risk_level=SafetyLevel.NORMAL), status=ModelStatus.ok)
-    assert safety_reply_messages(normal, already_halted=True) == [
-        SUPPORT_MODE_CONTINUATION_MESSAGE]
+    # 续接文案是两句话，按气泡协议拆成 2 条短消息（不再挤成一整段）。
+    assert safety_reply_messages(normal, already_halted=True) == \
+        SUPPORT_MODE_CONTINUATION_MESSAGE.splitlines()
     assert safety_next_strategy(normal, already_halted=True) == "safety_support"
     # 未处于支持模式且判 NORMAL 时不产生多余消息
     assert safety_reply_messages(normal, already_halted=False) == []
@@ -521,3 +525,62 @@ def test_review_mode_has_a_fallback_message() -> None:
         status=ModelStatus.ok)
     assert safety_reply_messages(review, already_halted=False) == ["在的"]
     assert safety_next_strategy(review, already_halted=False) == "safety_review"
+
+
+# ---------------------------------------------------------------------------
+# 支持文本的分段：由模型决定换行，后端只做清理与条数收口
+# ---------------------------------------------------------------------------
+
+def test_support_message_is_split_into_bubbles_by_the_model() -> None:
+    """高危支持文本按模型给的换行拆成 2~3 条，而不是挤成一整段。"""
+    output = SafetyModelOutput(
+        risk_level=SafetyLevel.HIGH,
+        support_message="谢谢你愿意说出来，这很不容易。\n"
+                        "如果此刻有伤害自己的念头，请先离危险的东西远一点。\n"
+                        "你不需要一个人扛着。")
+    verdict = assemble_verdict(output=output, status=ModelStatus.ok,
+                              hotlines=["12356"],
+                              allowed_hotlines=allowed_hotline_numbers())
+    assert verdict.route is SafetyRoute.SAFETY_STOP
+    assert verdict.messages == [
+        "谢谢你愿意说出来，这很不容易。",
+        "如果此刻有伤害自己的念头，请先离危险的东西远一点。",
+        "你不需要一个人扛着。",
+    ]
+    # 号码照样只走 hotline_numbers，不会被写进正文
+    assert verdict.hotline_numbers == ["12356"]
+
+
+def test_single_line_support_message_stays_one_bubble() -> None:
+    """单行支持文本仍然是 1 条：这次改动不改变原本就正常的情况。"""
+    output = SafetyModelOutput(risk_level=SafetyLevel.HIGH,
+                               support_message="我很担心你，请先联系身边可信任的人。")
+    verdict = assemble_verdict(output=output, status=ModelStatus.ok,
+                              hotlines=["12356"],
+                              allowed_hotlines=allowed_hotline_numbers())
+    assert verdict.messages == ["我很担心你，请先联系身边可信任的人。"]
+
+
+def test_support_message_split_merges_instead_of_dropping() -> None:
+    """超过 3 段时合并而不是截断：安全提醒一个字都不能丢。"""
+    messages = split_support_message("一。\n二。\n三。\n四。")
+    assert len(messages) == MAX_SUPPORT_MESSAGES
+    assert messages[-1] == "三。\n四。"
+    assert split_support_message("") == []
+    assert split_support_message("\n  \n") == []
+
+
+def test_parser_tolerates_raw_newlines_inside_the_support_message() -> None:
+    """支持文本要求写 2~3 段，模型偶尔不转义换行；不应因此掉成 parse_error。"""
+    raw = ('{"risk_level": "HIGH", "support_message": "第一段。\n第二段。",'
+           ' "rationale": "有风险"}')
+    output = parse_safety_content(raw)
+    assert output.risk_level is SafetyLevel.HIGH
+    assert output.support_message == "第一段。\n第二段。"
+
+
+def test_safety_output_budget_covers_the_schema_limits() -> None:
+    """输出上限必须大于 schema 的字段上限之和，否则会在上限处截断成非法 JSON。"""
+    worst_case_chars = 600 + 600 + 5 * 64  # rationale + support_message + quotes
+    # 中文大致 0.6 token/字，再留 JSON 结构与英文引号键名的余量。
+    assert DEFAULT_SAFETY_MAX_TOKENS >= worst_case_chars * 0.6 * 1.5

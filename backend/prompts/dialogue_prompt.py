@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
+from backend.core.text_polarity import text_polarity
 from backend.core.visual_acknowledgment import TONE_LABELS, VISUAL_LABELS
 from backend.models.dialogue import (
     DialogueAgentRequest,
@@ -36,14 +37,37 @@ from backend.models.dialogue import (
 __all__ = [
     "DIALOGUE_AGENT_SYSTEM_PROMPT",
     "DIALOGUE_ROUTER_SYSTEM_PROMPT",
+    "REFUSAL_PHRASES",
     "build_dialogue_user_prompt",
     "build_dialogue_route_prompt",
+    "is_refusal",
 ]
 
 # 外观线索与语气的说法直接取视觉模块的那一份，不在本文件另抄一份：
 # 两处各存一份同样内容的表时，改文案只会改到一处，于是"后端允许说的"
 # 和"提示词里说的"会悄悄分家（VISUAL_LABELS / TONE_LABELS 见
 # backend/core/visual_acknowledgment.py）。
+
+#: 用户明确表示「不想说 / 不想继续这个话题」的说法。
+#:
+#: 这是一份**词表**，不做语义推断：命中即认为用户表达了拒绝，本轮不追问。
+#: 之所以要单独判一次，是因为"拒绝"常常长得很短（"我不想说"只有 5 个字），
+#: 会被下面的"简短回答 → 直接推进"规则接管，反过来催他回答——正是要避免的行为。
+#: 因此拒绝判定必须排在简短回答判定**之前**。
+REFUSAL_PHRASES: tuple[str, ...] = (
+    "不想说", "不想聊", "不想谈", "不想提", "不想讲",
+    "不愿说", "不愿意说", "不想回答", "不愿意回答", "不方便说", "不好说",
+    "别问了", "不要问了", "没什么好说", "没什么可说", "没什么说的",
+    "换个话题", "说点别的", "不想继续",
+)
+
+
+def is_refusal(text: str) -> bool:
+    """用户这句话是否明确表达了拒绝（不想说 / 不想继续这个话题）。"""
+    if not text:
+        return False
+    stripped = text.strip()
+    return any(phrase in stripped for phrase in REFUSAL_PHRASES)
 
 
 def _polarity_phrase(value: float) -> str:
@@ -129,13 +153,27 @@ DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue 
 【执行 decision 的方式】
 8. 如果 decision 包含“共情安慰”：针对明确的痛苦简短回应即可，
    不需要每次用“嗯”“听起来”“听你这么说”开头，也不需要复述用户的话来证明你听见了。
+   但他这句话本身带着明显情绪时（累、烦、难受、撑不住、没意思、睡不好……），
+   即使 decision 的 action 里没有“共情安慰”，也要先用一条消息接住这个情绪，
+   再按 decision 推进话题——不要跳过情绪、只丢下一个问题。
+   他明确表示不想说时，按【本轮表达要求】处理（先接纳，不追问）。
 9. 切换话题时让问题与上下文相关；需要时用一句简短过渡，
    同一话题的追问可以直接问，不必每次重复上一句话再承接。
 10. 如果 decision 要求继续当前话题：根据 conversation_history 判断已经问过什么，
     不要重复同一个问题，应围绕当前 topic 进行新的、合理的追问。
     用户已经明确回答的内容不再换个说法问一遍；只补充尚缺的时间、频率或生活影响。
     用户短答“是”“没有”“一个月”“每天”时，直接推进，不逐字复述或反复确认。
-11. 默认每一轮只提出一个主要问题，避免一次连续问三四个问题。
+    但如果他刚才只是在倾诉、或者上一个问题他还没答完，可以先只回应，把追问留到下一轮。
+11. 每轮**最多**提出一个主要问题，也**可以一个问题都不提**。允许这几种回复：
+    - 纯共情：只接住他的感受，不提问；
+    - 共情 + 追问：先回应，再问一个问题；
+    - 回应 / 安慰 / 简单建议：说完就停，不追加问题；
+    - 尊重拒绝：他不想说时先接纳，不追问。
+    一条消息里只放**一个**问题：不要在一个气泡里连问两个
+    （“是不是……？平时……？”就是两个，要拆成两轮或只留一个）。
+    评估仍然要推进：需要了解的信息还没问到、且他情绪平稳时，
+    仍应用一个自然的问题推进当前话题；但不必每一轮都提问——
+    连续追问会让对话变成问卷。
 
 【表达风格】
 12. 回复应当：自然、简洁、口语化、像真实对话；不要像问卷，不要像心理医生照着量表逐条念。
@@ -151,10 +189,11 @@ DIALOGUE_AGENT_SYSTEM_PROMPT = """你是心理状态评估系统中的 Dialogue 
 【输出格式（会直接决定聊天气泡的条数）】
 19. 每轮输出 1~3 条消息，**每条消息单独占一行**。
     不要编号、不要项目符号、不要用空行分隔两条消息、不要输出代码块或引号。
-20. 条数由内容实际需要决定，不要为了凑数量而拆分或添加内容：
-    - 只需要回应一句，或只需要问一个问题：**1 条**；
-    - 先简短接住对方的感受、再追问：**2 条**；
-    - 内容确实较多（既要回应、又要说明、还要追问）：最多 **3 条**。
+20. 条数按**表达单元**决定，不按句子长短，也不要为了凑数量而拆分或添加内容：
+    - 只有一个表达单元（只回应感受，或只问一个问题）：**1 条**；
+    - 同时有“回应/共情”和“追问”两个单元：**必须拆成 2 条**，一条一行，
+      不要用逗号或句号把这两个单元连在同一行；
+    - 除了回应与追问还确实要说第三件事（说明、建议、提醒）：最多 **3 条**。
 21. 每条消息都必须是完整、能直接说出口的一句话，不能出现半句或只有标点。
     不要把一个完整句子从中间断开——分段要分在句子之间，不要分在句子内部。
 """
@@ -268,6 +307,43 @@ def _format_decision(decision: DialogueDecision) -> str:
 # --------------------------------------------------------------------------
 
 
+def _turn_requirement(request: DialogueAgentRequest) -> str:
+    """渲染【本轮表达要求】：这一轮到底该"只回应"还是"回应+追问"。
+
+    判定顺序是刻意的：**收尾 > 拒绝 > 简短且无情绪 > 一般情况**。
+
+    "我不想说"只有 5 个字，如果先落进"简短回答 → 直接推进"那一档，
+    就会变成催他回答——所以拒绝必须在简短回答之前拦下来。
+
+    而"简短"这一档还要再过一道**情绪**闸门。这一条是被实机验收逼出来的：
+    原先只按 ``len <= 12`` 判断，于是"我最近真的好累。"（8 字）、
+    "晚上睡不好，白天没精神。"（12 字）这类**又短又带情绪**的自述全部落进
+    "直接推进……不套共情前缀"那一档，模型于是每次都只丢回一个问题——
+    这正是"每轮都在问、从不接住情绪"的机制性来源。
+
+    闸门用的是项目自己的 :func:`~backend.core.text_polarity.text_polarity`：
+    读得出情绪词（"累""烦""闷""睡不好"…）就说明这不是一句单纯的信息性回答，
+    不该被当成"是/每天/一个月"那样处理；读不出时才走"直接推进"。
+    这样不新增任何模型调用，判据也只有一个来源。
+    """
+    if request.finish_screening:
+        return "本轮只收尾，不提出任何问题；提示可点击‘生成结果’，不自行生成评估。"
+
+    text = request.current_user_input.text
+    if is_refusal(text):
+        return (
+            "用户表示不想说、不想继续这个话题。先接纳他的意愿，"
+            "**不要追问他不愿说的那件事**，也不要换个说法再问一遍；"
+            "可以只陪伴、不提问，或用一句简短的过渡把话题自然带开。"
+        )
+    if len(text.strip()) <= 12 and text_polarity(text) is None:
+        return "用户是简短回答，请直接推进尚未了解的信息，不复述这句回答，不套共情前缀。"
+    return (
+        "根据实际需要决定是只回应、还是回应后追问一个问题："
+        "可以一个问题都不提；不要每一轮先复述再提问，避免重复最近回复的开头。"
+    )
+
+
 def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
     """把 DialogueAgentRequest 渲染成 Dialogue Agent 的 User Prompt。
 
@@ -297,13 +373,7 @@ def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
         "【用户记忆】\n" + _format_memory(request.user_memory),
         "【当前用户输入】\n" + _format_current_input(request.current_user_input),
         "【上游最终决策】\n" + _format_decision(request.decision),
-        "【本轮表达要求】\n" + (
-            "本轮只收尾，不提出任何问题；提示可点击‘生成结果’，不自行生成评估。"
-            if request.finish_screening else
-            "用户是简短回答，请直接推进尚未了解的信息，不复述这句回答，不套共情前缀。"
-            if len(request.current_user_input.text.strip()) <= 12 else
-            "根据实际需要回应或提问；不要每一轮先复述再提问，避免重复最近回复的开头。"
-        ),
+        "【本轮表达要求】\n" + _turn_requirement(request),
         "【本轮视觉观察】\n" + _visual_section(request),
         (
             "【任务】\n"

@@ -37,6 +37,8 @@ __all__ = [
     "derive_risk_detected",
     "build_failed_verdict",
     "assemble_verdict",
+    "split_support_message",
+    "MAX_SUPPORT_MESSAGES",
     "PHONE_LIKE",
 ]
 
@@ -76,6 +78,27 @@ class ModelStatus(str, Enum):
 #: 会话级安全阶段。与 SessionStage 的 SAFETY_REVIEW / SAFETY_STOP 对应。
 #: 只会单向推进：none -> review -> stopped，**不会自动回退**。
 SafetyStage = Literal["none", "review", "stopped"]
+
+#: 面向学生的安全消息条数上限。与 Dialogue 的气泡协议一致：1~3 条。
+MAX_SUPPORT_MESSAGES = 3
+
+
+def split_support_message(text: str) -> list[str]:
+    """把模型的 ``support_message`` 按行拆成 1~3 条面向学生的消息。
+
+    分段由**模型**决定（提示词要求"每段单独一行"），后端刻意不做
+    "按句号/逗号切分"这类机械拆分——那会把一句完整的话切成语义残缺的碎片。
+    这与 :func:`backend.agents.dialogue_agent.parse_reply_messages` 是同一条约定：
+    换行位置由生成方决定，后端只做清理与条数收口。
+
+    超过上限时**合并**最后几条而不是截断：安全提醒宁可长一点，也不能丢。
+    """
+    messages = [line.strip() for line in (text or "").splitlines()]
+    messages = [message for message in messages if message]
+    if len(messages) > MAX_SUPPORT_MESSAGES:
+        messages = messages[:MAX_SUPPORT_MESSAGES - 1] + [
+            "\n".join(messages[MAX_SUPPORT_MESSAGES - 1:])]
+    return messages
 
 
 #: risk_level -> route 的唯一映射来源。覆盖全部枚举值，不存在 KeyError 分支。
@@ -146,7 +169,7 @@ class SafetyVerdict(BaseModel):
     risk_detected: bool
     risk_level: SafetyLevel
     route: SafetyRoute
-    messages: list[str] = Field(default_factory=list, max_length=3)
+    messages: list[str] = Field(default_factory=list, max_length=MAX_SUPPORT_MESSAGES)
     hotline_numbers: list[str] = Field(default_factory=list)
 
     # 引擎侧元数据（不展示给学生）
@@ -259,7 +282,7 @@ def assemble_verdict(
         risk_detected=derive_risk_detected(output.risk_level),
         risk_level=output.risk_level,
         route=route,
-        messages=[output.support_message] if output.support_message else [],
+        messages=split_support_message(output.support_message),
         hotline_numbers=numbers,
         model_status=status,
         keyword_signals=list(extra_signals),

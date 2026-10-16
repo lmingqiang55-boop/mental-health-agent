@@ -108,6 +108,11 @@ export interface ChatMessage {
   audio_snapshot?: AudioState | null
   utterance_id?: string | null
   speech?: SpeechMetadata | null
+  /**
+   * 用户消息附带的本轮安全结论。续测时用它恢复安全支持热线，
+   * 免得中途某一轮判为 normal 就把号码弄丢了。
+   */
+  safety?: SafetyVerdict | null
 }
 
 export interface ConsentRecord {
@@ -179,67 +184,6 @@ export interface VisualFeedback {
   emotion: string | null
 }
 
-// ---------------- Agent 运行轨迹（演示面板，默认关闭） ----------------
-//
-// 全部来自后端真实执行记录（`/api/chat` 的 trace）；未开启 AGENT_TRACE 时为 null。
-// 只含节点级结论：没有提示词、模型推理文本、密钥或视觉原始数据。
-
-/** 五段共用的状态词表：已调用 / 跳过 / 安全分支提前结束 / 该引擎不提供。 */
-export type TraceState = 'ran' | 'skipped' | 'short_circuit' | 'unavailable'
-
-export interface TraceSafety {
-  /** 恒为 pre_graph：Safety 在 LangGraph **之外**执行，不要画成图内节点。 */
-  placement: 'pre_graph'
-  placement_label: string
-  engine: string
-  risk_level: SafetyLevel
-  route: SafetyRoute
-  model_status: SafetyModelStatus
-  state: TraceState
-  outcome: 'continue' | 'review' | 'stop'
-}
-
-export interface TraceDialogue {
-  state: TraceState
-  /** 本轮是否真的问过 Dialogue「要不要新策略」；后端强制换策略时为 false。 */
-  routed: boolean | null
-  need_decision: boolean | null
-  reason_code: string
-  reason_label: string
-  forced_reason: string | null
-  forced_label: string | null
-}
-
-export interface TraceDecision {
-  state: TraceState
-  called: boolean | null
-  label: string
-  strategy: string
-}
-
-export interface TraceVision {
-  state: TraceState
-  cue_valid: boolean
-  channel: string | null
-  channel_label: string | null
-  cue: string | null
-  spoken: boolean
-  reason: string
-}
-
-export interface TraceOutput {
-  bubbles: number
-}
-
-export interface AgentTrace {
-  engine: string
-  safety: TraceSafety
-  dialogue: TraceDialogue
-  decision: TraceDecision
-  vision: TraceVision
-  output: TraceOutput
-}
-
 export interface ChatResponse {
   session_id: string
   /**
@@ -262,11 +206,6 @@ export interface ChatResponse {
   completion_reason: CompletionReason | null
   screening_progress: ScreeningProgress
   visual_feedback: VisualFeedback
-  /**
-   * 本轮多智能体运行轨迹，用于演示面板。
-   * **默认关闭**：未开启后端 `AGENT_TRACE` 时为 null，此时不渲染面板。
-   */
-  trace: AgentTrace | null
 }
 
 // ---------------- Vision ----------------

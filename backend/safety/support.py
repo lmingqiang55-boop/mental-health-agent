@@ -19,7 +19,7 @@
 from __future__ import annotations
 
 from backend.models.enums import SessionStage
-from backend.safety.schemas import SafetyRoute, SafetyVerdict
+from backend.safety.schemas import SafetyRoute, SafetyVerdict, split_support_message
 
 __all__ = [
     "SUPPORT_MODE_CONTINUATION_MESSAGE",
@@ -33,8 +33,9 @@ __all__ = [
 
 #: 已在支持模式时，若该轮 Safety 未给出面向用户的消息（例如判为 NORMAL），
 #: 用它保证学生仍然收到有意义的回应，而不是空气泡。
+#: 两句话分两行：按气泡协议拆成 2 条短消息，比挤成一整段更好读。
 SUPPORT_MODE_CONTINUATION_MESSAGE = (
-    "我还在。你不用急着说清楚，我们可以慢慢来。"
+    "我还在。你不用急着说清楚，我们可以慢慢来。\n"
     "如果你现在身边有人，可以让他们陪着你。"
 )
 
@@ -62,7 +63,7 @@ def safety_reply_messages(verdict: SafetyVerdict, *, already_halted: bool) -> li
     if verdict.messages:
         return list(verdict.messages)
     if already_halted:
-        return [SUPPORT_MODE_CONTINUATION_MESSAGE]
+        return split_support_message(SUPPORT_MODE_CONTINUATION_MESSAGE)
     if verdict.route is SafetyRoute.SAFETY_REVIEW:
         return [REVIEW_MODE_CONTINUATION_MESSAGE]
     return []
