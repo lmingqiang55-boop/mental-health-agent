@@ -19,8 +19,11 @@ from backend.core.screening_flow import (
 )
 from backend.core.multimodal_consistency import TurnDiscordance
 from backend.core.visual_acknowledgment import (
-    VisualAcknowledgment, select_visual_checkin, select_visual_observation,
-    select_visual_tone,
+    # VISUAL_MENTION_PHRASES / mentions_appearance 在视觉模块里定义、在这里再导出：
+    # 以前 dialogue_agent 与本文件各存一份同样内容的词表，改文案只会改到一处，
+    # 于是"允许说的"和"判定说没说出口"会悄悄分家。
+    VISUAL_MENTION_PHRASES, VisualAcknowledgment, mentions_appearance,
+    select_visual_checkin, select_visual_observation, select_visual_tone,
 )
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
@@ -47,10 +50,6 @@ class DialogueUnavailable(RuntimeError):
 
 class ScreeningFinished(RuntimeError):
     """A closed screening accepts no further ordinary chat turns."""
-
-
-#: 生成后用来判断回复是否真的把外观线索说了出口。
-VISUAL_MENTION_PHRASES = ("看起来", "看上去", "表情", "神情", "脸上", "显得")
 
 
 @dataclass(frozen=True)
@@ -137,14 +136,23 @@ def select_visual_channels(
 def finalize_visual_feedback(
     session: SessionState, channels: VisualChannels, reply: str,
 ) -> None:
-    """生成之后才敢记账：提到过就进冷却，免得连着几轮盯着表情说。"""
+    """生成之后才敢记账：**真的说出口了**才进冷却。
+
+    这一轮模型要是没提外观，学生什么都没听到，就不该把 4 轮冷却记在账上。
+    原实现连"没提到"（``generation_omitted``）也照样推进冷却，与本函数
+    "提到过就进冷却"的本意相反：模型沉默一次，后面 4 轮都不会再给线索，
+    演示里就会出现"素材明明有、全场一句外观关怀都没有"。现在改成说了才进
+    冷却，没说就留白，下一轮还能再试——而只要说了就一定会进冷却，所以
+    "连着几轮盯着表情说"仍然被挡住。
+    """
+    provided = (channels.acknowledgment is not None
+                or channels.discordance is not None
+                or channels.tone is not None)
+    mentioned = mentions_appearance(reply)
     if channels.acknowledgment is not None:
-        session.last_visual_observation_turn = session.turn_count
-        channels.feedback.reason = "mentioned" if any(
-            phrase in reply for phrase in VISUAL_MENTION_PHRASES
-        ) else "generation_omitted"
-    elif channels.discordance is not None or channels.tone is not None:
-        # 核对与语气同样算"提过一次外观"，要进冷却。
+        channels.feedback.reason = "mentioned" if mentioned else "generation_omitted"
+    # 本轮根本没给线索时不记账：回复里恰好出现"看起来"不该算作提过一次外观。
+    if provided and mentioned:
         session.last_visual_observation_turn = session.turn_count
 
 

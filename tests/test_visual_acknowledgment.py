@@ -4,13 +4,18 @@ import pytest
 
 from backend.api import chat
 from backend.agents.dialogue_agent import DialogueAgent
-from backend.core.dialogue_manager import DialogueManager
-from backend.core.visual_acknowledgment import choose_visual_acknowledgment
+from backend.core.dialogue_manager import (
+    DialogueManager, VisualChannels, finalize_visual_feedback,
+)
+from backend.core.visual_acknowledgment import (
+    choose_visual_acknowledgment, mentions_appearance,
+)
 from backend.core.session_manager import session_manager
 from backend.models.dialogue import DialogueAgentResponse
 from backend.models.dialogue import (
     DialogueAgentRequest, DialogueCurrentUserInput, DialogueDecision,
 )
+from backend.models.responses import VisualFeedback
 from backend.prompts.dialogue_prompt import build_dialogue_user_prompt
 from backend.models.enums import MessageRole
 from backend.models.requests import ChatRequest
@@ -189,3 +194,101 @@ def test_agent_rewrites_missing_visual_observation_without_fixed_prefix():
     result = _resolve_synchronous_stub(agent.generate_reply(request))
     assert result.reply == "你看起来有点紧张，最近睡眠怎么样？"
     assert len(client.prompts) == 2
+
+
+# ---------------------------------------------------------------------------
+# Phase 5：冷却只在**真的说出口**之后才推进
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("reply", [
+    "你看起来有点累。",
+    "感觉你今天没什么精神。",
+    "你似乎不太想聊这个。",
+    "你说还好，不过看你好像有点累，是这样吗？",
+    "看你脸上没什么表情。",
+])
+def test_mentions_appearance_accepts_every_prompt_suggested_wording(reply):
+    """提示词三种通道各自建议的说法都要认，否则合规写法会被误判成"没提到"。"""
+    assert mentions_appearance(reply)
+
+
+@pytest.mark.parametrize("reply", [
+    "最近睡得怎么样？",
+    "听起来挺累的。我们继续聊聊情绪。",
+])
+def test_mentions_appearance_rejects_replies_without_an_appearance_cue(reply):
+    assert not mentions_appearance(reply)
+
+
+def test_omitted_appearance_does_not_burn_the_cooldown():
+    """模型沉默一次，不该让学生白丢接下来四轮的机会。"""
+    session, snapshot = _visual_session()
+    session.turn_count = 2
+    channels = VisualChannels(feedback=VisualFeedback(reason="eligible"),
+                              acknowledgment="sad")
+
+    finalize_visual_feedback(session, channels, "最近睡得怎么样？")
+
+    assert channels.feedback.reason == "generation_omitted"
+    assert session.last_visual_observation_turn is None
+    session.turn_count = 3
+    assert choose_visual_acknowledgment(session, "turn", snapshot) == "sad"
+
+
+def test_mentioned_appearance_starts_the_cooldown():
+    session, snapshot = _visual_session()
+    session.turn_count = 2
+    channels = VisualChannels(feedback=VisualFeedback(reason="eligible"),
+                              acknowledgment="sad")
+
+    finalize_visual_feedback(session, channels, "你看起来不太开心，最近睡眠怎么样？")
+
+    assert channels.feedback.reason == "mentioned"
+    assert session.last_visual_observation_turn == 2
+    for _ in range(3):
+        session.turn_count += 1
+        assert choose_visual_acknowledgment(session, "turn", snapshot) is None
+    session.turn_count += 1
+    assert choose_visual_acknowledgment(session, "turn", snapshot) == "sad"
+
+
+def test_tone_cue_only_starts_the_cooldown_once_it_is_spoken():
+    """语气通道同样：说了才进冷却，没说下一轮还能再提。"""
+    session, _ = _visual_session()
+    session.turn_count = 2
+    channels = VisualChannels(feedback=VisualFeedback(reason="tone"), tone="low")
+
+    finalize_visual_feedback(session, channels, "最近是不是挺累的？")
+    assert session.last_visual_observation_turn is None
+
+    finalize_visual_feedback(
+        session, channels, "感觉你今天没什么精神，最近睡得怎么样？")
+    assert session.last_visual_observation_turn == 2
+
+
+def test_discordance_checkin_only_starts_the_cooldown_once_it_is_spoken():
+    from backend.core.multimodal_consistency import TurnDiscordance
+
+    session, _ = _visual_session()
+    session.turn_count = 2
+    channels = VisualChannels(
+        feedback=VisualFeedback(reason="discordance"),
+        discordance=TurnDiscordance(text_polarity=0.4, vision_valence=-0.6))
+
+    finalize_visual_feedback(session, channels, "那挺好的呀，最近都在忙什么？")
+    assert session.last_visual_observation_turn is None
+
+    finalize_visual_feedback(
+        session, channels, "你说还好，不过看你好像有点累，是这样吗？")
+    assert session.last_visual_observation_turn == 2
+
+
+def test_unrelated_mention_without_a_cue_does_not_start_the_cooldown():
+    """本轮根本没给线索时，回复里恰好出现"看起来"不算提过一次外观。"""
+    session, _ = _visual_session()
+    session.turn_count = 2
+    channels = VisualChannels(feedback=VisualFeedback(reason="missing_segment"))
+
+    finalize_visual_feedback(session, channels, "你看起来挺开心的呀。")
+
+    assert session.last_visual_observation_turn is None

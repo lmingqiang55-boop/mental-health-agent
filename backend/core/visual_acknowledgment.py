@@ -53,6 +53,30 @@ TONE_LABELS: dict[VisualTone, str] = {
 """整体语气的两档说法；与 :data:`VISUAL_LABELS` 一样只保留这一份。"""
 ALIASES = {"happiness": "happy", "sadness": "sad", "fear": "fearful", "anger": "angry"}
 
+VISUAL_MENTION_PHRASES: tuple[str, ...] = (
+    "看起来", "看上去", "显得", "表情", "神情", "脸上",
+    "感觉你", "看你好像", "你似乎", "没什么精神", "没精神",
+)
+"""回复里出现哪些说法，才算"真的把外观说出口了"。
+
+这张表只用于一件事：判断生成结果有没有兑现本轮给出的外观线索。两个方向都要
+看住，所以**宁可宽一点**：
+
+- 判成"没提到"会触发一次重写，也会让冷却不推进（下一轮还会再给线索）；
+- 判成"提到了"只意味着进冷却，不会拦掉任何东西。
+
+表里的词条对应提示词三种通道各自建议的说法（见
+``backend/prompts/dialogue_prompt._visual_section``）：报出情绪名字时用
+"你看起来……"，只报语气时用"你看起来有点累""感觉你今天没什么精神"，核对
+矛盾时用"看你好像有点累"。以前这张表只有前六个词，于是"感觉你今天没什么精神"
+这种**完全合规**的写法也会被判成"没提到"，白白触发一次重写。
+"""
+
+
+def mentions_appearance(reply: str) -> bool:
+    """这条回复是否真的提到了外观。"""
+    return any(phrase in reply for phrase in VISUAL_MENTION_PHRASES)
+
 
 @dataclass(frozen=True)
 class VisualCheckIn:

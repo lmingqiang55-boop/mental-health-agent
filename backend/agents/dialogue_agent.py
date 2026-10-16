@@ -29,6 +29,7 @@ from difflib import SequenceMatcher
 import json
 import re
 
+from backend.core.visual_acknowledgment import mentions_appearance
 from backend.models.dialogue import (
     MAX_REPLY_MESSAGES,
     DialogueAgentRequest,
@@ -277,13 +278,14 @@ class DialogueAgent:
                             if message.role == "assistant"}
         recent_replies = [message.content.strip() for message in request.conversation_history
                           if message.role == "assistant"]
-        visual_phrases = ("看起来", "看上去", "表情", "神情", "脸上", "显得")
         repeated = reply in previous_replies
         repeated_question = _near_repeated_question(reply, recent_replies)
         mechanical_opening = _repeated_opening(reply, recent_replies)
         closing_question = request.finish_screening and bool(re.search(r"[？?]", reply))
+        # 这里只管"报出情绪名字"这条通道；语气与核对通道的判词由
+        # backend/core/visual_acknowledgment 统一给出，不再各写一份。
         missed_visual = (request.visual_observation is not None
-                         and not any(phrase in reply for phrase in visual_phrases))
+                         and not mentions_appearance(reply))
         if repeated or repeated_question or mechanical_opening or closing_question or missed_visual:
             requirements = []
             if repeated:
