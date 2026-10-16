@@ -159,6 +159,12 @@ class ChatReceipt(BaseModel):
 class Message(BaseModel):
     role: MessageRole
     content: str
+    #: 该条助手消息的气泡（1~3 条）。``content`` 是它们的换行拼接。
+    #:
+    #: 一轮用户输入**只对应一条 Message**，多条气泡存在同一个 Message 里，
+    #: 因此轮次计数、幂等回执、TTS 按 turn_count 取回复这三件事都不受影响。
+    #: 用户消息恒为空列表。
+    messages: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_now)
     # 该消息对应的句级多模态快照（可选），不存原始音视频
     vision_snapshot: VisionState | None = None

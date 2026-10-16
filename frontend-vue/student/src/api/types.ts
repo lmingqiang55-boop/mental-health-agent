@@ -97,6 +97,12 @@ export interface SpeechMetadata {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'counselor' | 'system'
   content: string
+  /**
+   * 该条助手消息的气泡（1~3 条）。
+   * `content` 是它们的换行拼接；一轮用户输入只对应一条消息，气泡不额外占轮次。
+   * 本次改动之前的历史记录可能没有这个字段，此时按 `[content]` 处理。
+   */
+  messages?: string[]
   created_at?: string
   vision_snapshot?: VisionState | null
   audio_snapshot?: AudioState | null
@@ -175,12 +181,19 @@ export interface VisualFeedback {
 
 export interface ChatResponse {
   session_id: string
+  /**
+   * 本轮回复全文（= `messages` 用换行拼接）。
+   * 仅作向后兼容与降级文本使用；**前端渲染气泡只读 `messages`**，不要两者都渲染。
+   */
   reply: string
   next_strategy: string
   current_stage: Stage
   /** 本轮安全结论。安全分支下 reply 为 messages[0]。 */
   safety: SafetyVerdict | null
-  /** 面向用户的消息：安全分支 1~3 条；普通对话 1 条且等于 reply。 */
+  /**
+   * 本轮面向学生的消息（1~3 条），一条气泡一条。
+   * Safety 分支为 1~3 条；普通对话由 Dialogue 决定条数（也是 1~3 条）。
+   */
   messages: string[]
   turn_count: number
   /** 本轮是否收尾：true 表示停止普通追问、可生成结果。 */

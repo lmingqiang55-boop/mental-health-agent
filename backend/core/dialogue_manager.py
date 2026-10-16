@@ -25,9 +25,9 @@ from backend.core.visual_acknowledgment import (
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.models.dialogue import (
-    DialogueAgentRequest, DialogueCurrentUserInput, DialogueDecision,
-    DialogueHistoryMessage, DialogueRouteDecision, DialogueRouteRequest,
-    DialogueVisual, DialogueVisualDiscordance,
+    DialogueAgentRequest, DialogueAgentResponse, DialogueCurrentUserInput,
+    DialogueDecision, DialogueHistoryMessage, DialogueRouteDecision,
+    DialogueRouteRequest, DialogueVisual, DialogueVisualDiscordance,
 )
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.responses import DialogueResponsePayload, VisualFeedback
@@ -39,6 +39,7 @@ from backend.policy.client import (
     PolicyDecision,
     get_policy_client,
 )
+
 
 class DialogueUnavailable(RuntimeError):
     """The dialogue generation service cannot produce a usable reply."""
@@ -148,12 +149,16 @@ def finalize_visual_feedback(
 
 
 def open_payload(
-    session: SessionState, reply: str, next_strategy: str,
+    session: SessionState, response: DialogueAgentResponse, next_strategy: str,
     visual_feedback: VisualFeedback,
 ) -> DialogueResponsePayload:
-    """普通轮次的响应载荷；legacy 与 graph 共用，避免两处各写一份。"""
+    """普通轮次的响应载荷；legacy 与 graph 共用，避免两处各写一份。
+
+    ``response.messages`` 是本轮的气泡（1~3 条），``response.reply`` 是全文投影。
+    """
     return DialogueResponsePayload(
-        reply=reply, next_strategy=next_strategy,
+        reply=response.reply, messages=response.messages,
+        next_strategy=next_strategy,
         current_stage=session.current_stage.value,
         screening_progress=session.screening_progress,
         visual_feedback=visual_feedback,
@@ -161,11 +166,12 @@ def open_payload(
 
 
 def closing_payload(
-    session: SessionState, reply: str, ending: str,
+    session: SessionState, response: DialogueAgentResponse, ending: str,
 ) -> DialogueResponsePayload:
     """收尾轮次的响应载荷；调用前调用方须已推进会话阶段。"""
     return DialogueResponsePayload(
-        reply=reply, next_strategy="结束本次筛查",
+        reply=response.reply, messages=response.messages,
+        next_strategy="结束本次筛查",
         current_stage=session.current_stage.value,
         assessment_ready=True, completion_reason=ending,
         screening_progress=session.screening_progress,
@@ -205,11 +211,11 @@ class DialogueManager:
         decision = limit_topic(session, self.decide(session))
         channels = select_visual_channels(
             session, utterance_id, current_vision, user_text)
-        reply = self.reply_for_decision(
+        response = self.reply_for_decision(
             session, user_text, current_vision, decision, channels)
-        finalize_visual_feedback(session, channels, reply)
+        finalize_visual_feedback(session, channels, response.reply)
         return open_payload(
-            session, reply, decision.actions[-1].value, channels.feedback)
+            session, response, decision.actions[-1].value, channels.feedback)
 
     # -- 供 backend.graph 复用的公开入口 ---------------------------------
     #
@@ -223,20 +229,21 @@ class DialogueManager:
     def reply_for_decision(self, session: SessionState, user_text: str,
                            current_vision: VisionState | None,
                            decision: PolicyDecision,
-                           channels: VisualChannels) -> str:
-        """按决策生成回复，并带上本轮选中的视觉线索。"""
+                           channels: VisualChannels) -> DialogueAgentResponse:
+        """按决策生成回复（1~3 条消息），并带上本轮选中的视觉线索。"""
         return self._generate_reply(
             session, user_text, current_vision, decision, channels.acknowledgment,
             visual_discordance=channels.discordance, visual_tone=channels.tone)
 
     def closing_reply(self, user_text: str, session: SessionState,
-                      current_vision: VisionState | None, ending: str) -> str:
+                      current_vision: VisionState | None,
+                      ending: str) -> DialogueAgentResponse:
         """收尾轮的回复正文；同时推进会话阶段与收尾原因。"""
-        reply = self._generate_reply(
+        response = self._generate_reply(
             session, user_text, current_vision, None, None, closing_reason=ending)
         session.current_stage = SessionStage.ASSESSMENT_READY
         session.screening_progress.end_reason = ending
-        return reply
+        return response
 
     def route_turn(self, session: SessionState, user_text: str,
                    current_vision: VisionState | None) -> DialogueRouteDecision:
@@ -312,8 +319,8 @@ class DialogueManager:
                          current_vision: VisionState | None,
                          ending: str) -> DialogueResponsePayload:
         """收尾轮：只提示生成结果、不再提问，也不选集视觉线索。"""
-        reply = self.closing_reply(user_text, session, current_vision, ending)
-        return closing_payload(session, reply, ending)
+        response = self.closing_reply(user_text, session, current_vision, ending)
+        return closing_payload(session, response, ending)
 
     # -- 决策 ------------------------------------------------------------
 
@@ -333,8 +340,12 @@ class DialogueManager:
                         visual_ack: VisualAcknowledgment | None,
                         *, closing_reason: str | None = None,
                         visual_discordance: TurnDiscordance | None = None,
-                        visual_tone: str | None = None) -> str:
-        """Pass the selected actions to the dialogue Agent; never use canned questions."""
+                        visual_tone: str | None = None) -> DialogueAgentResponse:
+        """Pass the selected actions to the dialogue Agent; never use canned questions.
+
+        返回 :class:`DialogueAgentResponse`（1~3 条 ``messages`` + 全文 ``reply``），
+        由调用方决定怎么消费；本函数不写会话状态。分段的唯一来源仍是 Dialogue Agent。
+        """
         previous = history_before_turn(session, user_text)
         actions = [action.value for action in decision.actions] if decision else ["结束本次筛查"]
         topics = [action for action in actions if action != "共情安慰"]
@@ -362,7 +373,7 @@ class DialogueManager:
         )
         if self._dialogue_agent is not None:
             try:
-                return asyncio.run(self._dialogue_agent.generate_reply(request)).reply
+                return asyncio.run(self._dialogue_agent.generate_reply(request))
             except (DialogueAgentError, DeepSeekClientError) as exc:
                 raise DialogueUnavailable("对话 Agent 生成失败") from exc
 
@@ -371,9 +382,9 @@ class DialogueManager:
         except DeepSeekConfigError as exc:
             raise DialogueUnavailable("对话 Agent 缺少有效的 DeepSeek 配置") from exc
 
-        async def generate() -> str:
+        async def generate() -> DialogueAgentResponse:
             try:
-                return (await DialogueAgent(client).generate_reply(request)).reply
+                return await DialogueAgent(client).generate_reply(request)
             finally:
                 await client.client.close()
 

@@ -130,7 +130,9 @@ async def synthesize_reply(request: SynthesizeRequest) -> Response:
                 "code": "REPLY_NOT_FOUND", "message": "这轮回复不存在。"})
         text = opening.content
     else:
-        text = _reply_for_turn(session, request.turn_count)
+        # 一轮可能有 1~3 条气泡，**整轮一起合成**：既不漏读，也不会因为
+        # reply 兼容字段而把同一句话读两遍（reply 从不单独合成）。
+        text = _text_for_turn(session, request.turn_count)
     if not text.strip() or len(text) > 2000:
         raise HTTPException(status_code=422, detail={
             "code": "INVALID_TTS_TEXT", "message": "这轮回复无法合成语音。"})
@@ -146,16 +148,30 @@ async def synthesize_reply(request: SynthesizeRequest) -> Response:
                     headers={"Cache-Control": "no-store"})
 
 
-def _reply_for_turn(session: SessionState, turn_count: int) -> str:
-    replies = []
+def _turn_bubbles(session: SessionState, turn_count: int) -> list[str]:
+    """取第 ``turn_count`` 轮助手回复的全部气泡（保持顺序）。
+
+    一轮用户输入只对应**一条** assistant 消息（见 ``backend/api/chat.py``），
+    所以这里按"第几条 assistant 回复"定位，而不是按消息条数——气泡再多，
+    也只算一条回复、一个轮次。
+
+    旧历史里 ``messages`` 为空（本次改动之前的记录）时退回 ``content``。
+    """
+    bubbles: list[list[str]] = []
     user_turns = 0
     for message in session.conversation_history:
         if message.role == MessageRole.USER:
             user_turns += 1
-        elif message.role == MessageRole.ASSISTANT and user_turns > len(replies):
+        elif message.role == MessageRole.ASSISTANT and user_turns > len(bubbles):
             # The fixed opening question precedes the first user turn.
-            replies.append(message.content)
-    if turn_count > session.turn_count or turn_count > len(replies):
+            stored = [item.strip() for item in message.messages if item and item.strip()]
+            bubbles.append(stored or [message.content])
+    if turn_count > session.turn_count or turn_count > len(bubbles):
         raise HTTPException(status_code=404, detail={
             "code": "REPLY_NOT_FOUND", "message": "这轮回复不存在。"})
-    return replies[turn_count - 1]
+    return bubbles[turn_count - 1]
+
+
+def _text_for_turn(session: SessionState, turn_count: int) -> str:
+    """整轮合成用的文本：把所有气泡用换行连起来，一条都不落。"""
+    return "\n".join(_turn_bubbles(session, turn_count))

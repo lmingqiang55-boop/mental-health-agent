@@ -174,25 +174,32 @@ class TurnNodes:
         return {"channels": channels}
 
     def dialogue_execute(self, state: TurnState) -> dict:
-        """按决策生成回复，并在生成后记录外观是否真的被提及（影响冷却）。"""
+        """按决策生成回复，并在生成后记录外观是否真的被提及（影响冷却）。
+
+        生成结果带 1~3 条气泡（``reply_messages``）；冷却判定仍按 ``reply``
+        全文做，与拆分前一致——分段只改变"怎么显示"，不改变"检查什么"。
+        """
         session = state["session"]
         channels = state.get("channels")
         if channels is None:  # pragma: no cover - 拓扑保证不会发生
             raise RuntimeError("dialogue_execute 缺少视觉线索状态")
-        reply = self._manager.reply_for_decision(
+        response = self._manager.reply_for_decision(
             session, state["user_text"], state.get("current_vision"),
             state["decision"], channels)
-        finalize_visual_feedback(session, channels, reply)
-        return {"reply": reply, "visual_feedback": channels.feedback}
+        finalize_visual_feedback(session, channels, response.reply)
+        return {"response": response, "reply": response.reply,
+                "reply_messages": response.messages,
+                "visual_feedback": channels.feedback}
 
     # -- 收尾轮次 --------------------------------------------------------
 
     def dialogue_close(self, state: TurnState) -> dict:
         """收尾轮：只提示生成结果、不再提问，也不选集视觉线索。"""
-        reply = self._manager.closing_reply(
+        response = self._manager.closing_reply(
             state["user_text"], state["session"], state.get("current_vision"),
             state["ending"])
-        return {"reply": reply}
+        return {"response": response, "reply": response.reply,
+                "reply_messages": response.messages}
 
     # -- 出口 ------------------------------------------------------------
 
@@ -201,7 +208,7 @@ class TurnNodes:
         session = state["session"]
         ending = state.get("ending")
         if ending is not None:
-            payload = closing_payload(session, state["reply"], ending)
+            payload = closing_payload(session, state["response"], ending)
         else:
             decision = state.get("decision")
             if decision is None:  # pragma: no cover - 拓扑保证不会发生
@@ -209,6 +216,6 @@ class TurnNodes:
             feedback = state.get("visual_feedback")
             if feedback is None:  # pragma: no cover - 拓扑保证不会发生
                 raise RuntimeError("commit 缺少视觉反馈")
-            payload = open_payload(session, state["reply"],
+            payload = open_payload(session, state["response"],
                                    decision.actions[-1].value, feedback)
         return {"payload": payload}

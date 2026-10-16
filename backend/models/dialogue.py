@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 __all__ = [
+    "MAX_REPLY_MESSAGES",
     "DialogueVisual",
     "DialogueHistoryMessage",
     "DialogueUserMemory",
@@ -28,6 +29,12 @@ __all__ = [
     "DialogueRouteDecision",
     "DialogueRouteRequest",
 ]
+
+#: 一轮回复最多拆成几条独立消息（聊天气泡）。
+#:
+#: 上限刻意很小：气泡的作用是让对话节奏像真实聊天，不是把一段话切碎。
+#: 模型可以自主选择 1~3 条，但超过就合并——**不丢正文**。
+MAX_REPLY_MESSAGES = 3
 
 
 class DialogueVisual(BaseModel):
@@ -184,9 +191,46 @@ class DialogueAgentRequest(BaseModel):
 
 
 class DialogueAgentResponse(BaseModel):
-    """Dialogue Agent 的输出：只需要一句真正对用户说的话。"""
+    """Dialogue Agent 的输出：本轮要对用户说的话，拆成 1~3 条独立消息。
 
-    reply: str = Field(..., description="下一句真正对用户说的话")
+    【哪个字段是权威】``messages`` 是权威字段，**由模型自己决定分段**（见
+    ``DIALOGUE_AGENT_SYSTEM_PROMPT`` 的【输出格式】）。``reply`` 是它的向后兼容
+    投影：用换行把 ``messages`` 拼回一段完整文本。
+
+    这样安排有两个好处：
+
+    1. 既有的调用方、离线桩、质量检查与历史记录都继续按"一段文本"工作，
+       不需要为了多条消息改一遍；
+    2. 前端只按 ``messages`` 渲染气泡，**不再单独渲染 ``reply``**，
+       因此不会出现同一句话显示两遍。
+
+    校验器强制两条不变量：``messages`` 至少一条非空、且
+    ``reply == "\\n".join(messages)``。因此不存在"reply 与 messages 各说各话"。
+    """
+
+    reply: str = Field(
+        default="", description="本轮回复全文（等价于 messages 用换行拼接）"
+    )
+    messages: List[str] = Field(
+        default_factory=list,
+        description=f"1~{MAX_REPLY_MESSAGES} 条独立消息，按顺序显示为聊天气泡",
+    )
+
+    @model_validator(mode="after")
+    def _normalize_messages(self) -> "DialogueAgentResponse":
+        items = [item.strip() for item in self.messages if item and item.strip()]
+        if not items:
+            # 只给了 reply（例如离线桩、旧调用方）：退化成单条消息。
+            items = [self.reply.strip()]
+        if not items[0]:
+            raise ValueError("reply 与 messages 不能同时为空")
+        if len(items) > MAX_REPLY_MESSAGES:
+            # 超上限时合并而不是截断：正文一个字都不能少。
+            items = items[:MAX_REPLY_MESSAGES - 1] + [
+                "\n".join(items[MAX_REPLY_MESSAGES - 1:])]
+        self.messages = items
+        self.reply = "\n".join(items)
+        return self
 
 
 class DialogueRouteDecision(BaseModel):

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { audioApi, chatApi, sessionApi } from '@/api'
 import { isApiError } from '@/api/http'
@@ -17,10 +17,20 @@ import PxEmpty from '@/components/base/PxEmpty.vue'
 const DEFAULT_OPENER = '你好呀，我是小晴～ 我们随便聊聊最近的心情和状态，好吗？'
 /** 录音 59s 保护（后端音频时长上限 60s）。 */
 const RECORD_GUARD_MS = 59_000
+/**
+ * 同一轮里第 2、3 条气泡的出现间隔。
+ * 只是上屏节奏，**不额外调用任何模型**：内容在第一次响应里就已经全部拿到。
+ */
+const BUBBLE_REVEAL_MS = 420
 
 interface Msg {
   role: 'user' | 'assistant' | 'system'
+  /** 该条消息的完整文本（= bubbles 的换行拼接）。 */
   text: string
+  /** 要显示的气泡；单条消息就是 [text]。 */
+  bubbles: string[]
+  /** 目前已显示几条气泡（多条时逐条出现）。 */
+  shown: number
 }
 
 const route = useRoute()
@@ -58,6 +68,29 @@ const camFailed = ref(false)
 const manualText = ref('')
 let guard = 0
 
+/** 气泡逐个出现的定时器；离开页面/重新开始时必须清掉。 */
+const revealTimers = new Set<number>()
+/** 消息区末尾的哨兵元素，用于把最新气泡滚进视野。 */
+const chatEndRef = ref<HTMLElement | null>(null)
+
+async function scrollToEnd() {
+  await nextTick()
+  chatEndRef.value?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+}
+
+function clearRevealTimers() {
+  for (const id of revealTimers) window.clearTimeout(id)
+  revealTimers.clear()
+}
+
+/** 把一个后端消息对象归一成"至少一条气泡"。 */
+function toBubbles(text: string, items?: string[] | null): string[] {
+  const list = (items?.length ? items : [text])
+    .map((item) => (item ?? '').trim())
+    .filter(Boolean)
+  return list.length ? list : [text]
+}
+
 /**
  * 时间轴原点：整场会话只取一次 performance.now()。
  * 录音的 recording_start_ms/end_ms 与视觉 segment 的 start_ms/end_ms 都相对它计算，
@@ -88,8 +121,29 @@ const visionStatus = computed<{ tone: 'off' | 'warn' | 'ok'; text: string }>(() 
   return { tone: 'ok', text: `摄像头已开启 · 已上传 ${visionFrames.value} 帧` }
 })
 
-function pushMessage(role: Msg['role'], text: string) {
-  messages.value.push({ role, text })
+function pushMessage(role: Msg['role'], text: string, items?: string[] | null) {
+  const bubbles = toBubbles(text, items)
+  messages.value.push({ role, text, bubbles, shown: bubbles.length })
+  void scrollToEnd()
+}
+
+/**
+ * 追加一条助手消息：第 1 条气泡立即上屏，其余按 BUBBLE_REVEAL_MS 逐条出现。
+ * 历史恢复时走 pushMessage（一次全部显示），不会重新"演"一遍。
+ */
+function pushAssistantMessage(text: string, items?: string[] | null) {
+  const bubbles = toBubbles(text, items)
+  const msg: Msg = { role: 'assistant', text, bubbles, shown: 1 }
+  messages.value.push(msg)
+  void scrollToEnd()
+  for (let index = 1; index < bubbles.length; index += 1) {
+    const id = window.setTimeout(() => {
+      revealTimers.delete(id)
+      msg.shown = Math.min(index + 1, bubbles.length)
+      void scrollToEnd()
+    }, BUBBLE_REVEAL_MS * index)
+    revealTimers.add(id)
+  }
 }
 
 async function init() {
@@ -103,10 +157,11 @@ async function init() {
     const state = await sessionApi.get(sid)
     assess.setSession(state.session_id, state.turn_count)
     for (const m of state.conversation_history) {
-      if (m.role === 'user' || m.role === 'assistant') pushMessage(m.role, m.content)
+      if (m.role === 'user' || m.role === 'assistant') pushMessage(m.role, m.content, m.messages)
     }
     opener.value = messages.value.find((m) => m.role === 'assistant')?.text ?? DEFAULT_OPENER
     if (!messages.value.length) pushMessage('assistant', opener.value)
+    void scrollToEnd()
     // 已聊过（续测）：无需再点「开始对话」
     started.value = state.turn_count > 0
     // 续测时若后端已收尾：直接进入收尾态，等待用户生成结果。
@@ -174,17 +229,21 @@ async function stopCapture() {
 }
 
 /**
- * 统一处理 /api/chat 结果：上屏收尾回复 → 同步轮次 → 检测收尾 → 播报。
+ * 统一处理 /api/chat 结果：逐条上屏气泡 → 同步轮次 → 检测收尾 → 播报。
  * 收尾（assessment_ready）时停止输入与录音、关闭摄像头，并保留收尾语音。
+ *
+ * 语音按**整轮**合成一次（`/api/tts` 用 turn_count 定位这一轮的全部气泡），
+ * 因此不会漏读第 2、3 条，也不会因为 reply 兼容字段把同一句话读两遍。
  */
 async function applyChatResult(res: ChatResponse) {
-  pushMessage('assistant', res.reply)
+  const bubbles = toBubbles(res.reply, res.messages)
+  pushAssistantMessage(res.reply, bubbles)
   assess.setSession(sid, res.turn_count)
   if (res.assessment_ready) {
     closing.value = true
     await stopCapture()
   }
-  await speak(sid, res.turn_count, res.reply)
+  await speak(sid, res.turn_count, bubbles.join('\n'))
 }
 
 /** 结束说话：视觉分段 → 转写 → 出题(chat) → 播报。 */
@@ -290,6 +349,7 @@ async function sendManualText() {
 }
 
 async function stopAll() {
+  clearRevealTimers()
   await stopCapture()
   stopTts()
 }
@@ -317,6 +377,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (guard) window.clearTimeout(guard)
+  clearRevealTimers()
 })
 
 onBeforeRouteLeave(() => {
@@ -365,17 +426,27 @@ onBeforeRouteLeave(() => {
       <!-- 采集用 video：正式测评不显示预览（设备检查页已确认过），仅用于取帧上报。 -->
       <video ref="videoRef" class="session__cam" muted playsinline autoplay />
 
-      <!-- 消息区 -->
+      <!-- 消息区：一轮可有多条气泡，同一轮的气泡贴得更近 -->
       <div class="session__chat">
-        <PxBubble
+        <div
           v-for="(m, i) in messages"
           :key="i"
-          class="xq-fade-up"
-          :role="m.role"
-          :speaking="speaking && m.role === 'assistant' && i === messages.length - 1"
+          class="session__turn"
+          :class="`session__turn--${m.role}`"
         >
-          {{ m.text }}
-        </PxBubble>
+          <PxBubble
+            v-for="(b, j) in m.bubbles.slice(0, m.shown)"
+            :key="`${i}-${j}`"
+            class="xq-fade-up"
+            :role="m.role"
+            :speaking="
+              speaking && m.role === 'assistant' && i === messages.length - 1 && j === m.shown - 1
+            "
+          >
+            {{ b }}
+          </PxBubble>
+        </div>
+        <div ref="chatEndRef" class="session__chat-end" aria-hidden="true" />
       </div>
 
       <!-- 录音区：收尾后切换为「生成结果」 -->
@@ -535,6 +606,21 @@ onBeforeRouteLeave(() => {
   flex: 1;
   min-height: 140px;
   padding: var(--xq-sp-2) 0 var(--xq-sp-4);
+}
+
+/* 一轮 = 一个 turn 容器：轮与轮之间 var(--xq-sp-3)，同轮气泡之间更近，
+   让人一眼看出"这几条是同一个人在连着说"。 */
+.session__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.session__turn--user {
+  align-items: flex-end;
+}
+.session__chat-end {
+  height: 1px;
+  flex: 0 0 auto;
 }
 
 /* ---- 录音区 ---- */

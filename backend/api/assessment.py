@@ -153,6 +153,9 @@ def _prepare_history(session: SessionState, incoming) -> list[Message]:
             # 漏掉这一项会让「提交评估输入」把整个会话的安全记录抹掉，
             # 造成安全检测空窗。
             data["safety"] = original.safety
+            # 气泡同理：这是显示层的权威数据，评估输入里没有它，
+            # 不恢复会让"生成结果"把整场对话的多气泡退回单气泡。
+            data["messages"] = original.messages
         message = Message.model_validate(data)
         if message.speech is not None and message.utterance_id is None:
             raise ValueError("录音元数据需要 utterance_id")

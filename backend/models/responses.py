@@ -1,6 +1,6 @@
 """API 响应体模型。"""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.models.assessment import (
     CommunicationMessage,
@@ -39,7 +39,11 @@ class DialogueResponsePayload(BaseModel):
     **不含风险字段**：对话安全由 ``backend/safety`` 的 Safety Agent 单独产出，
     见 :class:`ChatResponse` 的 ``safety`` 字段。评估报告的风险字段由
     ``backend/safety/projection.py`` 从安全结论单向投影，与本响应无关。
+
+    ``messages`` 是本轮真实要显示的气泡（1~3 条），``reply`` 是向后兼容的
+    全文投影。**前端只按 messages 渲染**，不得两者都渲染。
     """
+
     reply: str
     next_strategy: str
     current_stage: str
@@ -47,6 +51,19 @@ class DialogueResponsePayload(BaseModel):
     completion_reason: str | None = None
     screening_progress: ScreeningProgress = Field(default_factory=ScreeningProgress)
     visual_feedback: VisualFeedback = Field(default_factory=VisualFeedback)
+    #: 本轮面向学生的消息（1~3 条）。为空时按单条 ``reply`` 处理，见校验器。
+    messages: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _messages_fall_back_to_reply(self) -> "DialogueResponsePayload":
+        """保证 ``messages`` 永不为空。
+
+        调用方忘记传 messages 时退化成 ``[reply]``，这样消费方（前端、TTS、
+        历史记录）只需要处理"至少一条"，不必再判断"是不是旧响应"。
+        """
+        items = [item.strip() for item in self.messages if item and item.strip()]
+        self.messages = items or [self.reply]
+        return self
 
 
 class ChatResponse(DialogueResponsePayload):

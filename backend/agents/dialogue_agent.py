@@ -30,6 +30,7 @@ import json
 import re
 
 from backend.models.dialogue import (
+    MAX_REPLY_MESSAGES,
     DialogueAgentRequest,
     DialogueAgentResponse,
     DialogueRouteDecision,
@@ -43,7 +44,11 @@ from backend.prompts.dialogue_prompt import (
 )
 
 __all__ = ["DialogueAgent", "DialogueAgentError", "parse_route_decision",
-           "route_fallback"]
+           "parse_reply_messages", "route_fallback"]
+
+#: 行首的列表符号或编号。模型有时会用 ``-`` / ``1.`` 分行，解析时剥掉，
+#: 免得气泡正文里带出这些符号。**只清理符号，不改动文字**。
+_MESSAGE_MARKER = re.compile(r"^\s*(?:[-*•·—]|\d+\s*[.、)）])\s*")
 
 #: 原因码按"它暗示的方向"分成两组，用来识别布尔值与理由自相矛盾的情况。
 #: 前一组说"当前话题还能继续"，后一组说"需要新方向"。
@@ -82,6 +87,60 @@ def _repeated_opening(reply: str, previous: list[str]) -> bool:
         return False
     return any(all(text.strip().startswith(prefix) for text in [*previous[-2:], reply])
                for prefix in ("听你这么说", "听起来", "嗯，", "嗯,"))
+
+
+def parse_reply_messages(content: str) -> list[str]:
+    """把模型返回的文本解析成 1~3 条独立消息（**每条消息单独占一行**）。
+
+    这是本阶段分段的**唯一来源**：换行位置由模型自己决定。后端刻意不做
+    "按句号/逗号切分"这类机械拆分——那会把一段完整的话切成语义残缺的碎片，
+    与"由 Dialogue 决定分段"的约定相反。
+
+    容错（都只做清理，不增删正文）：
+
+    - 整段被 markdown 代码围栏包住时去掉围栏；
+    - 丢弃空行；
+    - 剥掉行首的列表符号或编号（``-``、``•``、``1.``、``1、``）。
+
+    条数超过 :data:`~backend.models.dialogue.MAX_REPLY_MESSAGES` 时**合并**
+    多余的行，而不是截断。返回 ``[]`` 表示模型什么都没说，由调用方决定如何处理。
+    """
+    if not isinstance(content, str):
+        return []
+    text = content.strip()
+    if not text:
+        return []
+
+    lines = text.splitlines()
+    if (len(lines) >= 3 and lines[0].strip().startswith("```")
+            and lines[-1].strip() == "```"):
+        lines = lines[1:-1]
+
+    messages: list[str] = []
+    for line in lines:
+        cleaned = _MESSAGE_MARKER.sub("", line).strip()
+        if cleaned:
+            messages.append(cleaned)
+    if not messages:
+        return []
+    if len(messages) > MAX_REPLY_MESSAGES:
+        messages = messages[:MAX_REPLY_MESSAGES - 1] + [
+            "\n".join(messages[MAX_REPLY_MESSAGES - 1:])]
+    return messages
+
+
+def _reply_and_messages(content: str, *, repeated: bool = False) -> tuple[str, list[str]]:
+    """解析模型输出；空内容按调用时机转成对应的 :class:`DialogueAgentError`。
+
+    ``repeated=True`` 时用"重写后仍然为空"的措辞，与首次生成为空的报错区分开，
+    便于日志判断到底是哪一步失败。
+    """
+    messages = parse_reply_messages(content or "")
+    if not messages:
+        raise DialogueAgentError(
+            "Dialogue Agent repeated an earlier reply." if repeated
+            else "Dialogue Agent generated an empty reply.")
+    return "\n".join(messages), messages
 
 
 def route_fallback(reason: str) -> DialogueRouteDecision:
@@ -185,31 +244,33 @@ class DialogueAgent:
         self,
         request: DialogueAgentRequest,
     ) -> DialogueAgentResponse:
-        """生成下一句回复。
+        """生成下一轮回复（1~3 条独立消息）。
 
         Args:
             request: 完整结构化输入（history / memory / decision / current_input）。
 
         Returns:
-            DialogueAgentResponse，其 reply 已 strip 且保证非空。
+            :class:`DialogueAgentResponse`，其 ``messages`` 已 strip、保证非空且
+            不超过条数上限，``reply`` 是它的换行拼接。
 
         Raises:
-            DialogueAgentError: 模型返回空白内容。
+            DialogueAgentError: 模型返回空白内容，或重写后仍然重复/空内容。
+
+        Note:
+            质量检查与重写都在 ``reply``（拼接后的全文）上做，与拆分前完全一致：
+            分段只改变"怎么显示"，不改变"检查什么"。
         """
         user_prompt = build_dialogue_user_prompt(request)
 
         self.last_system_prompt = DIALOGUE_AGENT_SYSTEM_PROMPT
         self.last_user_prompt = user_prompt
 
-        reply = await self.llm_client.generate(
+        content = await self.llm_client.generate(
             system_prompt=DIALOGUE_AGENT_SYSTEM_PROMPT,
             user_prompt=user_prompt,
         )
 
-        reply = (reply or "").strip()
-
-        if not reply:
-            raise DialogueAgentError("Dialogue Agent generated an empty reply.")
+        reply, messages = _reply_and_messages(content)
 
         previous_replies = {message.content.strip()
                             for message in request.conversation_history
@@ -238,20 +299,23 @@ class DialogueAgent:
                 requirements.append(
                     "上一版没有自然提及本轮允许的外观线索。请把它融入完整句子，"
                     "例如用‘你看起来……’承接当前话题，不要在句首机械拼接固定短语。")
+            # 重写同样受输出格式约束，否则重写会把多条消息压回一行。
+            requirements.append("格式保持不变：1~3 条消息，每条单独一行。")
             retry_prompt = (
                 user_prompt + "\n\n【重写要求】" + "".join(requirements)
                 + "保持上游 decision 不变，不要重复历史中的助手回复。"
             )
             self.last_user_prompt = retry_prompt
-            reply = (await self.llm_client.generate(
+            content = await self.llm_client.generate(
                 system_prompt=DIALOGUE_AGENT_SYSTEM_PROMPT,
                 user_prompt=retry_prompt,
-            ) or "").strip()
-            if not reply or reply in previous_replies:
+            )
+            reply, messages = _reply_and_messages(content, repeated=True)
+            if reply in previous_replies:
                 raise DialogueAgentError("Dialogue Agent repeated an earlier reply.")
             if _near_repeated_question(reply, recent_replies):
                 raise DialogueAgentError("Dialogue Agent repeated an earlier question.")
             if request.finish_screening and re.search(r"[？?]", reply):
                 raise DialogueAgentError("Dialogue Agent asked a question after closing.")
 
-        return DialogueAgentResponse(reply=reply)
+        return DialogueAgentResponse(reply=reply, messages=messages)

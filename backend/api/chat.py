@@ -145,7 +145,8 @@ def chat(request: ChatRequest) -> ChatResponse:
             if request.speech is not None or "vision_snapshot" in request.model_fields_set:
                 kwargs["use_latest_states"] = False
             payload = dialogue_runner.process_turn(text, session, **kwargs)
-            messages = [payload.reply]
+            # 本轮的气泡（1~3 条）由 Dialogue 决定；reply 是它的全文投影。
+            messages = payload.messages or [payload.reply]
             reply = payload.reply
             next_strategy = payload.next_strategy
             assessment_ready = payload.assessment_ready
@@ -153,8 +154,10 @@ def chat(request: ChatRequest) -> ChatResponse:
             visual_feedback = payload.visual_feedback
 
         # ── 落库与计数：各只做一次 ────────────────────────────────────
+        # 一轮用户输入只追加**一条** assistant 消息，多条气泡存在它的 messages 里：
+        # 这样历史不会因为气泡数而多长出几条记录，turn_count 也不会重复自增。
         session.conversation_history.append(Message(
-            role=MessageRole.ASSISTANT, content=reply))
+            role=MessageRole.ASSISTANT, content=reply, messages=messages))
         session.turn_count += 1
         response = ChatResponse(
             session_id=request.session_id,

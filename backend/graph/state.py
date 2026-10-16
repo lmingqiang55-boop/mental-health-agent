@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import TypedDict
 
 from backend.core.dialogue_manager import VisualChannels
-from backend.models.dialogue import DialogueRouteDecision
+from backend.models.dialogue import DialogueAgentResponse, DialogueRouteDecision
 from backend.models.responses import DialogueResponsePayload, VisualFeedback
 from backend.models.states import SessionState, VisionState
 from backend.policy.client import PolicyDecision
@@ -55,6 +55,10 @@ class TurnState(TypedDict, total=False):
     decision: PolicyDecision | None
     channels: VisualChannels | None
     reply: str | None
+    #: 本轮回复的气泡（1~3 条）。``reply`` 是它的换行拼接。
+    reply_messages: list[str]
+    #: 本轮生成的完整响应对象；``commit`` 直接用它组装载荷，不再拼一遍。
+    response: DialogueAgentResponse | None
     visual_feedback: VisualFeedback | None
 
     # -- 输出 ------------------------------------------------------------
