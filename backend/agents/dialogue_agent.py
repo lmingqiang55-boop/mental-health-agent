@@ -45,14 +45,19 @@ from backend.prompts.dialogue_prompt import (
 __all__ = ["DialogueAgent", "DialogueAgentError", "parse_route_decision",
            "route_fallback"]
 
-#: 路由模块可以给出的原因码；用于识别"模型没有按约定输出"。
-ROUTE_REASON_CODES = frozenset({
-    "continue_topic", "clarify", "topic_exhausted",
-    "user_wants_change", "off_topic",
+#: 原因码按"它暗示的方向"分成两组，用来识别布尔值与理由自相矛盾的情况。
+#: 前一组说"当前话题还能继续"，后一组说"需要新方向"。
+ROUTE_CONTINUE_CODES = frozenset({"continue_topic", "clarify"})
+ROUTE_DECISION_CODES = frozenset({
+    "topic_exhausted", "user_wants_change", "off_topic",
 })
+#: 路由模块可以给出的原因码；用于识别"模型没有按约定输出"。
+ROUTE_REASON_CODES = ROUTE_CONTINUE_CODES | ROUTE_DECISION_CODES
 #: 路由异常（输出不合约定或调用失败）时使用的原因码。
 ROUTE_ERROR = "route_error"
 ROUTE_UNCERTAIN = "route_uncertain"
+#: 布尔值与原因码自相矛盾时使用的标记（仍按需要决策处理）。
+ROUTE_INCONSISTENT = "route_inconsistent"
 
 
 class DialogueAgentError(RuntimeError):
@@ -116,13 +121,26 @@ def parse_route_decision(content: str) -> DialogueRouteDecision:
 
     reason_code = str(payload.get("reason_code") or "").strip()
     reason = str(payload.get("reason") or "").strip()
-    if need_decision and reason_code not in ROUTE_REASON_CODES:
-        # "需要"是无条件安全的，原因码不认也照样接受，只把原因码标注清楚。
-        reason_code = ROUTE_UNCERTAIN
-    elif not need_decision and reason_code not in ROUTE_REASON_CODES:
+    if reason_code not in ROUTE_REASON_CODES:
+        if need_decision:
+            # "需要"是无条件安全的，原因码不认也照样接受，只把原因码标注清楚。
+            return DialogueRouteDecision(
+                need_decision=True, reason_code=ROUTE_UNCERTAIN, reason=reason)
         return DialogueRouteDecision(
             need_decision=True, reason_code=ROUTE_UNCERTAIN,
             reason=f"原因码不在约定集合内：{reason_code or '（空）'}")
+    if not need_decision and reason_code in ROUTE_DECISION_CODES:
+        # 理由本身在说"需要新方向"，只是布尔值写成了 false。以理由为准：
+        # 否则会跳过一次必要的话题推进，而这正是本阶段要守住的东西。
+        return DialogueRouteDecision(
+            need_decision=True, reason_code=reason_code,
+            reason=f"理由暗示需要新方向但布尔值为 false，按需要处理：{reason}")
+    if need_decision and reason_code in ROUTE_CONTINUE_CODES:
+        # 理由说可以继续、布尔值却要求决策：仍然决策（这是安全方向），
+        # 但把原因码标成不一致，免得统计与后续 Agent Trace 被这句话误导。
+        return DialogueRouteDecision(
+            need_decision=True, reason_code=ROUTE_INCONSISTENT,
+            reason=f"布尔值与理由不一致（{reason_code}），按需要处理：{reason}")
     return DialogueRouteDecision(
         need_decision=need_decision, reason_code=reason_code, reason=reason)
 

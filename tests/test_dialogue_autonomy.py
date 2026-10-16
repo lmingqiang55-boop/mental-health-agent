@@ -366,6 +366,44 @@ def test_worst_case_route_still_completes_coverage_before_the_turn_limit(
     assert all(count <= 2 for count in progress["topic_turns"].values()), progress
 
 
+@pytest.mark.parametrize("need, code, expected_need, expected_code", [
+    # 一致：照原样接受
+    (False, "continue_topic", False, "continue_topic"),
+    (False, "clarify", False, "clarify"),
+    (True, "topic_exhausted", True, "topic_exhausted"),
+    (True, "user_wants_change", True, "user_wants_change"),
+    (True, "off_topic", True, "off_topic"),
+    # 矛盾且方向不安全：理由说要新方向、布尔值说不要 → 以理由为准（会真的决策）
+    (False, "topic_exhausted", True, "topic_exhausted"),
+    (False, "user_wants_change", True, "user_wants_change"),
+    (False, "off_topic", True, "off_topic"),
+    # 矛盾但方向安全：布尔值要决策、理由说可以继续 → 仍然决策，原因码标注不一致
+    (True, "continue_topic", True, "route_inconsistent"),
+    (True, "clarify", True, "route_inconsistent"),
+])
+def test_route_boolean_and_reason_code_are_reconciled(
+        need, code, expected_need, expected_code):
+    import json
+
+    from backend.agents.dialogue_agent import parse_route_decision
+
+    payload = json.dumps({"need_decision": need, "reason_code": code,
+                          "reason": "测试理由"}, ensure_ascii=False)
+    result = parse_route_decision(payload)
+    assert result.need_decision is expected_need
+    assert result.reason_code == expected_code
+
+
+def test_route_reason_code_groups_are_disjoint_and_known():
+    """两组原因码必须互斥且并集等于全部合法原因码。"""
+    from backend.agents.dialogue_agent import (
+        ROUTE_CONTINUE_CODES, ROUTE_DECISION_CODES, ROUTE_REASON_CODES)
+
+    assert ROUTE_CONTINUE_CODES & ROUTE_DECISION_CODES == frozenset()
+    assert ROUTE_CONTINUE_CODES | ROUTE_DECISION_CODES == ROUTE_REASON_CODES
+    assert "route_inconsistent" not in ROUTE_REASON_CODES
+
+
 def test_closing_turn_still_skips_the_decision_model(
         monkeypatch, policy_stub, dialogue_stub):
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
@@ -577,7 +615,7 @@ def test_carry_over_topic_never_changes_the_global_topic():
 
 
 def test_adopt_decision_records_the_constrained_topic():
-    """新策略生效时必须记录被次数约束器裁剪后的那个话题。"""
+    """① 有效话题正常切换：记录被次数约束器裁剪后的那个话题。"""
     from backend.core.screening_flow import adopt_decision
     from backend.policy.client import DialogueAction, PolicyDecision
 
@@ -588,6 +626,133 @@ def test_adopt_decision_records_the_constrained_topic():
     assert session.screening_progress.active_topic == "情绪"
     assert session.screening_progress.active_actions == ["共情安慰", "情绪"]
     assert session.screening_progress.pending_topic == "情绪"
+
+
+@pytest.mark.parametrize("actions", [
+    ("其它",),                      # ② 仅返回"其它"
+    ("共情安慰", "其它"),           # ③ "共情安慰 + 其它"
+])
+def test_adopt_decision_clears_the_topic_when_decision_has_none(actions):
+    """决策没有给出评估话题时，**不得**把它当成"继续旧话题"的有效决定。"""
+    from backend.core.screening_flow import adopt_decision
+    from backend.policy.client import DialogueAction, PolicyDecision
+
+    session = unit_session(active_topic="睡眠",
+                           active_actions=["共情安慰", "睡眠"],
+                           pending_topic="睡眠")
+    decision = PolicyDecision(actions=[DialogueAction(a) for a in actions])
+    adopt_decision(session, decision, None)
+
+    assert session.screening_progress.active_topic is None, "旧话题必须被清空"
+    assert session.screening_progress.pending_topic is None, "下一条回答不得记到旧话题"
+    assert session.screening_progress.active_actions == list(actions), \
+        "决策本身是有效的，动作列表要如实记录"
+    assert session.screening_progress.topic_turns == {}, "不得凭空累计旧话题次数"
+
+
+@pytest.mark.parametrize("actions", [("其它",), ("共情安慰", "其它")])
+def test_no_topic_decision_forces_a_new_decision_next_turn(actions):
+    """④ 后续应能够重新进入有效评估话题：下一轮由后端强制决策。"""
+    from backend.core.screening_flow import adopt_decision, should_force_decision
+    from backend.policy.client import DialogueAction, PolicyDecision
+
+    session = unit_session(active_topic="睡眠",
+                           active_actions=["共情安慰", "睡眠"])
+    adopt_decision(session, PolicyDecision(
+        actions=[DialogueAction(a) for a in actions]), None)
+    assert should_force_decision(session) == "no_active_topic"
+
+
+def test_other_only_decision_does_not_accumulate_the_old_topic(
+        monkeypatch, policy_stub, dialogue_stub):
+    """⑤ 端到端：只返回"其它"的那一轮，下一条回答不记到旧话题名下。
+
+    这正是真实模型下观察到的现象（场景 B 第 2 轮）：决策返回"其它"后，
+    回复是"你平时空闲的时候喜欢做点什么？"，而用户的下一句其实在说同学关系，
+    却被记到了「睡眠」名下。修复后它不计入任何话题。
+
+    注意发生窗口：``limit_topic`` 在 ``turn_count >= 2`` 时会用"最少被聊到"
+    的话题补位（这是覆盖率机制，**不是** bug），所以"没有话题"只在第 1~2 轮
+    会真的留下来——这也正是真实运行里观察到的位置。
+    """
+    monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
+    requests: list = []
+    policy_stub(SLEEP, requests=requests)
+
+    session_id = new_session()
+    turn(session_id, "晚上睡不好，白天没精神")          # 轮 1：强制决策 → 睡眠
+
+    policy_stub(("其它",), requests=requests)          # 轮 2：决策只说"其它"
+    body = turn(session_id, "这个不太想聊了，能聊点别的吗")
+    assert body["next_strategy"] == "其它"
+    assert body["screening_progress"]["pending_topic"] is None, \
+        "决策没有话题时 pending_topic 必须为空"
+    assert body["screening_progress"]["topic_turns"] == {"睡眠": 1}, \
+        "此时睡眠只应记到第 1 轮那一次"
+
+    # 轮 3：被强制重新决策（no_active_topic），重新进入有效话题
+    policy_stub(("共情安慰", "社会功能"), requests=requests)
+    body = turn(session_id, "其实我最近跟同学关系有点紧张")
+    assert body["next_strategy"] == "社会功能"
+    assert body["screening_progress"]["topic_turns"] == {"睡眠": 1}, \
+        "轮 2 的回答不得计入睡眠"
+
+    # 轮 4：社会功能这时才被计数一次
+    body = turn(session_id, "感觉他们在背后说我")
+    assert body["screening_progress"]["topic_turns"] == {"睡眠": 1, "社会功能": 1}
+
+
+def test_repeated_other_only_decisions_never_accumulate(monkeypatch, policy_stub,
+                                                        dialogue_stub):
+    """连续多轮只返回"其它"时，旧话题次数不得被无依据地累加。
+
+    第 1~2 轮没有话题可言（``pending_topic`` 为空）；从第 3 轮起
+    ``limit_topic`` 会合规地补位一个最少被聊到的话题，计数才重新开始。
+    无论哪种情况，**旧话题「睡眠」都不允许超过轮 1 那一次**。
+    """
+    monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
+    session_id = new_session()
+    policy_stub(("其它",))
+
+    for index in range(1, 7):
+        body = turn(session_id, f"第{index}句随便聊聊")
+        assert body["screening_progress"]["topic_turns"].get("睡眠", 0) <= 1, \
+            f"第 {index} 轮把回答错记到了旧话题「睡眠」名下：{body['screening_progress']}"
+        if index <= 2:
+            assert body["screening_progress"]["pending_topic"] is None
+        else:
+            assert body["screening_progress"]["pending_topic"] is not None, \
+                "第 3 轮起 limit_topic 应合规补位出明确话题"
+
+    # 只有轮 1 那次算进了睡眠；轮 3 起补位出的话题各自只被计一次。
+    counts = body["screening_progress"]["topic_turns"]
+    assert counts.get("睡眠", 0) == 1, counts
+    assert all(value <= 1 for value in counts.values()), counts
+
+
+def test_screening_still_reaches_topic_coverage_after_other_only_decisions(
+        monkeypatch, policy_stub, dialogue_stub):
+    """⑥ 正常筛查收尾不受影响：中途出现"其它"也能靠覆盖率收尾。"""
+    from backend.core.screening_flow import TOPICS
+
+    monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
+    session_id = new_session()
+
+    closing = None
+    for index in range(20):
+        # 轮 2 刻意只返回"其它"，制造一次"没有话题"的决策。
+        policy_stub(("其它",) if index == 1 else SLEEP)
+        body = turn(session_id, f"说说第{index}件事")
+        if body["assessment_ready"]:
+            closing = body
+            break
+
+    assert closing is not None, "出现一次无话题决策后仍必须能收尾"
+    assert closing["completion_reason"] == "topic_coverage", \
+        closing["completion_reason"]
+    counts = closing["screening_progress"]["topic_turns"]
+    assert len(counts) == len(TOPICS), counts
+    assert all(value <= 2 for value in counts.values()), counts
 
 
 def test_reuse_decision_restores_the_stored_strategy():

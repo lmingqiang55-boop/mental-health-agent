@@ -117,14 +117,21 @@ def adopt_decision(session: SessionState, decision: PolicyDecision,
     """决策模型给出的新方向生效：记录 ``active_*``，并登记下一条回答的话题。
 
     ``topic`` 由 :func:`limit_topic` 决定后传入，避免这里再算一遍话题而分家。
-    无论 ``topic`` 是否为空，``pending_topic`` 都会被重新指向本轮的有效话题，
-    因此**下一条用户回答一定会被计数**，不依赖本轮是否调用过决策模型。
+
+    决策只返回非评估动作（``其它``、或``共情安慰 + 其它``）时 **没有** 任何
+    评估话题可言，这不是"继续上一个话题"的有效决定，因此：
+
+    * ``active_topic`` 清空 —— 否则旧话题会被当成仍然有效；
+    * ``pending_topic`` 置空 —— 下一条回答**不计入任何话题**，
+      避免无依据地累计旧话题次数；
+    * ``active_actions`` 照样记录 —— 决策本身是有效的，下一轮
+      :func:`should_force_decision` 会因 ``active_topic is None`` 重新决策，
+      于是能重新进入一个有效评估话题。
     """
     progress = session.screening_progress
-    if topic:
-        progress.active_topic = topic
+    progress.active_topic = topic
     progress.active_actions = [action.value for action in decision.actions]
-    progress.pending_topic = progress.active_topic
+    progress.pending_topic = topic
 
 
 def carry_over_topic(session: SessionState) -> None:

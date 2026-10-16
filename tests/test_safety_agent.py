@@ -99,16 +99,31 @@ def test_registry_entries_carry_verification_provenance() -> None:
         assert entry.source_url.startswith("https://")
 
 
-def test_hotlines_only_for_known_region() -> None:
+def test_hotlines_only_for_known_region(monkeypatch) -> None:
     assert [h.number for h in load_hotlines("CN")] == ["12356"]
-    # 未知地区绝不假定适用
+    # 未知地区绝不假定适用。``None`` 的含义是"去读环境变量"，所以先把它清掉，
+    # 否则这条断言的结果会随开发机 .env 里有没有配置地区而变化。
+    monkeypatch.delenv(DEPLOYMENT_REGION_ENV, raising=False)
     for unknown in (None, "", "   ", "unknown", "US"):
         assert load_hotlines(unknown) == []
 
 
-def test_agent_without_known_region_sends_no_number() -> None:
-    agent = SafetyAgent(lambda: _FakeClient(content=""), deployment_region=None)
-    assert agent.hotlines == []
+def test_agent_without_known_region_sends_no_number(monkeypatch) -> None:
+    """没有可用地区时不下发任何号码；环境变量未配置等同于未知地区。
+
+    这里刻意覆盖三种形态，避免测试结果依赖运行环境的 .env：
+    未配置 / 显式 unknown / 配置为有已核实条目的地区。
+    """
+    monkeypatch.delenv(DEPLOYMENT_REGION_ENV, raising=False)
+    unset = SafetyAgent(lambda: _FakeClient(content=""), deployment_region=None)
+    assert unset.hotlines == []
+
+    unknown = SafetyAgent(lambda: _FakeClient(content=""), deployment_region="unknown")
+    assert unknown.hotlines == []
+
+    # 配置了正确地区时才下发，并且确实带出那条已核实号码。
+    known = SafetyAgent(lambda: _FakeClient(content=""), deployment_region="CN")
+    assert known.hotlines == ["12356"]
 
 
 def test_unconfigured_region_is_loud_not_silent(monkeypatch) -> None:
