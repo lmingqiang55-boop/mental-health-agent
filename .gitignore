@@ -34,6 +34,10 @@ policy-qwen3-8b-teammate-deploy/
 # YuNet 人脸检测权重（约 227KB，执行 python -m backend.vision.face_weights 重新下载）
 /backend/vision/weights/
 
+# 视觉阈值重校的原始逐帧数据（VISION_FRAME_DUMP_DIR）。推荐放在仓库之外；
+# 真放进仓库时用这个名字，别把校准用的原始数据提交上去。
+vision_dump/
+
 # --- 新前端（Vue3）frontend-vue ---
 frontend-vue/*/node_modules/
 frontend-vue/*/dist/

@@ -84,10 +84,20 @@ class EmotiEffLibVisionDetector(VisionDetector):
         self._recognizer = EmotiEffLibRecognizer(engine=engine, model_name=model_name)
         # 人脸检测用 YuNet（见 backend.vision.face_weights）。换掉 Haar 的原因：
         # 它在暗光、侧脸、小脸场景漏检严重，又不输出置信度，只能靠放宽
-        # minNeighbors 硬凑，反而引入误检。可复现的对照（取 EmotiEffLib 仓库自带
-        # 的真人合照，逐档压暗后比对检出数）：亮度压到 30% 时 Haar 从 3 张脸掉到
-        # 1~2 张，YuNet 在各种缩放下始终稳定 3 张；正常亮度下 Haar 还多报过一张。
-        # 那段素材不是本项目自己的会话录像，只能作受控对照，真实会话上的表现
+        # minNeighbors 硬凑，反而引入误检。
+        #
+        # 可复现的受控对照：素材是上游仓库 sb-ai-lab/EmotiEffLib 自带的真人合照
+        # ``tests/test_images/20180720_174416.jpg``（上游 @
+        # 520a051c64cd191521e5934655314e769a319684）。素材不在本仓库里，本机副本放在
+        # 仓库之外的过程目录，换台机器要重新从上游拿那张图。做法是整图乘一个亮度系数，
+        # 再按下面的生产参数各检一次。4032×3024、3 张脸的检出数：
+        #   亮度 100%：YuNet 3；Haar 3，缩到 0.75/0.5 倍时多报成 4；
+        #   亮度 30%：YuNet 3；Haar 1~2；
+        #   亮度 20%：YuNet 3；Haar 0（整张图一张都没有）。
+        # Haar 的第二档（1.05/3/24）在正常亮度下会报出 22 个框，这就是"放宽参数
+        # 硬凑、反而引入误检"的实测依据。
+        #
+        # 那张合影不是本项目自己的会话录像，只能作受控对照；真实会话上的表现
         # 仍要按 vision_validation 的待办用真实摄像头复核。
         #
         # YuNet 权重需要一次性联网下载，所以留一条降级路：拿不到权重时回退 Haar，
@@ -119,6 +129,22 @@ class EmotiEffLibVisionDetector(VisionDetector):
         # Haar cascade and lazy model state must not be shared concurrently.
         with self._inference_lock:
             return self._analyze_frame(frame)
+
+    @property
+    def face_detector_name(self) -> str:
+        """人脸检测实际走的那条路：``yunet``，或拿不到权重时降级的 ``haar``。"""
+
+        return "haar" if self._cascade is not None else "yunet"
+
+    def describe(self) -> dict[str, str]:
+        """来源描述：模型名 + 两条子链路的实际选择。
+
+        供视觉片段落盘标注来源（见 ``backend.core.vision_frame_dump``）：不同模型或
+        降级到 Haar 的数据不能混在一起算分位数。
+        """
+
+        return {"provider": "emotiefflib", "model": self.model_name,
+                "face_detector": self.face_detector_name}
 
     def _analyze_frame(self, frame: Any | None = None) -> VisionState:
         image = self._decode_frame(frame)
@@ -250,6 +276,29 @@ def describe_vision_status() -> dict:
             state = "simulated" if configured == "mock" else "not_loaded"
         return {"provider": provider, "state": state,
                 "real_analysis": state == "ready" and provider in {"emotiefflib", "custom"}}
+
+
+def describe_loaded_vision_detector() -> dict[str, str]:
+    """报告**已经加载**的检测器用的模型与人脸检测后端；不会去加载模型。
+
+    与 :func:`describe_vision_status` 的分工：那个按配置回答"能不能用"，这个按内存里
+    的实例回答"刚才这些帧到底是谁产出的"。**绝不触发加载**——调用它的是冻结片段的
+    那条路径（见 ``backend.core.vision_frame_dump``），为了写一行校准数据去初始化
+    模型是不能接受的。还没加载过时返回空字典。
+    """
+
+    with _detector_lock:
+        detector = _detector
+    if detector is None:
+        return {}
+    describe = getattr(detector, "describe", None)
+    if callable(describe):
+        try:
+            return {str(key): str(value) for key, value in dict(describe()).items()}
+        except Exception as exc:  # noqa: BLE001 - 标注来源失败不该影响调用方
+            logger.warning("视觉检测器来源描述失败：%s: %s", type(exc).__name__, exc)
+    return {"provider": "mock" if getattr(detector, "is_simulated", False) else "custom"}
+
 
 
 def get_detector() -> VisionDetector:

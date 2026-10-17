@@ -2,16 +2,29 @@
 
 这两件事以前没有测试，而它们都是"错了也不会报错、只会静默筛空"的那一类：
 
-- ``MOOD_LEVEL_TAGS``（按心情档位分组）与 ``MOOD_TAGS``（学生端多选的候选词）
+- ``MOOD_LEVEL_TAGS``（按心情档位分组）与 ``MOOD_TAGS``（学生端筛选候选词）
   曾经分散在两个文件里各写一份，漂移了没人发现；
 - ``HealContent.category / tags / summary`` 由 ``tag / moods / desc`` 推导，
   推导失效时学生端"按此刻的心情看看"会筛不出任何内容。
+
+**两个方向都要守**：档位分组里的词必须在候选表里（否则那个档位筛不出内容），
+候选表里的词也必须至少被一个档位覆盖（否则那颗 chip 点下去永远是空列表——
+"被理解"曾经就是这样）。
 """
 
 from __future__ import annotations
 
 from backend.core.heal_store import HEAL_CONTENTS, recommend_contents
 from backend.models.heal import MOOD_LEVEL_TAGS, MOOD_TAGS, HealContent
+
+
+def _tagged_contents() -> dict[str, list[str]]:
+    """每个候选词 → 能筛出它的内容 id。"""
+
+    return {
+        word: [content.id for content in HEAL_CONTENTS if word in content.tags]
+        for word in MOOD_TAGS
+    }
 
 
 def test_every_level_tag_is_a_candidate_tag() -> None:
@@ -24,6 +37,16 @@ def test_every_level_tag_is_a_candidate_tag() -> None:
         assert set(tags) <= candidates, sorted(set(tags) - candidates)
 
 
+def test_every_candidate_tag_filters_at_least_one_content() -> None:
+    """候选表里的每个词都必须能筛出内容。
+
+    学生端点一颗 chip 得到空列表，看起来就是"坏了"；这类漂移不会报错，只会静默筛空。
+    """
+
+    empty = [word for word, hits in _tagged_contents().items() if not hits]
+    assert not empty, f"这些筛选标签永远筛空：{empty}"
+
+
 def test_every_content_exposes_tags_the_frontend_can_filter_on() -> None:
     """内容卡片的 ``tags`` 必须落在候选表里，否则它永远不会被筛出来。"""
 
@@ -34,7 +57,7 @@ def test_every_content_exposes_tags_the_frontend_can_filter_on() -> None:
 
 
 def test_heal_content_fills_the_fields_the_student_page_reads() -> None:
-    """分类取 ``tag``、简介取 ``desc``、标签由 ``moods`` 推导。"""
+    """分类取 ``tag``、简介取 ``desc``、标签由 ``moods`` 逐档推导。"""
 
     derived = HealContent(
         id="hc_test", title="测试", tag="呼吸", type="breath",
@@ -42,9 +65,12 @@ def test_heal_content_fills_the_fields_the_student_page_reads() -> None:
     )
     assert derived.category == "呼吸"
     assert derived.summary == "跟着做三分钟。"
-    assert derived.tags == list(MOOD_LEVEL_TAGS[1]) + [
-        word for word in MOOD_LEVEL_TAGS[2] if word not in MOOD_LEVEL_TAGS[1]
-    ]
+    # 逐档取词、档内保序、跨档去重：断言这三条性质，而不是把推导再实现一遍。
+    assert derived.tags == list(dict.fromkeys(MOOD_LEVEL_TAGS[1] + MOOD_LEVEL_TAGS[2]))
+    assert set(derived.tags) == set(MOOD_LEVEL_TAGS[1]) | set(MOOD_LEVEL_TAGS[2])
+    for level in (1, 2):
+        for word in MOOD_LEVEL_TAGS[level]:
+            assert word in derived.tags
 
     explicit = HealContent(
         id="hc_test2", title="测试", tag="呼吸", type="breath", cover="doc",
@@ -52,6 +78,8 @@ def test_heal_content_fills_the_fields_the_student_page_reads() -> None:
     )
     assert explicit.category == "放松训练"
     assert explicit.summary == "短简介"
+    # 显式给了 tags 就不覆盖：推导只在留空时发生。
+    assert explicit.tags == list(MOOD_LEVEL_TAGS[1])
 
 
 def test_recommending_by_mood_prefers_contents_for_that_level() -> None:

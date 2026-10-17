@@ -18,6 +18,13 @@
 :class:`backend.core.vision_thresholds.ConsistencyThresholds`，**没有权威出处**，
 是按当前样本暂定的经验值。
 
+**整句否认不参与这个分数**（"我没事""没有""没什么"）：
+:func:`backend.core.text_polarity.is_whole_sentence_denial` 为真时整句跳过。
+``text_polarity`` 会把这些句子读成弱正向（那是**单句核对通道**要的，让
+"嘴上说没事、脸上却难过"能被抓到），但它们是回答"有没有"的，不是情绪表达；
+算进来会让普通筛查里大量的"没有"跟偏低的脸色凑成一对对"不一致"，分数被系统性地
+压低。排除的句数在 ``summary`` 里如实写明，不假装它们不存在。
+
 为什么用"极性差"而不是余弦相似度
 --------------------------------
 村口开源实现（``EcheoSan/multimodal_lie_detect``）把文本与面部各自转成 7 类情绪
@@ -45,7 +52,7 @@ from typing import Protocol
 from evaluation_agent.inputs import SELF_REPORT_ROLES, EvaluationInput
 from evaluation_agent.schemas import ConsistencyLevel
 
-from backend.core.text_polarity import text_polarity
+from backend.core.text_polarity import is_whole_sentence_denial, text_polarity
 from backend.core.vision_thresholds import ConsistencyThresholds
 
 
@@ -102,6 +109,7 @@ def _level_for(score: int, thresholds: ConsistencyThresholds) -> ConsistencyLeve
 
 def _insufficient_summary(
     paired: int, considered: int, thresholds: ConsistencyThresholds,
+    denials: int = 0,
 ) -> str:
     if considered == 0:
         opening = "本次没有一句用户自述同时拿到了可用的人脸数据"
@@ -110,8 +118,13 @@ def _insufficient_summary(
             f"本次有 {considered} 句用户自述拿到了可用的人脸数据，"
             f"其中 {paired} 句的文字里能识别出情绪"
         )
+    denied = (
+        f"（另有 {denials} 句是整句否认，如「我没事」「没有」，"
+        "那是在回答「有没有」而不是表达情绪，不参与比对）"
+        if denials else ""
+    )
     return (
-        f"{opening}，少于给出一致性分数所需的最少 {thresholds.min_pairs} 句，"
+        f"{opening}{denied}，少于给出一致性分数所需的最少 {thresholds.min_pairs} 句，"
         "因此本次不给视觉一致性分数。"
         "没有分数不等于「一致」，只表示两路信号没有重叠到可以比较。"
     )
@@ -122,10 +135,16 @@ def _paired_summary(
     level: ConsistencyLevel,
     pairs: tuple[ConsistencyPair, ...],
     considered: int,
+    denials: int = 0,
 ) -> str:
     mean_difference = sum(pair.difference for pair in pairs) / len(pairs)
     widest = max(pairs, key=lambda pair: pair.difference)
-    unpaired = considered - len(pairs)
+    unpaired = considered - denials - len(pairs)
+    denied = (
+        f"另有 {denials} 句是整句否认（如「我没事」「没有」），"
+        "那是在回答「有没有」而不是表达情绪，同样不参与比对。"
+        if denials else ""
+    )
     coverage = (
         f"另有 {unpaired} 句文字里没有可识别的情绪词，未参与比对。"
         if unpaired else ""
@@ -137,6 +156,7 @@ def _paired_summary(
         f"相差最大的一句是「{_clip(widest.text)}」"
         f"（文字 {widest.text_polarity:+.2f}，表情 {widest.vision_valence:+.2f}）。"
         f"{coverage}"
+        f"{denied}"
         "这个视觉一致性分数只说明语言自述与面部表现两路信号彼此接近的程度，"
         "不代表诊断置信度，也不表示受访者是否诚实；"
         "分档阈值是暂定的经验值，会随样本积累重新校准。"
@@ -152,10 +172,18 @@ def compute_consistency(
     只看 ``SELF_REPORT_ROLES``（用户本人的话）里**同时**具备
     "检出人脸 + 有效价 + 文字可判极性"的句子；其余句子计入
     :attr:`ConsistencyResult.considered_turns` 只用来说明覆盖率。
+
+    **整句否认不参与比对**（"我没事""没有""没什么"）：``text_polarity`` 会把它们
+    读成弱正向，好让单句核对通道能抓到"嘴上说没事、脸上却难过"；但那是回答
+    "有没有"的，不是情绪表达。若把它们算进来，普通筛查里大量的"没有"会跟偏低的
+    脸色凑成一对对"不一致"，分数被系统性地压低——所以这里按
+    :func:`backend.core.text_polarity.is_whole_sentence_denial` 排除，并在 summary
+    里如实说明排除了多少句。
     """
 
     limits = thresholds or ConsistencyThresholds.from_env()
     considered = 0
+    denials = 0
     pairs: list[ConsistencyPair] = []
     for index, message in enumerate(input_data.dialogue_history):
         if message.role not in SELF_REPORT_ROLES:
@@ -164,6 +192,9 @@ def compute_consistency(
         if snapshot is None or not snapshot.face_detected or snapshot.valence is None:
             continue
         considered += 1
+        if is_whole_sentence_denial(message.content):
+            denials += 1
+            continue
         polarity = text_polarity(message.content)
         if polarity is None:
             continue
@@ -177,11 +208,13 @@ def compute_consistency(
         )
 
     matched = tuple(pairs)
-    if len(matched) < limits.min_pairs:
+    # 空配对必须先拦：min_pairs 是环境变量旋钮，设成 0 时 ``0 < 0`` 不成立，
+    # 会直接走到下面的整除、抛 ZeroDivisionError（评估报告接口 500）。
+    if not matched or len(matched) < limits.min_pairs:
         return ConsistencyResult(
             score=None,
             level=ConsistencyLevel.UNKNOWN,
-            summary=_insufficient_summary(len(matched), considered, limits),
+            summary=_insufficient_summary(len(matched), considered, limits, denials),
             pairs=matched,
             considered_turns=considered,
         )
@@ -192,7 +225,7 @@ def compute_consistency(
     return ConsistencyResult(
         score=score,
         level=level,
-        summary=_paired_summary(score, level, matched, considered),
+        summary=_paired_summary(score, level, matched, considered, denials),
         pairs=matched,
         considered_turns=considered,
     )

@@ -14,7 +14,11 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from backend.api import vision
+from backend.core import vision_frame_dump
+from backend.core.session_manager import session_manager
 from backend.core.vision_frame_dump import DUMP_DIR_ENV, dump_dir
+from backend.vision import detector as detector_module
+from backend.vision.detector import describe_loaded_vision_detector
 from backend.main import app
 from backend.models.states import VisionState
 
@@ -137,3 +141,113 @@ def test_a_broken_dump_directory_never_breaks_the_dialogue(
     sid = session()
     prepare(sid)
     assert segment(sid).status_code == 200
+
+
+def test_a_serialization_failure_never_breaks_the_dialogue(
+        detector, tmp_path, monkeypatch):
+    """抛的不是 OSError 也不能把对话带崩。
+
+    只兜 OSError 时，"写盘失败绝不影响一次真实对话"是句空话：模型将来多一个
+    datetime / enum 字段，json.dumps 就会抛 TypeError。
+    """
+
+    monkeypatch.setenv(DUMP_DIR_ENV, str(tmp_path / "dump"))
+    monkeypatch.setattr(vision_frame_dump, "_serialize",
+                        lambda payload: (_ for _ in ()).throw(TypeError("不能序列化")))
+
+    sid = session()
+    prepare(sid)
+    assert segment(sid).status_code == 200
+    assert not list((tmp_path / "dump").glob("*.jsonl"))
+
+
+def test_a_payload_build_failure_never_breaks_the_dialogue(
+        detector, tmp_path, monkeypatch):
+    """构造那一行内容时抛错，也不能把对话带崩。
+
+    兜底原先只包住"序列化 + 写文件"，payload 的构造在 try 之外；而调用点
+    （/api/vision/segment）不包异常，于是构造一旦抛错就是一次 500，
+    "任何失败都不该让一次真实对话失败"就成了空话。这里让描述检测器那条路抛错。
+    """
+
+    monkeypatch.setenv(DUMP_DIR_ENV, str(tmp_path / "dump"))
+    monkeypatch.setattr(vision_frame_dump, "describe_loaded_vision_detector",
+                        lambda: (_ for _ in ()).throw(RuntimeError("描述炸了")))
+
+    sid = session()
+    prepare(sid)
+    assert segment(sid).status_code == 200
+    assert not list((tmp_path / "dump").glob("*.jsonl"))
+
+
+def test_the_dump_records_which_chain_produced_it(detector, tmp_path, monkeypatch):
+    """每行都要带来源字段：不同 provider / 模型 / 人脸检测后端不能混着算分位数。
+
+    这里注入的假检测器没走检测器单例（测试直接替换了 ``vision.get_detector``），
+    所以字段是空的——真实链路上每个片段落盘前都至少取过一帧，单例早就加载好了。
+    """
+
+    monkeypatch.setenv(DUMP_DIR_ENV, str(tmp_path / "dump"))
+
+    sid = session()
+    prepare(sid)
+    assert segment(sid).status_code == 200
+
+    record = lines(list((tmp_path / "dump").glob("*.jsonl"))[0])[0]
+    assert isinstance(record["detector"], dict)
+
+
+def test_loaded_detector_description_is_honest_and_never_loads(monkeypatch):
+    """没加载过就说"不知道"；加载过就报模型与人脸检测后端；describe 抛错也不能炸。"""
+
+    monkeypatch.setattr(detector_module, "_detector", None)
+    assert describe_loaded_vision_detector() == {}
+
+    class Described:
+        is_simulated = False
+
+        def describe(self):
+            return {"provider": "emotiefflib", "model": "enet_b0_8_va_mtl",
+                    "face_detector": "haar"}
+
+    monkeypatch.setattr(detector_module, "_detector", Described())
+    assert describe_loaded_vision_detector() == {
+        "provider": "emotiefflib", "model": "enet_b0_8_va_mtl", "face_detector": "haar"}
+
+    class Broken:
+        is_simulated = False
+
+        def describe(self):
+            raise RuntimeError("描述炸了")
+
+    monkeypatch.setattr(detector_module, "_detector", Broken())
+    assert describe_loaded_vision_detector() == {"provider": "custom"}
+
+
+def test_the_dump_does_not_run_inside_the_session_lock(
+        detector, tmp_path, monkeypatch):
+    """写盘必须在会话锁之外。
+
+    落盘会真的写磁盘；留在 session_manager 的全局锁里，一次慢写（网络盘、杀软扫描）
+    就会把所有会话的对话卡住。这条用 RLock 的持有状态钉住调用点。
+    """
+
+    monkeypatch.setenv(DUMP_DIR_ENV, str(tmp_path / "dump"))
+    lock = session_manager._lock
+    is_owned = getattr(lock, "_is_owned", None)
+    if is_owned is None:  # pragma: no cover - 非 CPython 实现上跳过这条断言
+        pytest.skip("当前解释器的 RLock 不暴露持有状态")
+
+    seen: list[bool] = []
+    original = vision_frame_dump.dump_segment
+
+    def spy(session_id, utterance_id, seg):
+        seen.append(bool(is_owned()))
+        return original(session_id, utterance_id, seg)
+
+    monkeypatch.setattr(vision, "dump_segment", spy)
+
+    sid = session()
+    prepare(sid)
+    assert segment(sid).status_code == 200
+    assert seen == [False]

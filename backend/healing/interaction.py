@@ -30,6 +30,10 @@ DENIED_CONCERNS = [
     re.compile(r"(?:并不|不再|并非|不是|并没有|没有|不|没)(?:(?:觉得|感到|感觉|那么|特别|很|太|再|有)){0,3}"
                r"(?:学习压力|紧张|焦虑|低落|难过|伤心|沮丧|烦躁|孤独|失眠|压力)"),
 ]
+NORMAL_MARKERS = re.compile(r"(?:正常|还行|还好|挺好(?:的)?|没问题|不错)")
+NEGATION_TAIL = re.compile(r"(?:不再|并不|并非|没有|不|没|未|别)"
+                           r"(?:(?:太|怎么|算|大|很|特别|那么|再|也|够|是)){0,3}\s*$")
+CLAUSE_SPLIT = re.compile(r"[，,。！？；;、\n]")
 STYLE_INSTRUCTIONS = {
     "simple": "用短句和日常词，从学生说过的一件具体小事接话；一次只问一件容易回答的事。"
               "避免抽象术语、长段解释、说教和夸张表扬。不扮演父母，不假称能现实陪伴。",
@@ -47,13 +51,34 @@ def communication_style(background: HealingBackground) -> str:
     return {"primary": "simple", "middle": "conversational", "high": "autonomous"}.get(background.school_stage, "unknown")
 
 
-def positive_concern_text(text: str) -> str:
-    """Mask explicit denials, preserving offsets and actual difficulties.
+def normal_topic_spans(text: str) -> list[tuple[int, int]]:
+    """Topics the student describes as normal or fine in the same clause.
 
-    Missing sleep/friends and unresolved problems still count as concerns;
-    only denied problems, feelings or discussion requests are removed.
+    "平时上学吃饭睡觉正常""跟同学关系还行" state that nothing is wrong; they must
+    not count as a second concern. A negation right before the marker keeps the
+    topic ("睡觉不正常" is still a concern).
     """
     spans = []
+    for match in NORMAL_MARKERS.finditer(text):
+        head = text[:match.start()]
+        if NEGATION_TAIL.search(head):
+            continue
+        clause = CLAUSE_SPLIT.split(head)[-1]
+        start = len(head) - len(clause)
+        spans.extend((start + index, start + index + len(word))
+                     for word in TOPIC_WORDS
+                     if (index := clause.rfind(word)) >= 0)
+    return spans
+
+
+def positive_concern_text(text: str) -> str:
+    """Mask explicit denials and "everything is normal" statements, preserving offsets.
+
+    Missing sleep/friends and unresolved problems still count as concerns;
+    only denied problems, feelings, discussion requests, and topics the student
+    describes as normal or fine are removed.
+    """
+    spans = normal_topic_spans(text)
     for pattern in DENIED_CONCERNS:
         for match in pattern.finditer(text):
             if not re.search(r"(?:不是|并非)$", text[:match.start()].rstrip()):

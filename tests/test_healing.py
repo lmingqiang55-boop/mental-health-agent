@@ -375,7 +375,7 @@ def test_missing_age_and_unknown_concern_degrade_without_inventing_methods(suppo
     response = start(sid, background={})
     assert response.status_code == 200
     assert response.json()["report"]["suggestions"] == []
-    assert len(fake.calls) == 0
+    assert len(fake.calls) == 1
     # All-zero profile without current text is not evidence of low mood.
     state = healing.healing_store.slot(sid).state
     memory = state.memory.model_copy(update={"current_session_messages": []})
@@ -530,7 +530,8 @@ def test_retrieval_failure_degrades_and_restart_cannot_invent_old_history(suppor
     healing.healing_agent.retriever = Broken()
     first = start(sid).json()
     assert first["report"]["suggestions"] == []
-    assert not fake.calls
+    assert len(fake.calls) == 1
+    assert fake.calls[0]["knowledge"] == []
     healing.healing_store.slots.clear()
     response = client.get(f"/api/healing/{sid}")
     assert response.status_code == 404 and response.json()["error"]["code"] == "HEALING_NOT_FOUND"
@@ -606,7 +607,8 @@ def test_pause_alone_does_not_invent_action_preparation(support):
 def test_multiple_goals_confirm_before_methods_and_keep_selected_goal(support):
     sid, _, _, fake = support
     data = start(sid, background={"school_stage": "middle", "current_concern": "考试紧张，也总是睡不着", "adult_support_available": True}).json()
-    assert data["report"]["suggestions"] == [] and not fake.calls
+    assert data["report"]["suggestions"] == [] and len(fake.calls) == 1
+    assert fake.calls[0]["goal_confirmation"] and fake.calls[0]["knowledge"] == []
     assert data["report"]["question"].count("？") == 1
     confirmed = chat(sid, data["healing_id"], "先聊考试压力").json()
     assert confirmed["status"] == "active"
@@ -916,7 +918,8 @@ def test_source_help_is_kept_as_caution_only_for_same_verified_scope():
     assert not results[2].referral_conditions
 
 
-def test_rejected_narrative_uses_checked_fallback_with_original_method(support):
+def test_rejected_narrative_is_never_displayed_and_start_reports_error(support):
+    """正文核对不通过不再兜底成固定句：本轮报错，被否的正文一个字都不展示。"""
     sid, _, _, _ = support
     class UngroundedClient(FakeClient):
         async def generate(self, system, payload, schema, **kwargs):
@@ -929,12 +932,30 @@ def test_rejected_narrative_uses_checked_fallback_with_original_method(support):
             return draft
     healing.healing_agent.client = UngroundedClient()
     response = start(sid)
-    assert response.status_code == 200
+    assert response.status_code == 503
     assert "三小时" not in response.text
-    state = healing.healing_store.slot(sid).state
-    assert state.audit[-1]["narrative_fallback"]
-    assert state.suggestions[0].steps == knowledge().steps
-    assert not state.feedback
+    assert healing.healing_store.slot(sid).state is None
+
+
+def test_rejected_narrative_on_chat_keeps_previous_state(support):
+    """闲聊轮被否也一样：报错并原样保留上一轮状态，学生重试即可。"""
+    sid, _, _, _ = support
+    hid = start(sid).json()["healing_id"]
+    before = healing.healing_store.slot(sid).state.model_copy(deep=True)
+    class UngroundedClient(FakeClient):
+        async def generate(self, system, payload, schema, **kwargs):
+            if schema is NarrativeCheck:
+                return NarrativeCheck(valid=payload["understanding"] != "你最近每晚只睡三小时。",
+                    issues=["unsupported_fact"] if payload["understanding"] == "你最近每晚只睡三小时。" else [])
+            draft = await super().generate(system, payload, schema, **kwargs)
+            if schema is AgentDraft:
+                draft.understanding = "你最近每晚只睡三小时。"
+            return draft
+    healing.healing_agent.client = UngroundedClient()
+    response = chat(sid, hid, "最近睡不好")
+    assert response.status_code == 503
+    assert "三小时" not in response.text
+    assert healing.healing_store.slot(sid).state == before
 
 
 def test_later_effect_can_use_an_already_confirmed_attempt(support):
@@ -1256,7 +1277,8 @@ def test_review_report_refills_after_personal_filter_with_same_hard_limits(suppo
     assert len({key for batch in fake.fit_batches for key in batch}) == sum(map(len, fake.fit_batches))
     assert not any(key.startswith("invalid-") for batch in fake.fit_batches for key in batch)
     if blocked_count == 8:
-        assert not data["report"]["suggestions"] and not fake.calls
+        assert not data["report"]["suggestions"] and len(fake.calls) == 1
+        assert fake.calls[0]["knowledge"] == []
     else:
         expected = [hit.item.knowledge_id for hit in ranked[blocked_count:blocked_count + 4]]
         assert [item["knowledge_id"] for item in fake.calls[0]["knowledge"]] == expected
@@ -1583,7 +1605,8 @@ def test_grade_only_cannot_satisfy_numerical_source_age_limits(support):
     assert response.status_code == 200 and response.json()["report"]["suggestions"] == []
     state = healing.healing_store.slot(sid).state
     assert state.memory.background.age is None and state.memory.background.school_stage == "middle"
-    assert state.memory.assessment.result_id == latest["result_id"] and not fake.calls
+    assert state.memory.assessment.result_id == latest["result_id"] and len(fake.calls) == 1
+    assert fake.calls[0]["knowledge"] == []
 
 
 def test_unknown_recorded_grade_preserves_raw_value_without_guessing_stage(support):
@@ -1593,7 +1616,8 @@ def test_unknown_recorded_grade_preserves_raw_value_without_guessing_stage(suppo
     assert response.status_code == 200 and response.json()["report"]["suggestions"] == []
     state = healing.healing_store.slot(sid).state
     assert state.memory.assessment.grade == "大一" and state.memory.background.school_stage is None
-    assert state.memory.provenance["background.age"] == "unknown" and not fake.calls
+    assert state.memory.provenance["background.age"] == "unknown" and len(fake.calls) == 1
+    assert fake.calls[0]["knowledge"] == []
 
 
 @pytest.mark.parametrize("text,expected_status,expected_scene", [
