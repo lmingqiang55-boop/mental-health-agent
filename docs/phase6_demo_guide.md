@@ -6,7 +6,7 @@
 > 后端 `AGENT_TRACE` / `/api/chat` 的 `trace` 字段**原样保留**，现在只作调试用途
 > （本手册下面的开启方式、字段说明、真实日志都仍然有效），
 > 但它**不产生额外模型调用，也不再出现在任何学生可见界面上**。
-> `docs/phase6_trace_log.md` 仍是当时真实模型的执行记录。
+> `docs/archive/dialogue/phase6_trace_log.md` 仍是当时真实模型的执行记录。
 
 > 目标：让评委一眼看出这是**多智能体动态调度**，而不是一个普通聊天机器人。
 >
@@ -33,7 +33,7 @@ $env:AGENT_TRACE     = "on"      # 调试用轨迹；默认关闭
 
 环境：Safety / Router / Dialogue = `deepseek-flash`，Decision = 本地 Ollama
 `policy-qwen3-8b:latest`。以下是**真机跑出来的**逐轮记录，完整 `trace` JSON 见
-[phase6_trace_log.md](phase6_trace_log.md)。
+[phase6_trace_log.md](archive/dialogue/phase6_trace_log.md)。
 
 ### 场景 A：Dialogue 自主追问 → Decision 跳过
 

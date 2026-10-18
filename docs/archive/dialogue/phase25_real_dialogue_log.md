@@ -1,5 +1,7 @@
 # Phase 2.5 真实模型对话验收记录（graph 引擎）
 
+> 历史记录：本文保留原日期、版本及验收结论，不代表当前代码重新验收。整理于 2026-10-18；返回[归档索引](../README.md)。
+
 > 本文件由 `scripts/phase25_real_dialogue.py` 自动生成。所有用户输入均为**模拟学生输入**，不含任何真实学生数据。
 
 > 对话/路由/安全模型：`deepseek-flash`；决策模型：本地 Ollama `policy-qwen3-8b:latest`；`DIALOGUE_ENGINE=graph`。

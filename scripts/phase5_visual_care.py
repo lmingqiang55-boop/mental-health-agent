@@ -12,7 +12,7 @@ Decision 是本地 Ollama ``policy-qwen3-8b``。
 用法::
 
     python scripts/phase5_visual_care.py
-    python scripts/phase5_visual_care.py --out docs/phase5_visual_care_log.md
+    python scripts/phase5_visual_care.py --out docs/archive/dialogue/phase5_visual_care_log.md
 """
 
 from __future__ import annotations
@@ -186,7 +186,7 @@ def _is_router_json(raw: str) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="docs/phase5_visual_care_log.md")
+    parser.add_argument("--out", default="docs/archive/dialogue/phase5_visual_care_log.md")
     parser.add_argument("--engine", default=ENGINE_GRAPH)
     args = parser.parse_args()
 

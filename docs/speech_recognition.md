@@ -7,7 +7,7 @@
 
 本轮已完成 SenseVoice 与 faster-whisper Small 的本机对照，保留 SenseVoice
 作为生产路径；对照模型只用于基准脚本。耗时、识别样本和待验收项见
-[2026-10-02 验证记录](speech_validation_2026-10-02.md)。单字“嗯”的合成样本
+[2026-10-02 验证记录](archive/audio/speech_validation_2026-10-02.md)。单字“嗯”的合成样本
 在两种模型上均未通过；随后用户提供的一份真人录音在两种模型上均识别正确，
 SenseVoice 的默认自动语言模式也通过。其他发音、设备和噪声条件仍待验收。
 随后用户录制的 5 条单句均通过 SenseVoice 和正式上传路由；五合一完整录音
