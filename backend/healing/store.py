@@ -38,5 +38,13 @@ class HealingStore:
         slot.touched_at = now
         return slot
 
+    def delete_sessions(self, session_ids: list[str]) -> int:
+        """删除与已撤销筛查会话关联的临时陪伴状态。"""
+        deleted = 0
+        for session_id in session_ids:
+            if self.slots.pop(session_id, None) is not None:
+                deleted += 1
+        return deleted
+
 
 healing_store = HealingStore()

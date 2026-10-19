@@ -8,6 +8,7 @@ import { useRecorder, type RecordingResult } from '@/composables/useRecorder'
 import { useVision } from '@/composables/useVision'
 import { useTts } from '@/composables/useTts'
 import { useAssessStore } from '@/stores/assess'
+import { useStudentStore } from '@/stores/student'
 import { newUtteranceId } from '@/utils/id'
 import { toastError, toastWarn } from '@/utils/toast'
 import PxButton from '@/components/base/PxButton.vue'
@@ -37,10 +38,21 @@ interface Msg {
 const route = useRoute()
 const router = useRouter()
 const assess = useAssessStore()
+const student = useStudentStore()
+const micAllowed = computed(() =>
+  student.prefs.allowMic && assess.micEnabled && assess.consentScopes.includes('audio_transcription'))
+const cameraAllowed = computed(() =>
+  student.prefs.allowCamera && assess.camEnabled && assess.consentScopes.includes('vision_analysis'))
 
 const sid = String(route.params.id ?? '')
 
-const { recording, elapsedMs, start: startRecording, stop: stopRecording } = useRecorder()
+const {
+  recording,
+  elapsedMs,
+  start: startRecording,
+  stop: stopRecording,
+  cancel: cancelRecording,
+} = useRecorder()
 const { speaking, speak, stop: stopTts } = useTts()
 const {
   active: visionActive,
@@ -81,6 +93,7 @@ const camFailed = ref(false)
 // 正式面向学生上线前需要重新评估是否保留。
 const manualText = ref('')
 let guard = 0
+const processingController = new AbortController()
 
 /** 气泡逐个出现的定时器；离开页面/重新开始时必须清掉。 */
 const revealTimers = new Set<number>()
@@ -125,7 +138,7 @@ const recordSeconds = computed(() => Math.min(59, Math.floor(elapsedMs.value / 1
  */
 const visionStatus = computed<{ tone: 'off' | 'warn' | 'ok'; text: string }>(() => {
   if (!visionActive.value) {
-    return assess.camEnabled && !camFailed.value
+    return cameraAllowed.value && assess.camEnabled && !camFailed.value
       ? { tone: 'warn', text: '摄像头开启中…' }
       : { tone: 'off', text: '仅语音模式（摄像头未开启）' }
   }
@@ -169,7 +182,13 @@ async function init() {
   loading.value = true
   try {
     const state = await sessionApi.get(sid)
+    if (state.consent.status !== 'granted') {
+      toastWarn('本次会话尚未完成知情同意')
+      await router.replace({ name: 'assess-consent' })
+      return
+    }
     assess.setSession(state.session_id, state.turn_count)
+    assess.setConsentScopes(state.consent.scope)
     for (const m of state.conversation_history) {
       if (m.role === 'user' || m.role === 'assistant') pushMessage(m.role, m.content, m.messages)
     }
@@ -206,7 +225,7 @@ async function begin() {
   started.value = true
   busy.value = true
   try {
-    if (assess.camEnabled) {
+    if (cameraAllowed.value && assess.camEnabled) {
       try {
         await startVision(sid, originMs())
         camFailed.value = false
@@ -223,6 +242,10 @@ async function begin() {
 
 async function startRecord() {
   if (busy.value || speaking.value || recording.value || closing.value) return
+  if (!micAllowed.value) {
+    toastWarn('麦克风已在隐私设置中关闭，请使用文字回答')
+    return
+  }
   busy.value = true
   try {
     await startRecording(originMs())
@@ -243,7 +266,7 @@ async function stopCapture() {
     guard = 0
   }
   try {
-    if (recording.value) await stopRecording()
+    if (recording.value) cancelRecording()
   } catch {
     /* ignore */
   }
@@ -304,6 +327,7 @@ async function finishRecord() {
       captureId: ensureCaptureId(),
       recordingStartMs: rec.startMs,
       recordingEndMs: rec.endMs,
+      signal: processingController.signal,
     })
     const text: string = tr.text
     const speech: SpeechMetadata = tr.speech
@@ -320,7 +344,7 @@ async function finishRecord() {
       vision_snapshot: visionSnapshot,
       utterance_id: utteranceId,
       speech,
-    })
+    }, processingController.signal)
     lastUtteranceId.value = utteranceId
     assess.saveProgress(utteranceId)
     await applyChatResult(res)
@@ -361,7 +385,7 @@ async function sendManualText() {
       text,
       vision_snapshot: visionSnapshot,
       utterance_id: utteranceId,
-    })
+    }, processingController.signal)
     lastUtteranceId.value = utteranceId
     assess.saveProgress(utteranceId)
     manualText.value = ''
@@ -380,8 +404,43 @@ async function sendManualText() {
 
 async function stopAll() {
   clearRevealTimers()
+  processingController.abort()
   await stopCapture()
   stopTts()
+}
+
+function cancelCurrentRecording() {
+  if (guard) window.clearTimeout(guard)
+  guard = 0
+  cancelRecording()
+  pushMessage('system', '本次录音已取消，没有上传。')
+}
+
+async function disableCamera() {
+  await stopVision()
+  assess.setCamEnabled(false)
+  student.prefs.allowCamera = false
+  toastWarn('摄像头已关闭，后续不会再发送画面')
+}
+
+async function withdrawConsent() {
+  if (!window.confirm('撤回后会立即停止设备、取消未完成请求并删除当前会话。已保存的历史结果不会自动删除，是否继续？')) return
+  processingController.abort()
+  cancelRecording()
+  await stopVision()
+  stopTts()
+  await sessionApi.consent(sid, false, []).catch(() => undefined)
+  await sessionApi.remove(sid).catch(() => undefined)
+  messages.value = []
+  manualText.value = ''
+  assess.clearProgress()
+  await router.replace({ name: 'me-privacy' })
+}
+
+function onVisibilityChange() {
+  if (!document.hidden) return
+  if (recording.value) cancelCurrentRecording()
+  if (visionActive.value) void disableCamera()
 }
 
 /** 生成结果：保存进度、彻底停机 → 进入安全检查页（由该页调 /api/assessment）。 */
@@ -402,12 +461,18 @@ async function endSession() {
 watch(videoRef, (el) => bindVideo(el), { flush: 'post' })
 
 onMounted(() => {
+  if (!cameraAllowed.value && assess.camEnabled) assess.setCamEnabled(false)
+  if (!micAllowed.value) assess.setMicEnabled(false)
   void init()
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onUnmounted(() => {
   if (guard) window.clearTimeout(guard)
   clearRevealTimers()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  processingController.abort()
+  cancelRecording()
 })
 
 onBeforeRouteLeave(() => {
@@ -440,6 +505,7 @@ onBeforeRouteLeave(() => {
           <button type="button" class="session__pause" @click="router.push({ name: 'assess' })">
             暂停
           </button>
+          <button type="button" class="session__pause" @click="withdrawConsent">撤回同意</button>
         </div>
 
         <!-- 采集状态：区分「未开启（仅语音）」与「已开启但未上传/上传中」 -->
@@ -450,6 +516,7 @@ onBeforeRouteLeave(() => {
         >
           <i class="session__vision-dot" />
           <span>{{ visionStatus.text }}</span>
+          <button v-if="visionActive" type="button" class="session__vision-close" @click="disableCamera">关闭摄像头</button>
         </div>
       </header>
 
@@ -520,6 +587,7 @@ onBeforeRouteLeave(() => {
           </span>
 
           <button
+            v-if="micAllowed"
             type="button"
             class="session__mic"
             :class="{ 'is-recording xq-pulse': recording }"
@@ -531,22 +599,31 @@ onBeforeRouteLeave(() => {
           </button>
 
           <p v-if="!started" class="session__hint">
-            {{ busy ? '小晴正在准备…' : '点一下麦克风开始，小晴会先跟你打个招呼' }}
+            {{
+              busy
+                ? '小晴正在准备…'
+                : micAllowed
+                  ? '点一下麦克风开始，小晴会先跟你打个招呼'
+                  : '麦克风已关闭，点击下面按钮开始文字测评'
+            }}
           </p>
           <p v-else-if="recording" class="session__hint session__hint--live">
             正在聆听… 说完点这里结束
           </p>
+          <PxButton v-if="recording" variant="danger" size="sm" @click="cancelCurrentRecording">取消录音（不上传）</PxButton>
           <p v-else-if="busy" class="session__hint">小晴正在思考…</p>
           <p v-else-if="speaking" class="session__hint">小晴正在说话…</p>
           <p v-else class="session__hint">准备好了就点麦克风，慢慢说</p>
 
-          <!-- 【演示用】文字输入通道：与语音通道等价，绕开 ASR 抖动 -->
+          <PxButton v-if="!started && !micAllowed" size="lg" @click="begin">开始文字测评</PxButton>
+
+          <!-- 【演示用】文字输入通道；关闭麦克风时也是正式的无障碍入口。 -->
           <div class="session__manual">
             <input
               v-model="manualText"
               class="session__manual-input"
               type="text"
-              placeholder="在这里说说你想说的事…"
+              :placeholder="micAllowed ? '也可以输入文字回答' : '输入文字回答后按回车发送'"
               :disabled="busy || speaking || recording"
               @keyup.enter="sendManualText"
             />
@@ -566,7 +643,7 @@ onBeforeRouteLeave(() => {
       </div>
 
       <p class="xq-disclaimer">
-        语音仅用于当场转写、不留存；视频仅提取特征。本测评为初步筛查，不构成医学诊断。
+        语音上传至本机项目后端转写且不长期保存原始录音；摄像头画面发送至本机项目后端实时分析且不写入评估记录。本测评不构成医学诊断。
       </p>
     </template>
   </div>
@@ -615,6 +692,7 @@ onBeforeRouteLeave(() => {
   background: var(--xq-primary-soft);
   color: var(--xq-primary-deep);
 }
+.session__vision-close { margin-left: 8px; border: 0; background: transparent; color: inherit; text-decoration: underline; cursor: pointer; }
 
 /* ---- 采集状态指示 ---- */
 .session__vision {

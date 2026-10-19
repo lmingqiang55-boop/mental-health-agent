@@ -44,5 +44,13 @@ class CommunicationStore:
                 if message:
                     message.read = True
 
+    def delete_by_student(self, student_ref: str) -> int:
+        """删除进程内保存的该学生全部沟通消息。"""
+        with self._lock:
+            ids = self._by_student.pop(student_ref, [])
+            for message_id in ids:
+                self._messages.pop(message_id, None)
+            return len(ids)
+
 
 communication_store = CommunicationStore()

@@ -90,6 +90,18 @@ class SessionManager:
         with self._lock:
             return self._sessions.pop(session_id, None) is not None
 
+    def delete_by_student(self, student_ref: str) -> list[str]:
+        """删除学生仍在内存中的对话、音频元数据与视觉派生状态。"""
+        with self._lock:
+            session_ids = [
+                session_id
+                for session_id, session in self._sessions.items()
+                if session.student_ref == student_ref
+            ]
+            for session_id in session_ids:
+                self._sessions.pop(session_id, None)
+            return session_ids
+
     def count(self) -> int:
         with self._lock:
             return len(self._sessions)

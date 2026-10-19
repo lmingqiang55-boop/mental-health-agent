@@ -1,4 +1,4 @@
-"""Persist the three most recent assessment results for each anonymous student."""
+"""Persist assessment results until the anonymous student deletes them."""
 
 import json
 import sqlite3
@@ -13,7 +13,6 @@ from backend.models.enums import FollowUpStatus
 
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "evaluation_memory.sqlite3"
-MAX_RESULTS_PER_STUDENT = 3
 
 
 class MemoryStore:
@@ -79,13 +78,6 @@ class MemoryStore:
                 INSERT INTO assessment_records (record_id, result_id, student_ref, payload)
                 VALUES (?, ?, ?, ?)
             """, (record.record_id, result.result_id, student_ref, record.model_dump_json()))
-            connection.execute("""
-                DELETE FROM assessment_records
-                WHERE student_ref = ? AND sequence NOT IN (
-                    SELECT sequence FROM assessment_records
-                    WHERE student_ref = ? ORDER BY sequence DESC LIMIT ?
-                )
-            """, (student_ref, student_ref, MAX_RESULTS_PER_STUDENT))
             return record.model_copy(deep=True)
 
     def get_record(self, record_id: str) -> EvaluationRecord | None:
@@ -128,6 +120,24 @@ class MemoryStore:
                 SELECT payload FROM assessment_records
                 WHERE student_ref = ? ORDER BY sequence DESC LIMIT 1
             """, (student_ref,)).fetchone())
+
+    def delete_by_student(self, student_ref: str) -> int:
+        """永久删除匿名学生的全部测评结果与其中的教师备注。"""
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM assessment_records WHERE student_ref = ?",
+                (student_ref,),
+            )
+            return max(cursor.rowcount, 0)
+
+    def delete_record(self, student_ref: str, record_id: str) -> bool:
+        """只删除属于该匿名身份的一条评估结果。"""
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM assessment_records WHERE student_ref = ? AND record_id = ?",
+                (student_ref, record_id),
+            )
+            return cursor.rowcount > 0
 
     def add_counselor_note(self, record_id: str, counselor_ref: str,
                            content: str) -> EvaluationRecord | None:

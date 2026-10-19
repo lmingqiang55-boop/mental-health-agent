@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { ensureStudentRef, resetStudentRef } from '@/utils/studentRef'
-import { STORAGE_KEYS, readLS, writeLS } from '@/utils/storage'
+import { ensureStudentRef, persistStudentRef, resetStudentRef } from '@/utils/studentRef'
+import { clearAppLocalStorage, STORAGE_KEYS, readLS, writeLS } from '@/utils/storage'
 import { contactApi, profileApi } from '@/api'
 import type { EmergencyContact, SchoolStage } from '@/api/types'
 
@@ -32,11 +32,33 @@ export const useStudentStore = defineStore('student', () => {
   const contacts = ref<EmergencyContact[]>([])
   const prefs = ref<ConsentPrefs>(readLS<ConsentPrefs>(STORAGE_KEYS.consentPrefs, DEFAULT_PREFS))
   const profileLoaded = ref(false)
+  let previousAllowStorage = prefs.value.allowStorage
 
   const displayName = computed(() => nickname.value.trim() || '小晴的朋友')
 
   watch(nickname, (v) => writeLS(STORAGE_KEYS.nickname, v))
-  watch(prefs, (v) => writeLS(STORAGE_KEYS.consentPrefs, v), { deep: true })
+  watch(
+    prefs,
+    (v) => {
+      // 授权偏好必须先落盘，storage 工具才能据此拦截后续读写。
+      writeLS(STORAGE_KEYS.consentPrefs, v)
+      if (!v.allowStorage) {
+        clearAppLocalStorage(true)
+      } else if (!previousAllowStorage) {
+        persistStudentRef(studentRef.value)
+        writeLS(STORAGE_KEYS.nickname, nickname.value)
+      }
+      previousAllowStorage = v.allowStorage
+      if (!v.allowCamera) {
+        try {
+          sessionStorage.setItem(STORAGE_KEYS.camEnabled, '0')
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    { deep: true },
+  )
 
   /** 从后端拉取档案；失败时沿用本地昵称缓存，不阻塞页面。 */
   async function loadProfile() {

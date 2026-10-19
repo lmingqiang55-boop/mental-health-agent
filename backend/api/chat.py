@@ -25,6 +25,7 @@ import json
 
 from fastapi import APIRouter, HTTPException
 
+from backend.api.consent_guard import require_scopes
 from backend.api.errors import session_not_found
 from backend.core.agent_trace import build_agent_trace, trace_enabled
 from backend.core.dialogue_manager import DialogueManager, DialogueUnavailable, ScreeningFinished
@@ -95,6 +96,7 @@ def chat(request: ChatRequest) -> ChatResponse:
     fingerprint = _fingerprint(request, text)
 
     def mutator(session: SessionState) -> None:
+        require_scopes(session, "text_processing", "third_party_ai")
         if request.utterance_id is not None:
             receipt = session.chat_receipts.get(request.utterance_id)
             if receipt is not None:

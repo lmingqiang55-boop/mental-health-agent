@@ -15,6 +15,13 @@ export function fmtDateTime(input?: string | number | null): string {
   return d.isValid() ? d.format('MM-DD HH:mm') : String(input)
 }
 
+/** 日期时间 → 「2026-10-09 14:32」 */
+export function fmtFullDateTime(input?: string | number | null): string {
+  if (!input) return '—'
+  const d = dayjs(input)
+  return d.isValid() ? d.format('YYYY-MM-DD HH:mm') : String(input)
+}
+
 /** 日期时间 → 「2026-10-09」 */
 export function fmtDate(input?: string | number | null): string {
   if (!input) return '—'

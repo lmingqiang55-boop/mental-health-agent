@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { STORAGE_KEYS, readLS, writeLS, removeLS, readSessionFlag, writeSessionFlag } from '@/utils/storage'
+import { STORAGE_KEYS, readLS, writeLS, removeLS, writeSessionFlag } from '@/utils/storage'
 
 export interface AssessProgress {
   sessionId: string
@@ -16,9 +16,11 @@ export interface AssessProgress {
 export const useAssessStore = defineStore('assess', () => {
   const sessionId = ref<string>('')
   const turnCount = ref(0)
+  const consentScopes = ref<string[]>([])
   /** 摄像头是否启用（设备检查结果，仅前端态；关闭=仅语音，不影响有效性） */
-  const camEnabled = ref<boolean>(readSessionFlag(STORAGE_KEYS.camEnabled) ?? false)
-  const micEnabled = ref(true)
+  // 刷新后绝不自动恢复设备采集；必须由用户在设备检查页重新开启。
+  const camEnabled = ref(false)
+  const micEnabled = ref(false)
 
   function setCamEnabled(v: boolean) {
     camEnabled.value = v
@@ -31,6 +33,10 @@ export const useAssessStore = defineStore('assess', () => {
   function setSession(id: string, turns = 0) {
     sessionId.value = id
     turnCount.value = turns
+  }
+
+  function setConsentScopes(scopes: string[]) {
+    consentScopes.value = [...scopes]
   }
 
   /** 暂存进度（离开测评页时调用）。 */
@@ -53,16 +59,21 @@ export const useAssessStore = defineStore('assess', () => {
     removeLS(STORAGE_KEYS.assessProgress)
     sessionId.value = ''
     turnCount.value = 0
+    consentScopes.value = []
+    setCamEnabled(false)
+    setMicEnabled(false)
   }
 
   return {
     sessionId,
     turnCount,
+    consentScopes,
     camEnabled,
     micEnabled,
     setCamEnabled,
     setMicEnabled,
     setSession,
+    setConsentScopes,
     saveProgress,
     readProgress,
     clearProgress,

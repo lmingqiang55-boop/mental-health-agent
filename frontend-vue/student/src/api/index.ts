@@ -30,6 +30,22 @@ export const healthApi = {
   check: () => http.get<{ status: string }>('/api/health').then((r) => r.data),
 }
 
+// ---------------- 隐私与数据权利 ----------------
+
+export interface DeleteStudentDataResponse {
+  status: 'deleted'
+  student_ref: string
+  deleted: Record<string, number>
+  total: number
+}
+
+export const privacyApi = {
+  deleteAll: (studentRef: string) =>
+    http
+      .delete<DeleteStudentDataResponse>(`/api/privacy/student/${studentRef}`)
+      .then((r) => r.data),
+}
+
 // ---------------- Session ----------------
 
 export const sessionApi = {
@@ -41,12 +57,13 @@ export const sessionApi = {
   remove: (sessionId: string) =>
     http.delete<{ status: string }>(`/api/session/${sessionId}`).then((r) => r.data),
 
-  consent: (sessionId: string, granted: boolean, scope: string[] = ['screening', 'result_storage']) =>
+  consent: (sessionId: string, granted: boolean, scope: string[] = []) =>
     http
       .put<ConsentResponse>(`/api/session/${sessionId}/consent`, {
         session_id: sessionId,
         granted,
         scope,
+        version: '1.0',
       })
       .then((r) => r.data),
 }
@@ -54,22 +71,22 @@ export const sessionApi = {
 // ---------------- Chat ----------------
 
 export const chatApi = {
-  send: (payload: ChatRequest) =>
-    http.post<ChatResponse>('/api/chat', payload).then((r) => r.data),
+  send: (payload: ChatRequest, signal?: AbortSignal) =>
+    http.post<ChatResponse>('/api/chat', payload, { signal, silent: true }).then((r) => r.data),
 }
 
 // ---------------- Vision ----------------
 
 export const visionApi = {
   /** 开关采集（代次隔离）。注意 extra=forbid，不要多传字段。 */
-  capture: (sessionId: string, captureId: string, generation: number, active: boolean) =>
+  capture: (sessionId: string, captureId: string, generation: number, active: boolean, signal?: AbortSignal) =>
     http
       .post('/api/vision/capture', {
         session_id: sessionId,
         capture_id: active ? captureId : null,
         generation,
         active,
-      })
+      }, { signal, silent: true })
       .then((r) => r.data),
 
   /** 提交一帧即时分析（不落盘）。带时间的三件套必须同时给。 */
@@ -91,7 +108,7 @@ export const visionApi = {
     capture_id: string
     start_ms: number
     end_ms: number
-  }) => http.post<VisionSegmentResponse>('/api/vision/segment', payload).then((r) => r.data),
+  }, signal?: AbortSignal) => http.post<VisionSegmentResponse>('/api/vision/segment', payload, { signal, silent: true }).then((r) => r.data),
 }
 
 // ---------------- Audio ----------------
@@ -108,6 +125,7 @@ export const audioApi = {
     captureId?: string
     recordingStartMs: number
     recordingEndMs: number
+    signal?: AbortSignal
   }) => {
     const fd = new FormData()
     fd.append('file', params.file, params.filename)
@@ -116,7 +134,7 @@ export const audioApi = {
     if (params.captureId) fd.append('capture_id', params.captureId)
     fd.append('recording_start_ms', String(Math.round(params.recordingStartMs)))
     fd.append('recording_end_ms', String(Math.round(params.recordingEndMs)))
-    return http.post<TranscriptionResponse>('/api/audio/transcribe', fd).then((r) => r.data)
+    return http.post<TranscriptionResponse>('/api/audio/transcribe', fd, { signal: params.signal, silent: true }).then((r) => r.data)
   },
 }
 
@@ -156,6 +174,15 @@ export const historyApi = {
       .get<{ student_ref: string; records: EvaluationRecord[]; total: number }>(
         `/api/history/${studentRef}`,
       )
+      .then((r) => ({
+        ...r.data,
+        // 后端兼容旧版存储顺序；学生端统一保证最近一次测评排在最前。
+        records: [...r.data.records].sort(
+          (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at),
+        ),
+      })),
+  remove: (studentRef: string, recordId: string) =>
+    http.delete<{ status: string; record_id: string }>(`/api/history/${studentRef}/${recordId}`)
       .then((r) => r.data),
 }
 

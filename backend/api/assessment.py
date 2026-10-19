@@ -7,6 +7,7 @@ from evaluation_agent.llm_client import LLMError
 from evaluation_agent.inputs import EvaluationInput
 
 from backend.api.errors import session_not_found
+from backend.api.consent_guard import require_scopes, require_session_scopes
 from backend.core.evaluation_engine import evaluation_engine
 from backend.core.memory_store import memory_store
 from backend.core.multimodal_fusion import build_vision_summary
@@ -22,9 +23,8 @@ router = APIRouter(prefix="/api", tags=["assessment"])
 
 @router.post("/assessment", response_model=AssessmentResponse)
 def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
-    session = session_manager.get_session(request.session_id)
-    if session is None:
-        raise session_not_found()
+    session = require_session_scopes(
+        request.session_id, "text_processing", "third_party_ai", "assessment_storage")
     initial_history = session.conversation_history
     if request.evaluation_input is not None:
         _validate_speech_history(session, request.evaluation_input.dialogue_history)
@@ -66,6 +66,8 @@ def trigger_assessment(request: TriggerAssessmentRequest) -> AssessmentResponse:
         }) from exc
 
     def link(session: SessionState) -> None:
+        require_scopes(
+            session, "text_processing", "third_party_ai", "assessment_storage")
         if not _same_history(
                 session.conversation_history, initial_history):
             raise HTTPException(status_code=409, detail={

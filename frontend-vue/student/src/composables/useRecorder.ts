@@ -99,9 +99,31 @@ export function useRecorder() {
     stream = null
     recorder = null
     recording.value = false
+    chunks = []
+  }
+
+  /** 取消本次录音：丢弃缓冲并释放设备，不生成 Blob，也不会触发上传。 */
+  function cancel() {
+    window.clearInterval(tickTimer)
+    if (recorder) {
+      recorder.ondataavailable = null
+      recorder.onstop = null
+      recorder.onerror = null
+      try {
+        if (recorder.state !== 'inactive') recorder.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+    chunks = []
+    stream?.getTracks().forEach((t) => t.stop())
+    stream = null
+    recorder = null
+    recording.value = false
+    elapsedMs.value = 0
   }
 
   onUnmounted(dispose)
 
-  return { recording, elapsedMs, error, start, stop, dispose, ensureStream }
+  return { recording, elapsedMs, error, start, stop, cancel, dispose, ensureStream }
 }

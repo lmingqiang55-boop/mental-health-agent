@@ -180,7 +180,7 @@ FollowUpStatus     none | pending | in_progress | resolved
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `session_id` | string | 会话 ID（UUID） |
-| `student_ref` | string | 匿名学生标识；跨会话复用以读取同一人的最近 3 次评估 |
+| `student_ref` | string | 匿名学生标识；跨会话复用以读取同一人尚未删除的评估 |
 | `conversation_history` | Message[] | 完整对话历史；新会话的第 1 条是固定开场问题 |
 | `turn_count` | int | 已完成回合数 |
 | `current_stage` | SessionStage | 当前阶段 |
@@ -670,7 +670,7 @@ DeepSeek 接口发送对话原文及结构化视觉状态；不发送原始音�
 
 ## 数据边界
 
-- Session 与治愈陪伴状态为进程内存，重启清空，TTL 2 小时；评估记忆使用 SQLite 持久保存每位学生最近三次结果。
+- Session 与治愈陪伴状态为进程内存，重启清空，TTL 2 小时；评估结果使用 SQLite 持久保存，直到用户主动删除。
 - 所有风险/评估结果均为**初步筛查提示**，不得表述为临床诊断或治疗建议。
 - `session_id` 是会话定位符，不是身份认证或授权凭据。
 - 不提交 `.env`、密钥、原始音视频或真实个人对话。

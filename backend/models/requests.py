@@ -111,6 +111,7 @@ class ConsentRequest(BaseModel):
     session_id: str
     granted: bool
     scope: list[str] = Field(default_factory=list)
+    version: str = Field(default="1.0", min_length=1, max_length=20)
 
 
 class SendCommunicationRequest(BaseModel):

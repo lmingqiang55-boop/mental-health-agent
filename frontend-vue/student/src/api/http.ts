@@ -17,6 +17,7 @@ export const http = axios.create({
 /** 静默选项：某些调用（如启动时探测 health）不希望弹 toast。 */
 export interface RequestConfig {
   silent?: boolean
+  signal?: AbortSignal
 }
 
 // 让 `silent` 成为 axios 一等配置项，供各接口按请求传入（拦截器据此决定是否弹 toast）。
@@ -43,7 +44,8 @@ http.interceptors.response.use(
     const apiErr: ApiErrorShape = { status, code, message }
 
     const silent = (err.config as { silent?: boolean } | undefined)?.silent
-    if (!silent) {
+    const cancelled = err.code === 'ERR_CANCELED'
+    if (!silent && !cancelled) {
       toastError(`${message}${code !== 'NETWORK_ERROR' ? `（${code}）` : ''}`)
     }
     return Promise.reject(apiErr)

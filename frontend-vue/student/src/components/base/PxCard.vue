@@ -28,9 +28,11 @@ withDefaults(
 
 <style scoped>
 .px-card {
+  border: var(--xq-border-pixel-thin);
   border-radius: var(--xq-radius-l);
-  background: var(--xq-surface);
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--xq-shadow-pixel);
+  overflow: hidden;
 }
 .px-card__head {
   padding: var(--xq-sp-4) var(--xq-sp-4) 0;
@@ -62,10 +64,10 @@ withDefaults(
   box-shadow: var(--xq-shadow-pixel-lg);
 }
 .px-card--primary {
-  background: linear-gradient(135deg, #fff 0%, var(--xq-primary-soft) 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, #fff0e6 100%);
 }
 .px-card--secondary {
-  background: linear-gradient(135deg, #fff 0%, var(--xq-secondary-soft) 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, var(--xq-secondary-soft) 100%);
 }
 .px-card--warn {
   background: linear-gradient(135deg, #fff 0%, rgba(242, 184, 75, 0.16) 100%);

@@ -26,6 +26,11 @@ class EvaluationResult(BaseModel):
     risk: RiskResult
     report: EvaluationOutput
     assessment_method: Literal["evaluation_agent"] = "evaluation_agent"
+    data_sources: list[Literal["text", "audio_transcription", "vision_analysis"]] = Field(
+        default_factory=lambda: ["text"],
+        description="本次结果实际使用的数据来源；未采集的设备不会出现在列表中。",
+    )
+    consent_version: str = "1.0"
     created_at: datetime = Field(default_factory=_now)
 
     @model_validator(mode="after")

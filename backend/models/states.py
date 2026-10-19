@@ -180,6 +180,7 @@ class ConsentRecord(BaseModel):
     status: ConsentStatus = ConsentStatus.NOT_PROVIDED
     scope: list[str] = Field(default_factory=list,
                              description="同意的数据使用范围")
+    version: str = "1.0"
     granted_at: datetime | None = None
     withdrawn_at: datetime | None = None
 

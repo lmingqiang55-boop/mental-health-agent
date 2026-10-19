@@ -3,8 +3,10 @@
 只负责中间件、异常处理和路由注册，不写业务逻辑。
 """
 
+import asyncio
 import logging
 import os
+from contextlib import suppress
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -28,6 +30,7 @@ from backend.api import (
     history,
     healing,
     profile,
+    privacy,
     session,
     teacher,
     tts,
@@ -53,10 +56,22 @@ def _warn_if_hotlines_unconfigured() -> None:
 async def lifespan(app: FastAPI):
     _warn_if_hotlines_unconfigured()
     service = get_transcription_service()
-    await service.start()
+    # SenseVoice / CUDA 首次加载可能超过一分钟。让 HTTP 服务先监听 8000，
+    # 前端可正常使用文字功能，并通过 /api/audio/status 查看 loading/ready。
+    async def warm_up_transcription() -> None:
+        # 先把控制权还给 Uvicorn，使其完成 socket 绑定；否则大型依赖的首次
+        # 导入可能长时间占用解释器，让前端误以为后端已经退出。
+        await asyncio.sleep(2)
+        await service.start()
+
+    startup_task = asyncio.create_task(warm_up_transcription())
     try:
         yield
     finally:
+        if not startup_task.done():
+            startup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await startup_task
         service.close()
         get_transcription_service.cache_clear()
 
@@ -117,3 +132,4 @@ app.include_router(teacher.router)
 app.include_router(communication.router)
 app.include_router(profile.router)
 app.include_router(profile.contacts_router)
+app.include_router(privacy.router)

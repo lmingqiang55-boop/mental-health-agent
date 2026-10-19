@@ -112,5 +112,19 @@ class ProfileStore:
             deleted = cursor.rowcount > 0
         return deleted
 
+    def delete_by_student(self, student_ref: str) -> dict[str, int]:
+        """永久删除学生档案与紧急联系人。"""
+        with self._lock, self._connection() as connection:
+            contacts = connection.execute(
+                "DELETE FROM emergency_contacts WHERE student_ref = ?", (student_ref,)
+            ).rowcount
+            profiles = connection.execute(
+                "DELETE FROM student_profiles WHERE student_ref = ?", (student_ref,)
+            ).rowcount
+        return {
+            "emergency_contacts": max(contacts, 0),
+            "student_profiles": max(profiles, 0),
+        }
+
 
 profile_store = ProfileStore()

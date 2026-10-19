@@ -2,9 +2,10 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.api.errors import session_not_found
+from backend.api.consent_guard import ALLOWED_SCOPES, CONSENT_VERSION
 from backend.core.session_manager import session_manager
 from backend.models.enums import ConsentStatus
 from backend.models.requests import ConsentRequest, CreateSessionRequest
@@ -45,16 +46,29 @@ def delete_session(session_id: str) -> dict[str, str]:
 
 @router.put("/{session_id}/consent", response_model=ConsentResponse)
 def update_consent(session_id: str, request: ConsentRequest) -> ConsentResponse:
+    if request.session_id != session_id:
+        raise HTTPException(status_code=422, detail={
+            "code": "SESSION_MISMATCH", "message": "请求中的会话标识不一致。"})
+    unknown = sorted(set(request.scope) - ALLOWED_SCOPES)
+    if unknown:
+        raise HTTPException(status_code=422, detail={
+            "code": "INVALID_CONSENT_SCOPE", "message": "包含未知的授权范围。"})
+    required = {"text_processing", "third_party_ai", "assessment_storage"}
+    if request.granted and not required.issubset(request.scope):
+        raise HTTPException(status_code=422, detail={
+            "code": "INCOMPLETE_CONSENT", "message": "基础文字处理、第三方模型处理和结果保存为完成筛查所必需。"})
     def mutate(session: SessionState) -> None:
         if request.granted:
             session.consent = ConsentRecord(
                 status=ConsentStatus.GRANTED,
-                scope=request.scope,
+                scope=sorted(set(request.scope)),
+                version=request.version or CONSENT_VERSION,
                 granted_at=datetime.now(timezone.utc),
             )
         else:
             session.consent = ConsentRecord(
                 status=ConsentStatus.WITHDRAWN,
+                version=request.version or CONSENT_VERSION,
                 withdrawn_at=datetime.now(timezone.utc),
             )
 

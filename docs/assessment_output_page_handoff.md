@@ -23,7 +23,7 @@
 | --- | --- | --- | --- |
 | `result.result_id` | 字符串 | 不必直接展示 | 保存下来，供结果详情接口查询。 |
 | `result.session_id` | UUID 字符串 | 不必直接展示 | 与响应外层 `session_id` 相同。 |
-| `result.student_ref` | 匿名字符串 | 不必直接展示 | 同一浏览器跨会话复用，可查询最近 3 次结果。 |
+| `result.student_ref` | 匿名字符串 | 不必直接展示 | 同一浏览器跨会话复用，可查询该匿名身份尚未删除的结果。 |
 | `result.age` | 整数岁或 null | 年龄 | 从第一条用户回答中读取，随评估结果保存。 |
 | `result.grade` | 字符串或 null | 年级 | 例如 `初一`，随评估结果保存。 |
 | `result.psychological_profile.emotion` | 0～100 整数 | 情绪状态 | 分数越高，相关信号越突出。 |
@@ -76,7 +76,7 @@
 
 - 成功响应才有 `status: "completed"` 和 `result`；接口没有 `pending` 的评估结果对象。请求处理中由页面自行显示加载状态，并阻止重复触发。重复调用 `POST /api/assessment` 会生成另一条评估记录。
 - 统一错误体形如 `{ "error": { "code": "...", "message": "..." } }`。常见错误：`404 SESSION_NOT_FOUND`（会话不存在或过期）、`404 RESULT_NOT_FOUND`（结果 ID 与会话不匹配或不存在）、`422 INVALID_EVALUATION_INPUT`（例如空会话）、`422 VALIDATION_ERROR`（请求字段不合法）、`503 EVALUATION_UNAVAILABLE`（评估模型配置缺失或不可用）。`POST /api/chat` 还可能返回 `503 POLICY_UNAVAILABLE`。
-- `GET /api/history/{student_ref}` 返回 `{ "student_ref": "...", "records": [...], "total": 数字 }`。页面保留 `POST /api/session` 返回的匿名标识，并在新会话请求中复用；每人只返回最近 3 次评估。
+- `GET /api/history/{student_ref}` 返回 `{ "student_ref": "...", "records": [...], "total": 数字 }`。页面保留 `POST /api/session` 返回的匿名标识，并在新会话请求中复用；接口返回该匿名身份尚未主动删除的评估。
 - 会话仍保存在后端进程内存里，约 2 小时 TTL；评估结果保存在本机 SQLite，后端重启后仍在。清除浏览器数据会丢失该浏览器保存的匿名标识，尚无账号找回机制。
 
 ## 5. 交接验收

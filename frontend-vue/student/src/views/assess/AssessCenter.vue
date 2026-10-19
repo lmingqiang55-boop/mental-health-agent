@@ -6,7 +6,7 @@ import { isApiError } from '@/api/http'
 import type { EvaluationRecord, OverallLevel } from '@/api/types'
 import { useStudentStore } from '@/stores/student'
 import { useAssessStore, type AssessProgress } from '@/stores/assess'
-import { fmtDate, todayStr } from '@/utils/format'
+import { fmtDate, fmtFullDateTime, todayStr } from '@/utils/format'
 import { toastWarn } from '@/utils/toast'
 import PxButton from '@/components/base/PxButton.vue'
 import PxCard from '@/components/base/PxCard.vue'
@@ -132,7 +132,7 @@ function openReport(r: EvaluationRecord) {
       >
         <div class="assess__item-row">
           <div class="assess__item-main">
-            <span class="assess__item-date">{{ fmtDate(r.created_at) }}</span>
+            <span class="assess__item-date">{{ fmtFullDateTime(r.created_at) }}</span>
             <PxTag :tone="LEVEL_TONE[r.result.overall_level]" size="sm">
               {{ LEVEL_LABEL[r.result.overall_level] }}
             </PxTag>

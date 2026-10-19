@@ -203,5 +203,17 @@ class HealStore:
             ).fetchall()
         return [FocusSession.model_validate_json(r[0]) for r in rows]
 
+    def delete_by_student(self, student_ref: str) -> dict[str, int]:
+        """永久删除心情、打卡与专注记录。"""
+        deleted: dict[str, int] = {}
+        with self._lock, self._connection() as connection:
+            for table in ("mood_entries", "habit_records", "focus_sessions"):
+                cursor = connection.execute(
+                    f"DELETE FROM {table} WHERE student_ref = ?",  # noqa: S608 - 固定白名单
+                    (student_ref,),
+                )
+                deleted[table] = max(cursor.rowcount, 0)
+        return deleted
+
 
 heal_store = HealStore()

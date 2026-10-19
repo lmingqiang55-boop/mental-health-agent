@@ -6,6 +6,7 @@ import { historyApi } from '@/api'
 import { useStudentStore } from '@/stores/student'
 import { fmtRelative } from '@/utils/format'
 import type { EvaluationRecord } from '@/api/types'
+import sleepingCloud from '@/assets/illustrations/sleeping-cloud.png'
 
 const student = useStudentStore()
 const latest = ref<EvaluationRecord | null>(null)
@@ -62,6 +63,7 @@ onMounted(async () => {
         </template>
         <template v-else>还没有测评记录，先做一次初步筛查再来 ›</template>
       </p>
+      <img class="hh__core-art" :src="sleepingCloud" alt="" aria-hidden="true" />
     </router-link>
 
     <!-- 其余功能按分组 -->
@@ -90,7 +92,8 @@ onMounted(async () => {
   position: relative;
   display: block;
   border: var(--xq-border-pixel);
-  background: var(--xq-primary-soft);
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), #ffede0);
   box-shadow: var(--xq-shadow-pixel);
   padding: var(--xq-sp-4);
   color: var(--xq-text);
@@ -107,12 +110,17 @@ onMounted(async () => {
 }
 .hh__core-badge {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: var(--xq-sp-4);
+  right: var(--xq-sp-4);
+  z-index: 3;
   background: var(--xq-star);
-  border: 2px solid var(--xq-text);
+  border: 1px solid rgba(232, 163, 61, 0.45);
+  border-radius: 999px;
   font-size: 10px;
-  padding: 1px 6px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 3px 9px;
+  box-shadow: 0 4px 12px rgba(232, 163, 61, 0.18);
 }
 .hh__core-top {
   display: flex;
@@ -134,11 +142,18 @@ onMounted(async () => {
   margin-top: 2px;
 }
 .hh__core-hint {
+  position: relative;
+  z-index: 1;
   margin-top: var(--xq-sp-3);
   padding-top: var(--xq-sp-3);
   border-top: 1px dashed var(--xq-text-disabled);
   font-size: var(--xq-fs-xs);
   color: var(--xq-text-2);
+}
+.hh__core-art {
+  display: none;
+  pointer-events: none;
+  user-select: none;
 }
 .hh__group {
   margin-top: var(--xq-sp-4);
@@ -190,6 +205,24 @@ onMounted(async () => {
   line-height: 1.5;
 }
 @media (min-width: 768px) {
+  .hh__core {
+    min-height: 178px;
+    padding-right: 300px;
+  }
+  .hh__core-top,
+  .hh__core-hint {
+    position: relative;
+    z-index: 1;
+  }
+  .hh__core-art {
+    position: absolute;
+    right: -18px;
+    bottom: -34px;
+    display: block;
+    width: 320px;
+    height: 180px;
+    object-fit: contain;
+  }
   .hh__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

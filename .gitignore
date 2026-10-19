@@ -41,3 +41,6 @@ vision_dump/
 # --- 新前端（Vue3）frontend-vue ---
 frontend-vue/*/node_modules/
 frontend-vue/*/dist/
+
+# Codex 本机运行/浏览器测试产物（可能含截图、日志与临时浏览器资料）
+.codex-runtime/

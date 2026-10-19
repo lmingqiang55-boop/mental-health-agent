@@ -9,6 +9,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.api.errors import session_not_found
+from backend.api.consent_guard import require_session_scopes, require_scopes
 from backend.audio.decoder import SUPPORTED_MIME_TYPES
 from backend.audio.errors import AudioError
 from backend.audio.transcriber import get_transcription_service
@@ -46,14 +47,14 @@ async def transcribe_audio(request: Request) -> TranscriptionResponse:
             metadata, data, content_type = await read_recording(request, service.config)
             # Chat holds this global lock during policy calls; never wait on it
             # in the event loop, including the check after inference.
-            if await asyncio.to_thread(session_manager.get_session, metadata.session_id) is None:
-                raise session_not_found()
+            await asyncio.to_thread(
+                require_session_scopes, metadata.session_id, "audio_transcription")
             text = await reservation.transcribe(
                 data, content_type,
                 metadata.speech.recording_end_ms - metadata.speech.recording_start_ms)
             # A deleted/expired session must not receive a late result.
-            if await asyncio.to_thread(session_manager.get_session, metadata.session_id) is None:
-                raise session_not_found()
+            await asyncio.to_thread(
+                require_session_scopes, metadata.session_id, "audio_transcription")
             return TranscriptionResponse(
                 session_id=metadata.session_id, utterance_id=metadata.utterance_id,
                 text=text, speech=metadata.speech)
@@ -67,6 +68,7 @@ def update_audio(request: AudioUpsertRequest) -> StateUpsertResponse:
     incoming = request.state
 
     def mutator(session: SessionState) -> None:
+        require_scopes(session, "audio_transcription")
         merged = _merge_audio(session.latest_audio_state, incoming)
         session.latest_audio_state = merged
         session.audio_state_log.append(merged)

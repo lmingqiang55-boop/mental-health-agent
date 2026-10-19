@@ -167,6 +167,11 @@ class EvaluationEngine:
         risk = risk_from_verdicts(verdicts, RiskResult())
         record_safety_conclusion(session, verdicts)
         created_at = _now()
+        sources = ["text"]
+        if any(message.speech is not None for message in session.conversation_history):
+            sources.append("audio_transcription")
+        if any(message.vision_snapshot is not None for message in session.conversation_history):
+            sources.append("vision_analysis")
         return EvaluationResult(
             result_id=scored.assessment_id,
             session_id=session.session_id,
@@ -187,6 +192,8 @@ class EvaluationEngine:
                 generated_at=created_at,
                 item_scores=getattr(scored, "item_scores", None),
             ),
+            data_sources=sources,
+            consent_version=session.consent.version,
             created_at=created_at,
         )
 

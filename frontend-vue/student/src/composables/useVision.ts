@@ -25,6 +25,7 @@ export function useVision() {
   let generation = 0
   let sessionId = ''
   let originAt = 0
+  let requestController: AbortController | null = null
 
   function bindVideo(el: HTMLVideoElement | null) {
     videoEl.value = el
@@ -84,7 +85,7 @@ export function useVision() {
           capture_id: captureId,
           captured_at_ms: performance.now() - originAt,
         },
-        { silent: true },
+        { silent: true, signal: requestController?.signal },
       )
       framesSent.value += 1
       uploadError.value = ''
@@ -101,11 +102,13 @@ export function useVision() {
     framesSent.value = 0
     sessionId = sid
     originAt = originMs
+    requestController?.abort()
+    requestController = new AbortController()
     try {
       await openCamera()
       generation += 1
       captureId = ensureCaptureId()
-      await visionApi.capture(sid, captureId, generation, true)
+      await visionApi.capture(sid, captureId, generation, true, requestController.signal)
       active.value = true
       timer = window.setInterval(sendFrame, 1000)
     } catch (e) {
@@ -125,7 +128,7 @@ export function useVision() {
         capture_id: captureId,
         start_ms: Math.round(startMs),
         end_ms: Math.round(endMs),
-      })
+      }, requestController?.signal)
       faceDetected.value = res.vision_snapshot?.face_detected ?? null
       return res.vision_snapshot
     } catch (e) {
@@ -138,6 +141,8 @@ export function useVision() {
   async function stop() {
     window.clearInterval(timer)
     timer = 0
+    requestController?.abort()
+    requestController = null
     if (active.value && sessionId) {
       try {
         generation += 1

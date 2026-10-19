@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from PIL import Image
 
 from backend.api.errors import session_not_found
+from backend.api.consent_guard import require_scopes, require_session_scopes
 from backend.core.session_manager import session_manager
 from backend.core.vision_frame_dump import dump_segment
 from backend.models.requests import (
@@ -39,6 +40,7 @@ def update_vision(request: VisionUpsertRequest) -> StateUpsertResponse:
     incoming = request.state
 
     def mutator(session: SessionState) -> None:
+        require_scopes(session, "vision_analysis")
         merged = _merge_vision(session.latest_vision_state, incoming)
         session.latest_vision_state = merged
         session.vision_state_log.append(merged)
@@ -55,6 +57,7 @@ def update_vision(request: VisionUpsertRequest) -> StateUpsertResponse:
 @router.post("/vision/capture")
 def update_capture(request: VisionCaptureRequest) -> dict:
     def mutator(session: SessionState) -> None:
+        require_scopes(session, "vision_analysis")
         if request.generation < session.vision_capture_generation:
             return
         if request.generation == session.vision_capture_generation:
@@ -99,9 +102,7 @@ def _existing_frame(session, request, digest):
 @router.post("/vision/frame", response_model=VisionFrameResponse)
 def analyze_vision_frame(request: VisionFrameRequest) -> VisionFrameResponse:
     """分析单张 JPEG/PNG 帧并写入会话视觉日志。原始图像不落盘。"""
-    session = session_manager.get_session(request.session_id)
-    if session is None:
-        raise session_not_found()
+    session = require_session_scopes(request.session_id, "vision_analysis")
     _ensure_active(session, request)
     try:
         frame = base64.b64decode(_strip_data_url(request.image_base64), validate=True)
@@ -137,6 +138,7 @@ def analyze_vision_frame(request: VisionFrameRequest) -> VisionFrameResponse:
         }) from exc
 
     def mutator(session: SessionState) -> None:
+        require_scopes(session, "vision_analysis")
         _ensure_active(session, request)
         duplicate = _existing_frame(session, request, digest)
         if duplicate is not None:
@@ -174,6 +176,7 @@ def freeze_segment(request: VisionSegmentRequest) -> VisionSegmentResponse:
     result = {}
 
     def mutator(session: SessionState) -> None:
+        require_scopes(session, "vision_analysis")
         existing = session.vision_segments.get(request.utterance_id)
         if existing is not None:
             if (existing.capture_id, existing.start_ms, existing.end_ms) != (

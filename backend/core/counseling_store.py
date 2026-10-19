@@ -287,6 +287,20 @@ class CounselingStore:
             )
         return progress
 
+    def delete_by_student(self, student_ref: str) -> dict[str, int]:
+        """永久删除预约与个人 iCBT 完成度，不删除公共课程内容。"""
+        with self._lock, self._connection() as connection:
+            appointments = connection.execute(
+                "DELETE FROM appointments WHERE student_ref = ?", (student_ref,)
+            ).rowcount
+            progress = connection.execute(
+                "DELETE FROM icbt_progress WHERE student_ref = ?", (student_ref,)
+            ).rowcount
+        return {
+            "appointments": max(appointments, 0),
+            "icbt_progress": max(progress, 0),
+        }
+
     def unit_completion(self) -> tuple[int, dict[str, int]]:
         """返回 (有进度记录的学生数, {unit_id: 完成该单元的学生数})。"""
         with self._lock, self._connection() as connection:

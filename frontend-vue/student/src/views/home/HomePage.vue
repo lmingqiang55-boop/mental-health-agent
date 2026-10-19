@@ -13,6 +13,7 @@ import type { EvaluationRecord, GrowthResponse, HealContent, MoodEntry } from '@
 import { HEAL_HOME_ENTRIES } from '@/views/heal/functions'
 import { fmtRelative, todayStr } from '@/utils/format'
 import { toastSuccess, toastWarn } from '@/utils/toast'
+import sleepingCloud from '@/assets/illustrations/sleeping-cloud.png'
 
 const router = useRouter()
 const student = useStudentStore()
@@ -136,8 +137,11 @@ onMounted(loadAll)
 
     <!-- 问候 -->
     <header class="home__hello">
-      <h1 class="home__title">{{ greeting }}，{{ student.displayName }}</h1>
-      <p class="home__date">{{ dateLine }}</p>
+      <div class="home__hello-copy">
+        <h1 class="home__title">{{ greeting }}，{{ student.displayName }}</h1>
+        <p class="home__date">{{ dateLine }}</p>
+      </div>
+      <img class="home__hello-art" :src="sleepingCloud" alt="" aria-hidden="true" />
     </header>
 
     <!-- 今日心情 -->
@@ -303,7 +307,28 @@ onMounted(loadAll)
 }
 
 .home__hello {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 112px;
+  overflow: hidden;
   margin: var(--xq-sp-3) 0 var(--xq-sp-5);
+}
+.home__hello-copy {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  padding-right: 220px;
+}
+.home__hello-art {
+  position: absolute;
+  right: -10px;
+  bottom: -28px;
+  width: 300px;
+  height: 165px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
 }
 .home__title {
   font-size: var(--xq-fs-2xl);
@@ -505,6 +530,21 @@ onMounted(loadAll)
 @media (min-width: 1024px) {
   .home__entries {
     grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .home__hello {
+    min-height: 94px;
+  }
+  .home__hello-copy {
+    padding-right: 112px;
+  }
+  .home__hello-art {
+    right: -46px;
+    bottom: -18px;
+    width: 190px;
+    height: 112px;
   }
 }
 </style>

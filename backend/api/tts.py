@@ -16,6 +16,7 @@ from backend.audio.tts import (
     provider_unavailable_reason,
 )
 from backend.core.session_manager import session_manager
+from backend.api.consent_guard import require_scopes
 from backend.models.enums import MessageRole
 from backend.models.states import SessionState
 
@@ -123,6 +124,7 @@ async def synthesize_reply(request: SynthesizeRequest) -> Response:
     session = await asyncio.to_thread(session_manager.get_session, request.session_id)
     if session is None:
         raise session_not_found()
+    require_scopes(session, "text_processing")
     if request.turn_count == 0:
         opening = session.conversation_history[0] if session.conversation_history else None
         if opening is None or opening.role != MessageRole.ASSISTANT:

@@ -116,9 +116,11 @@ export interface ChatMessage {
 }
 
 export interface ConsentRecord {
-  granted: boolean
+  status: 'not_provided' | 'granted' | 'withdrawn'
   scope: string[]
+  version: string
   granted_at?: string | null
+  withdrawn_at?: string | null
 }
 
 // ---------------- Session ----------------
@@ -325,6 +327,8 @@ export interface EvaluationResult {
   risk: RiskResult
   report: ReportBlock | null
   assessment_method: string
+  data_sources: ('text' | 'audio_transcription' | 'vision_analysis')[]
+  consent_version: string
   created_at: string
 }
 

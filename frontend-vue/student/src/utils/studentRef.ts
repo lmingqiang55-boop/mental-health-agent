@@ -4,6 +4,8 @@
  * 它不是登录凭据，仅用于把「历史记录 / 治愈日记」归属到同一匿名身份。
  */
 
+import { isLocalStorageAllowed } from '@/utils/storage'
+
 const KEY = 'xq_student_ref'
 const VALID = /^[A-Za-z0-9_-]+$/
 
@@ -14,6 +16,7 @@ function randomRef(): string {
 
 /** 读取已存在的 student_ref；不存在或非法则生成并写入。 */
 export function ensureStudentRef(): string {
+  if (!isLocalStorageAllowed()) return randomRef()
   let ref = ''
   try {
     ref = localStorage.getItem(KEY) ?? ''
@@ -34,10 +37,21 @@ export function ensureStudentRef(): string {
 /** 强制写入新身份（「重置身份」用）。 */
 export function resetStudentRef(): string {
   const next = randomRef()
+  if (!isLocalStorageAllowed()) return next
   try {
     localStorage.setItem(KEY, next)
   } catch {
     /* ignore */
   }
   return next
+}
+
+/** 重新允许持久化时，把本次运行中的匿名身份写回浏览器。 */
+export function persistStudentRef(studentRef: string): void {
+  if (!isLocalStorageAllowed() || !VALID.test(studentRef) || studentRef.length > 128) return
+  try {
+    localStorage.setItem(KEY, studentRef)
+  } catch {
+    /* ignore */
+  }
 }

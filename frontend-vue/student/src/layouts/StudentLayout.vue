@@ -96,9 +96,10 @@ const activeKey = computed(() => {
   position: sticky;
   top: 0;
   z-index: 800;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 2px 12px rgba(214, 150, 108, 0.08);
+  background: rgba(255, 253, 249, 0.9);
+  border-bottom: 1px solid rgba(240, 218, 203, 0.72);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 2px 12px rgba(214, 150, 108, 0.05);
 }
 .topnav__inner {
   max-width: var(--xq-maxw);
@@ -131,6 +132,7 @@ const activeKey = computed(() => {
   display: flex;
   gap: var(--xq-sp-2);
   flex: 1;
+  justify-content: flex-end;
 }
 .topnav__link {
   padding: 8px 16px;
@@ -156,8 +158,9 @@ const activeKey = computed(() => {
   justify-content: space-between;
   height: 52px;
   padding: 0 var(--xq-sp-4);
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 253, 249, 0.9);
+  border-bottom: 1px solid rgba(240, 218, 203, 0.72);
+  backdrop-filter: blur(16px);
 }
 .brand--sm .brand__name {
   font-size: var(--xq-fs-lg);
@@ -173,7 +176,7 @@ const activeKey = computed(() => {
   display: flex;
   height: calc(var(--xq-tabbar-h) + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 253, 249, 0.94);
   backdrop-filter: blur(12px);
   box-shadow: 0 -4px 16px rgba(214, 150, 108, 0.1);
 }
