@@ -4,7 +4,7 @@
 当前修改分支：`codex/natural-dialogue-prompts`。
 
 目标是改善竞赛演示中的具体回应、跨轮承接和口头表达。修改入口为
-[`backend/prompts/dialogue_prompt.py`](../backend/prompts/dialogue_prompt.py)。
+[`backend/prompts/dialogue_prompt.py`](../../../backend/prompts/dialogue_prompt.py)。
 
 ## 参考资料与采用范围
 
@@ -68,7 +68,7 @@
 
 ## 可重复的真实模型对照
 
-[`scripts/compare_dialogue_prompts.py`](../scripts/compare_dialogue_prompts.py) 提供 10 个独立场景，
+[`scripts/compare_dialogue_prompts.py`](../../../scripts/compare_dialogue_prompts.py) 提供 10 个独立场景，
 覆盖情绪开场、短句反问、跨轮承接、纠错、求助、拒答、不确定、信息短答、允许的视觉关切及收尾。
 它记录新旧提示词的哈希、模型参数、原始回复和耗时；每个输入每版只生成一次。
 默认只构造提示词，添加 `--live` 才调用模型。

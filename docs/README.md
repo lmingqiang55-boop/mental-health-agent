@@ -22,6 +22,7 @@
 
 - [架构记录（2026-10-04）](architecture.md)
 - [对话流程交接](dialogue_flow_handoff.md)
+- [对话提示词优化依据与范围（2026-10-20）](archive/dialogue/dialogue_prompt_naturalness_20261020.md)
 - [LangGraph 工作流规划](langgraph_workflow_plan.md)
 - [Safety Agent 替换记录](safety_agent_replacement_report.md)
 - [语音识别说明](speech_recognition.md)
@@ -37,6 +38,7 @@
 
 - [演示场景](demo_scenarios.md)与[场景记录](demo_scenario_records.md)
 - [Trace 演示指南](phase6_demo_guide.md)
+- [对话提示词 35 次真实调用实录（2026-10-20）](archive/dialogue/dialogue_prompt_ab_20261020.md)
 - [接口示例与完整回放](examples/README.md)
 - [历史阶段记录与原路径对照](archive/README.md)
 - [上线前审查记录（2026-10-01）](prelaunch_audit_2026-10-01.md)
