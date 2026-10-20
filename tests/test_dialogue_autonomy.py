@@ -17,10 +17,12 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from backend.agents.dialogue_agent import (
     DialogueAgentError, parse_route_decision, route_fallback,
 )
+from backend.core.screening_flow import MAX_TURNS
 from backend.graph.engine import DIALOGUE_ENGINE_ENV, ENGINE_GRAPH, ENGINE_LEGACY
 from backend.main import app
 from backend.safety.schemas import SafetyLevel
@@ -36,7 +38,7 @@ def _offline_decision_model(policy_stub):
 
 
 def new_session() -> str:
-    return client.post("/api/session").json()["session_id"]
+    return create_consented_session(client)
 
 
 def chat(session_id: str, text: str, **extra):
@@ -208,7 +210,7 @@ def test_route_request_carries_the_context_dialogue_must_consider(
     assert request.topic_limit == 2
     assert request.turn_count == 1
     assert request.min_turns == 10
-    assert request.max_turns == 20
+    assert request.max_turns == MAX_TURNS
     assert request.current_user_input.text == "半夜总是醒"
     # 本轮输入不得同时出现在历史里。
     assert all("半夜总是醒" not in message.content
@@ -312,7 +314,7 @@ def test_autonomous_follow_ups_still_respect_every_existing_constraint(
 
     session_id = new_session()
     closing = None
-    for index in range(20):
+    for index in range(MAX_TURNS):
         response = chat(session_id, f"这是第{index}句话")
         if response.status_code == 409:
             break
@@ -321,7 +323,7 @@ def test_autonomous_follow_ups_still_respect_every_existing_constraint(
             closing = response.json()
             break
 
-    assert closing is not None, "自主追问模式下 20 轮内必须仍然收尾"
+    assert closing is not None, f"自主追问模式下 {MAX_TURNS} 轮内必须仍然收尾"
     assert closing["completion_reason"] in {
         "topic_coverage", "turn_limit", "user_requested"}
 
@@ -348,7 +350,7 @@ def test_worst_case_route_still_completes_coverage_before_the_turn_limit(
 
     session_id = new_session()
     closing = None
-    for index in range(20):
+    for index in range(MAX_TURNS):
         response = chat(session_id, f"这是第{index}句话")
         if response.status_code == 409:
             break
@@ -357,7 +359,7 @@ def test_worst_case_route_still_completes_coverage_before_the_turn_limit(
             closing = response.json()
             break
 
-    assert closing is not None, "20 轮之内必须收尾"
+    assert closing is not None, f"{MAX_TURNS} 轮之内必须收尾"
     assert closing["completion_reason"] == "topic_coverage", (
         "最坏情况下也必须靠覆盖率收尾，而不是撞上轮数上限")
     progress = client.get(
@@ -739,7 +741,7 @@ def test_screening_still_reaches_topic_coverage_after_other_only_decisions(
     session_id = new_session()
 
     closing = None
-    for index in range(20):
+    for index in range(MAX_TURNS):
         # 轮 2 刻意只返回"其它"，制造一次"没有话题"的决策。
         policy_stub(("其它",) if index == 1 else SLEEP)
         body = turn(session_id, f"说说第{index}件事")

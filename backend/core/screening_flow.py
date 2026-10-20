@@ -11,7 +11,8 @@ TOPICS = (
     DialogueAction.PHYSICAL, DialogueAction.SUICIDE,
 )
 MIN_TURNS = 10
-MAX_TURNS = 20
+COVERAGE_REMINDER_TURN = 25
+MAX_TURNS = 35
 MAX_TOPIC_TURNS = 2
 END_REQUEST = re.compile(
     r"^(?:今天|这次)?(?:先)?(?:不聊了|不想聊了|聊到这里|聊到这儿|结束对话|结束筛查|"
@@ -34,6 +35,27 @@ _ACTION_VALUES = frozenset(action.value for action in DialogueAction)
 def coverage_complete(progress: ScreeningProgress) -> bool:
     """是否每个话题都至少聊过一次——这是 ``topic_coverage`` 收尾的前提。"""
     return all(progress.topic_turns.get(topic.value, 0) >= 1 for topic in TOPICS)
+
+
+def coverage_reminder(session: SessionState) -> str | None:
+    """第 25 轮起，把轮数预算及尚未涉及的话题明确交给模型。
+
+    ``turn_count`` 尚未包含正在处理的用户输入；本提示在登记该回答后构造。
+    话题计数只描述交流进度，不代表评分证据已经充分。
+    """
+    current_turn = session.turn_count + 1
+    missing = [topic.value for topic in TOPICS
+               if session.screening_progress.topic_turns.get(topic.value, 0) < 1]
+    if not COVERAGE_REMINDER_TURN <= current_turn < MAX_TURNS or not missing:
+        return None
+    return (
+        f"当前是第 {current_turn} 轮，第 {MAX_TURNS} 轮必须结束对话。"
+        f"从第 {COVERAGE_REMINDER_TURN} 轮起，请尽快补充尚未涉及的话题："
+        f"{'、'.join(missing)}。"
+        "优先了解这些缺失话题，避免在已经了解的话题上重复追问；"
+        "保持自然，每轮最多一个主要问题，尊重用户不愿回答的意愿。"
+        "这些记录只表示话题交流次数，不代表相关评估信息已经充分。"
+    )
 
 
 def record_answer(session: SessionState) -> None:
@@ -101,6 +123,10 @@ def should_force_decision(session: SessionState) -> str | None:
         # 高风险话题刻意**不**让 Dialogue 自主追问：每一轮都回到决策模型，
         # 由既有规则决定是否继续、换向还是收尾，避免在同一敏感方向上连问两轮。
         return FORCE_SENSITIVE_TOPIC
+    if (session.turn_count + 1 >= COVERAGE_REMINDER_TURN
+            and not coverage_complete(progress)):
+        # 补充阶段不能只复用旧策略：让决策模型也收到最新缺项提醒。
+        return FORCE_COVERAGE_LAG
     if (session.turn_count + 1 >= MIN_TURNS
             and progress.topic_turns.get(progress.active_topic, 0) >= 1
             and not coverage_complete(progress)):

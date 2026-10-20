@@ -299,6 +299,8 @@ def _format_decision(decision: DialogueDecision) -> str:
         f"reason：{reason_text}"
         + (f"\n话题交流记录：{_dump_json(decision.extra['topic_turns'])}"
            if 'topic_turns' in decision.extra else "")
+        + (f"\n【后端话题补充要求】\n{decision.extra['coverage_reminder']}"
+           if decision.extra.get('coverage_reminder') else "")
     )
 
 
@@ -438,12 +440,15 @@ def _format_route_progress(request: DialogueRouteRequest) -> str:
         head = "当前话题：（尚未确定）"
     covered = "、".join(
         f"{topic} {count} 轮" for topic, count in request.topic_turns.items()) or "（暂无）"
-    return "\n".join([
+    lines = [
         head,
         f"各话题轮数：{covered}",
         f"已完成轮数：{request.turn_count}"
         f"（第 {request.min_turns} 轮起才可能收尾，第 {request.max_turns} 轮强制收尾）",
-    ])
+    ]
+    if request.coverage_reminder:
+        lines.append(request.coverage_reminder)
+    return "\n".join(lines)
 
 
 def build_dialogue_route_prompt(request: DialogueRouteRequest) -> str:

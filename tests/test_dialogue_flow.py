@@ -7,10 +7,11 @@ from io import BytesIO
 from fastapi.testclient import TestClient
 from PIL import Image
 import pytest
+from conftest import create_consented_session
 
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.api import chat, vision
-from backend.core.screening_flow import TOPICS
+from backend.core.screening_flow import MAX_TURNS, TOPICS
 from backend.core.session_manager import session_manager
 from backend.main import app
 from backend.models.dialogue import DialogueAgentRequest, DialogueAgentResponse
@@ -22,7 +23,7 @@ client = TestClient(app)
 
 
 def _session():
-    return client.post('/api/session').json()['session_id']
+    return create_consented_session(client)
 
 
 def _send(sid, text, **extra):
@@ -47,7 +48,7 @@ def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(
     policy_stub(('情绪',))
     sid = _session()
     strategies = []
-    for turn in range(20):
+    for turn in range(MAX_TURNS):
         response = _send(sid, f'第 {turn} 次回答', utterance_id=f'u{turn}')
         assert response.status_code == 200
         body = response.json()
@@ -79,7 +80,7 @@ def test_turn_limit_and_user_requested_end(monkeypatch, policy_stub):
     _natural_stub(monkeypatch)
     policy_stub(('睡眠',))
     sid = _session()
-    session_manager.modify_session(sid, lambda state: setattr(state, 'turn_count', 19))
+    session_manager.modify_session(sid, lambda state: setattr(state, 'turn_count', MAX_TURNS - 1))
     response = _send(sid, '一个月了').json()
     assert response['completion_reason'] == 'turn_limit'
     assert response['assessment_ready'] is True

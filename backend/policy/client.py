@@ -80,12 +80,14 @@ class HttpPolicyClient:
         self.client = client or httpx.Client(timeout=self.timeout, trust_env=False)
         self.headers = {"Authorization": f"Bearer {key}"} if key else {}
 
-    def predict(self, conversation_history: list[Message]) -> PolicyDecision:
+    def predict(self, conversation_history: list[Message], *,
+                coverage_reminder: str | None = None) -> PolicyDecision:
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": POLICY_SYSTEM_PROMPT},
-                {"role": "user", "content": build_policy_user_prompt(conversation_history)},
+                {"role": "user", "content": build_policy_user_prompt(
+                    conversation_history, coverage_reminder=coverage_reminder)},
             ],
             "temperature": 0,
             "max_tokens": 64,
