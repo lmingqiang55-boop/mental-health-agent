@@ -1,5 +1,7 @@
 # Phase 4 真实模型分段验证（Dialogue 输出 1~3 条消息）
 
+> 历史记录：本文保留原日期、版本及验收结论，不代表当前代码重新验收。整理于 2026-10-18；返回[归档索引](../README.md)。
+
 > 由 `scripts/phase4_messages_real.py` 生成。三组预设学生输入均为**模拟台词**，不含任何真实学生数据。
 
 > 对话/路由/安全模型：`deepseek-flash`；决策模型：本地 Ollama `policy-qwen3-8b:latest`；`DIALOGUE_ENGINE=graph`。

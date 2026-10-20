@@ -7,7 +7,7 @@
 用法::
 
     python scripts/phase4_messages_real.py
-    python scripts/phase4_messages_real.py --out docs/phase4_message_split_log.md
+    python scripts/phase4_messages_real.py --out docs/archive/dialogue/phase4_message_split_log.md
 """
 
 from __future__ import annotations
@@ -137,7 +137,7 @@ def looks_cleaned(raw: str, messages: list[str]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="docs/phase4_message_split_log.md")
+    parser.add_argument("--out", default="docs/archive/dialogue/phase4_message_split_log.md")
     parser.add_argument("--engine", default=ENGINE_GRAPH)
     args = parser.parse_args()
 

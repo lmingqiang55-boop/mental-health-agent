@@ -32,7 +32,8 @@ conda activate mental-health-agent
 前端锁文件更新后执行：
 
 ```powershell
-npm --prefix frontend ci
+npm --prefix frontend-vue/student ci
+npm --prefix frontend-vue/admin ci
 ```
 
 ## 检查环境
@@ -117,4 +118,4 @@ python -m pytest -q tests/test_conversation_data_flow.py
 
 该测试仅在**两个外部模型接口**返回可控响应，项目内部仍实际执行：创建会话 → 接收视觉状态和逐句对齐快照 → 调用策略客户端 → 保存用户与助手消息 → 构造评估输入 → 评估 Agent 解析 11 项并计算五维和关注指数 → 保存评估 → 按结果 ID 和学生历史查询。另一路测试验证上游直接提交完整 `dialogue_history` 与 `vision_summary` 时，这两层视觉数据进入评估请求。
 
-这些测试没有连接真实训练决策模型或 DeepSeek，因此通过不代表外部模型可用。新增对接回归测试见 `tests/test_vision_alignment.py`；前端媒体生命周期与上传协议测试使用 `cd frontend; npm test`。实际设备、光照与真人发音仍需验收。
+这些测试没有连接真实训练决策模型或 DeepSeek，因此通过不代表外部模型可用。新增对接回归测试见 `tests/test_vision_alignment.py`；保留的旧 React 前端媒体生命周期与上传协议测试使用 `cd frontend; npm test`。实际设备、光照与真人发音仍需验收。

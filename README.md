@@ -14,14 +14,14 @@
 项目用于研究与演示，演示使用虚构数据；筛查结果不作为临床诊断。
 
 治愈 Agent 后端已按团队竞赛受控自演范围完成，版本范围、验证结果及已知边界见
-[治愈 Agent 完成里程碑](docs/healing_completion_20261007.md)。
+[治愈 Agent 完成里程碑](docs/archive/healing/healing_completion_20261007.md)。
 
 ## 技术栈
 
 | 模块 | 技术 |
 | --- | --- |
 | 后端 | Python、FastAPI |
-| 前端 | React、Vite |
+| 前端 | Vue 3、TypeScript、Vite（学生端与管理端）；保留旧 React 原型 |
 | 语音 | FunASR、SenseVoiceSmall、PyAV、阿里云 CosyVoice |
 | 视觉 | EmotiEffLib、OpenCV |
 | 对话与评估 | 训练的决策模型服务、DeepSeek |
@@ -39,7 +39,8 @@ Python 3.11.16 由 Conda 配置统一安装；前端推荐 Node.js 22.14.0、npm
 
 ```powershell
 conda env create -f environment.yml
-npm --prefix frontend ci
+npm --prefix frontend-vue/student ci
+npm --prefix frontend-vue/admin ci
 ```
 
 首次运行将 `.env.example` 复制为 `.env`；已有 `.env` 时保留原文件。
@@ -84,13 +85,22 @@ python scripts/start_dev.py --skip-install
 
 ### 3. 启动前端
 
-另开一个终端：
+分别另开两个终端启动学生端和管理端：
 
 ```powershell
-npm --prefix frontend run dev
+# 终端 1：学生端
+npm --prefix frontend-vue/student run dev
 ```
 
-打开 <http://127.0.0.1:5173>，可切换学生端和心理老师端。
+```powershell
+# 终端 2：管理端
+npm --prefix frontend-vue/admin run dev
+```
+
+学生端：<http://127.0.0.1:5174>；管理端：<http://127.0.0.1:5173>。
+安装依赖、导入模型并配置 `.env` 后，也可双击根目录的 `一键启动.bat` 同时启动。
+新版前端说明见 [frontend-vue/README.md](frontend-vue/README.md)。
+旧 React 原型保留在 [frontend/](frontend/README.md)，与 Vue 管理端共用 5173，启动时应二选一。
 首次启用语音与视觉时会下载并加载模型，准备完成后再使用设备功能。
 
 ## 项目结构
@@ -98,10 +108,14 @@ npm --prefix frontend run dev
 ```text
 backend/           后端服务、对话编排、语音与视觉处理
 evaluation_agent/  综合评估与评分
-frontend/          学生端与心理老师端界面
+frontend-vue/      当前 Vue 前端：student/ 学生端、admin/ 管理端
+frontend/          保留的旧 React 原型，说明见 frontend/README.md
 tests/             后端测试
 scripts/           验证与基准脚本
-docs/              架构、接口与协作说明
+docs/              文档总入口见 docs/README.md
+  archive/         按模块归档的阶段验收与修复记录
+  examples/        完整历史回放与接口示例
+  research/        背景研究与技术调研
 environment.yml    Conda 环境配置
 requirements.txt   完整后端依赖（含语音、视觉与基础测试）
 ```
@@ -112,14 +126,18 @@ requirements.txt   完整后端依赖（含语音、视觉与基础测试）
 
 ```powershell
 python -m pytest -q
-npm --prefix frontend test
-npm --prefix frontend run build
+npm --prefix frontend-vue/student run build
+npm --prefix frontend-vue/admin run build
 ```
+
+旧 React 前端的媒体及协议测试仍可运行 `npm --prefix frontend test`。
 
 集成测试使用可控的外部模型响应；验收范围见
 [对话数据流验收](docs/environment.md#对话数据流验收mvb)。
 
 ## 项目文档
+
+完整分类见 [文档索引](docs/README.md)；历史过程见 [归档索引](docs/archive/README.md)。
 
 - [环境配置与验证](docs/environment.md)
 - [队友本地运行指南](docs/队友本地运行指南.md)
@@ -128,9 +146,10 @@ npm --prefix frontend run build
 - [三人协作与接口分工](docs/三人协作与接口分工_v3.md)
 - [语音识别说明](docs/speech_recognition.md)
 - [摄像头与录音对接](docs/vision_alignment.md)
-- [前端交接文档](docs/前端交接文档.md)
+- [新版前端运行与对接](frontend-vue/README.md)
+- [旧 React 前端交接记录](docs/前端交接文档.md)
 - [评估结果页面交接](docs/assessment_output_page_handoff.md)
 - [治愈 Agent 后端与前端接口交接](docs/healing_agent.md)
-- [治愈 Agent 竞赛演示版完成里程碑](docs/healing_completion_20261007.md)
+- [治愈 Agent 竞赛演示版完成里程碑](docs/archive/healing/healing_completion_20261007.md)
 - [治愈资料与软件许可记录](docs/healing_sources_and_licenses.md)
 - [真实用户上线前审查](docs/prelaunch_audit_2026-10-01.md)

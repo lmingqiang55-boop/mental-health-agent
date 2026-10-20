@@ -1,5 +1,7 @@
 # 当前架构与数据流（2026-10-04）
 
+> 本文记录 2026-10-04 的架构；当前前端入口见 [Vue 前端](../frontend-vue/README.md)，后续编排与安全改造见 [对话交接](dialogue_flow_handoff.md)和[Safety 改造记录](safety_agent_replacement_report.md)。
+
 本文件描述仓库当前实现；目标研究图见 `assets/target_architecture.png`，不代表全部能力已实现。HTTP 协议见 [API 数据协议](api_spec.md)，设备及时间对齐细节见 [摄像头与录音对接](vision_alignment.md)。
 
 ## 分层

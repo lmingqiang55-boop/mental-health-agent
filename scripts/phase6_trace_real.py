@@ -12,7 +12,7 @@ Decision 为本地 Ollama ``policy-qwen3-8b``；``DIALOGUE_ENGINE=graph``、
 用法::
 
     python scripts/phase6_trace_real.py
-    python scripts/phase6_trace_real.py --out docs/phase6_trace_log.md
+    python scripts/phase6_trace_real.py --out docs/archive/dialogue/phase6_trace_log.md
 """
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ def render(scenario: dict, turns: list[dict]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="docs/phase6_trace_log.md")
+    parser.add_argument("--out", default="docs/archive/dialogue/phase6_trace_log.md")
     args = parser.parse_args()
 
     os.environ[DIALOGUE_ENGINE_ENV] = ENGINE_GRAPH

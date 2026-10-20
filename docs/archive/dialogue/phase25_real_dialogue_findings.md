@@ -1,11 +1,13 @@
 # Phase 2.5 真实模型对话效果验收报告
 
+> 历史记录：本文保留原日期、版本及验收结论，不代表当前代码重新验收。整理于 2026-10-18；返回[归档索引](../README.md)。
+
 > 原始逐轮记录（自动生成，非人工整理）：
 > - Graph 引擎：[phase25_real_dialogue_log.md](phase25_real_dialogue_log.md)（47 轮，6 个场景）
 > - Legacy 对照：[phase25_legacy_baseline_log.md](phase25_legacy_baseline_log.md)（28 轮，3 个场景）
 >
-> 复现脚本：[scripts/phase25_real_dialogue.py](../scripts/phase25_real_dialogue.py)、
-> [scripts/check_real_models.py](../scripts/check_real_models.py)。
+> 复现脚本：[scripts/phase25_real_dialogue.py](../../../scripts/phase25_real_dialogue.py)、
+> [scripts/check_real_models.py](../../../scripts/check_real_models.py)。
 > 所有用户输入均为**模拟学生输入**，不含任何真实学生数据。
 
 ---
@@ -329,8 +331,8 @@ Router 是**远程** DeepSeek 调用（实测 0.75–1.88s）。
 **问题 1：筛查必然走到「自杀倾向」，而它必然触发安全澄清。**
 
 - 证据：场景 C 第 13 轮；`coverage_complete` 要求 8 个话题全部至少 1 轮，
-  而 `自杀倾向` 是其中之一（[screening_flow.py:8-12](../backend/core/screening_flow.py#L8-L12)、
-  [:34-36](../backend/core/screening_flow.py#L34-L36)）。
+  而 `自杀倾向` 是其中之一（[screening_flow.py:8-12](../../../backend/core/screening_flow.py#L8-L12)、
+  [:34-36](../../../backend/core/screening_flow.py#L34-L36)）。
 - 影响：演示如果按"自然对话到最后自动生成结果"走，很可能停在安全澄清里，
   看不到完整闭环；观众看到的是"卡住了"而不是"安全机制生效了"。
 - 建议（按推荐度排序）：
@@ -363,7 +365,7 @@ Router 是**远程** DeepSeek 调用（实测 0.75–1.88s）。
 - **真实发生窗口比看上去窄**：`limit_topic` 在 `turn_count >= 2` 时会用
   "最少被聊到"的话题补位（这是覆盖率机制，不是缺陷），所以"没有话题"只在
   第 1~2 轮会真的留下来——场景 B 第 2 轮正好落在窗口里。
-- 修复（[screening_flow.py](../backend/core/screening_flow.py)）：决策没有
+- 修复（[screening_flow.py](../../../backend/core/screening_flow.py)）：决策没有
   评估话题时 `active_topic` 与 `pending_topic` 一并置空，`active_actions`
   照实记录；下一轮 `should_force_decision` 因 `active_topic is None` 返回
   `FORCE_NO_ACTIVE_TOPIC`，于是**强制重新决策**，重新进入有效评估话题。
