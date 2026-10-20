@@ -1,5 +1,7 @@
 # Phase 6 多智能体运行轨迹验证（真实模型）
 
+> 历史记录：本文保留原日期、版本及验收结论，不代表当前代码重新验收。整理于 2026-10-18；返回[归档索引](../README.md)。
+
 > 由 `scripts/phase6_trace_real.py` 生成。
 
 > 真模型：Safety / Router / Dialogue 为 `deepseek-flash`，Decision 为本地 Ollama `policy-qwen3-8b:latest`；`DIALOGUE_ENGINE=graph`、`AGENT_TRACE=on`。

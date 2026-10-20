@@ -394,7 +394,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", nargs="*", default=list(SCENARIOS),
                         help="要跑的场景 key，默认全部")
-    parser.add_argument("--out", default="docs/phase25_real_dialogue_log.md")
+    parser.add_argument("--out", default="docs/archive/dialogue/phase25_real_dialogue_log.md")
     parser.add_argument("--engine", default=ENGINE_GRAPH, choices=["graph", "legacy"],
                         help="dialogue 引擎；legacy 用于真实对照")
     args = parser.parse_args()
