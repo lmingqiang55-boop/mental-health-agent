@@ -14,8 +14,8 @@ from backend.agents.dialogue_agent import (
     DialogueAgent, DialogueAgentError, route_fallback,
 )
 from backend.core.screening_flow import (
-    MAX_TOPIC_TURNS, MAX_TURNS, MIN_TURNS, completion_reason, limit_topic,
-    record_answer,
+    MAX_TOPIC_TURNS, MAX_TURNS, MIN_TURNS, completion_reason, coverage_reminder,
+    limit_topic, record_answer,
 )
 from backend.core.multimodal_consistency import TurnDiscordance
 from backend.core.visual_acknowledgment import (
@@ -321,6 +321,7 @@ class DialogueManager:
             turn_count=session.turn_count,
             min_turns=MIN_TURNS,
             max_turns=MAX_TURNS,
+            coverage_reminder=coverage_reminder(session),
         )
 
     def finish_screening(self, user_text: str, session: SessionState,
@@ -340,6 +341,10 @@ class DialogueManager:
             except ValueError as exc:
                 raise PolicyClientError(
                     f"决策模型配置无效：{exc}") from exc
+        reminder = coverage_reminder(session)
+        if reminder:
+            return self._policy.predict(
+                session.conversation_history, coverage_reminder=reminder)
         return self._policy.predict(session.conversation_history)
 
     def _generate_reply(self, session: SessionState, user_text: str,
@@ -363,7 +368,12 @@ class DialogueManager:
                 actions=actions,
                 topic=topics[-1] if topics else None,
                 reason=closing_reason,
-                extra={"topic_turns": session.screening_progress.topic_turns},
+                extra={
+                    "topic_turns": dict(session.screening_progress.topic_turns),
+                    "coverage_reminder": (
+                        coverage_reminder(session) if closing_reason is None else None
+                    ),
+                },
             ),
             current_user_input=DialogueCurrentUserInput(
                 text=user_text, visual=_dialogue_visual(current_vision),

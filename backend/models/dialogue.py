@@ -281,3 +281,6 @@ class DialogueRouteRequest(BaseModel):
     turn_count: int = Field(default=0, description="本次筛查已完成的用户轮数")
     min_turns: int = Field(..., description="可以收尾的最少轮数")
     max_turns: int = Field(..., description="强制收尾的轮数上限")
+    coverage_reminder: Optional[str] = Field(
+        default=None, description="第 25 轮起的缺失话题补充要求"
+    )

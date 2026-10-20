@@ -12,6 +12,8 @@
 
 | 归档文档 | 原路径 |
 | --- | --- |
+| [对话提示词优化依据与范围（2026-10-20）](dialogue/dialogue_prompt_naturalness_20261020.md) | `docs/dialogue_prompt_naturalness_20261020.md` |
+| [对话提示词 35 次真实调用实录（2026-10-20）](dialogue/dialogue_prompt_ab_20261020.md) | `docs/dialogue_prompt_ab_20261020.md` |
 | [对话流程修复验证（2026-10-11）](dialogue/dialogue_flow_validation_20261011.md) | `docs/dialogue_flow_validation_20261011.md` |
 | [成人支持的对话确认与验证](healing/healing_adult_support_20261006.md) | `docs/healing_adult_support_20261006.md` |
 | [治愈 Agent 竞赛演示版完成里程碑（2026-10-07）](healing/healing_completion_20261007.md) | `docs/healing_completion_20261007.md` |

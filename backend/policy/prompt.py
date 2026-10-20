@@ -11,11 +11,14 @@ POLICY_SYSTEM_PROMPT = """你是心理状态评估对话中的策略决策模型
 不要输出解释或具体回复。"""
 
 
-def build_policy_user_prompt(conversation_history: list[Message]) -> str:
+def build_policy_user_prompt(conversation_history: list[Message], *,
+                             coverage_reminder: str | None = None) -> str:
     lines = ["请根据以下对话历史决定下一步动作。", "", "【对话历史】"]
     for message in conversation_history:
         if message.role == MessageRole.USER:
             lines.append(f"用户：{message.content}")
         elif message.role == MessageRole.ASSISTANT:
             lines.append(f"助手：{message.content}")
+    if coverage_reminder:
+        lines.extend(["", "【后端话题补充要求】", coverage_reminder])
     return "\n".join(lines)

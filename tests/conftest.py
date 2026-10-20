@@ -16,6 +16,20 @@ from backend.policy.client import HttpPolicyClient
 DEFAULT_ACTIONS = ("共情安慰", "情绪")
 
 
+def create_consented_session(client) -> str:
+    """通过真实同意接口准备对话测试，保留服务端授权门禁。"""
+    from backend.api.consent_guard import ALLOWED_SCOPES
+
+    response = client.post("/api/session")
+    assert response.status_code == 200, response.text
+    sid = response.json()["session_id"]
+    response = client.put(f"/api/session/{sid}/consent", json={
+        "session_id": sid, "granted": True, "scope": sorted(ALLOWED_SCOPES),
+    })
+    assert response.status_code == 200, response.text
+    return sid
+
+
 @pytest.fixture(autouse=True)
 def dialogue_stub(monkeypatch):
     """Keep API tests offline while exercising the dialogue Agent boundary."""

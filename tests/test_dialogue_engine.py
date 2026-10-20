@@ -18,6 +18,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
+from backend.core.screening_flow import MAX_TURNS
 
 from backend.graph.engine import (
     DIALOGUE_ENGINE_ENV,
@@ -49,7 +51,7 @@ def _offline_decision_model(policy_stub):
 
 
 def new_session() -> str:
-    return client.post("/api/session").json()["session_id"]
+    return create_consented_session(client)
 
 
 def chat(session_id: str, text: str, **extra: Any):
@@ -261,7 +263,7 @@ def test_topic_budget_is_enforced_under_graph(monkeypatch, policy_stub):
 
 
 def test_screening_closes_within_the_turn_limit_under_graph(monkeypatch):
-    """轮数上限内必须收尾（MAX_TURNS=20），收尾后不再接受普通轮。
+    """轮数上限内必须收尾（MAX_TURNS=35），收尾后不再接受普通轮。
 
     收尾原因可能是 ``topic_coverage``（8 个话题问到且已过 ``MIN_TURNS=10``），
     所以这里不断言具体哪一种，只断言"在上限内收尾"。
@@ -269,7 +271,7 @@ def test_screening_closes_within_the_turn_limit_under_graph(monkeypatch):
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
     session_id = new_session()
     closing = None
-    for index in range(20):
+    for index in range(MAX_TURNS):
         response = chat(session_id, f"这是第{index}句话")
         if response.status_code == 409:
             break
@@ -277,7 +279,7 @@ def test_screening_closes_within_the_turn_limit_under_graph(monkeypatch):
         if response.json()["assessment_ready"]:
             closing = response.json()
             break
-    assert closing is not None, "20 轮之内没有收尾"
+    assert closing is not None, f"{MAX_TURNS} 轮之内没有收尾"
     assert closing["completion_reason"] in {
         "topic_coverage", "turn_limit", "user_requested"}
     assert chat(session_id, "还想再说一句").status_code == 409
@@ -285,7 +287,7 @@ def test_screening_closes_within_the_turn_limit_under_graph(monkeypatch):
 
 def test_long_run_closes_identically_on_both_engines(monkeypatch):
     """长会话下的话题覆盖推进与收尾判定也必须与 legacy 完全一致。"""
-    texts = [f"这是第{index}句话" for index in range(20)]
+    texts = [f"这是第{index}句话" for index in range(MAX_TURNS)]
 
     def run(engine: str):
         monkeypatch.setenv(DIALOGUE_ENGINE_ENV, engine)
