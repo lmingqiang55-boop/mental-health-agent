@@ -100,17 +100,20 @@ async function scrollDown() {
 
 watch([() => visibleMessages.value.length, sending], () => void scrollDown(), { flush: 'post' })
 
-/** 最近测评与入口卡片保持一致；仅在历史不可用时回退到陪伴指针。 */
+async function latestAssessmentSessionId(): Promise<string> {
+  try {
+    const res = await historyApi.byStudent(student.studentRef)
+    return res.records[0]?.result.session_id ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/** 明确指定的会话优先；默认入口与最新测评保持一致。 */
 async function resolveSessionId(): Promise<string> {
   const q = route.query.session
   if (typeof q === 'string' && q) return q
-  const pointer = heal.pointer()
-  try {
-    const res = await historyApi.byStudent(student.studentRef)
-    return res.records[0]?.result.session_id ?? pointer?.sessionId ?? ''
-  } catch {
-    return pointer?.sessionId ?? ''
-  }
+  return (await latestAssessmentSessionId()) || heal.pointer()?.sessionId || ''
 }
 
 async function refresh(sessionId: string) {
@@ -173,6 +176,10 @@ async function load() {
     loading.value = false
     return
   }
+  await loadSession(sessionId)
+}
+
+async function loadSession(sessionId: string, recoverExpired = true) {
   try {
     const res = await healingApi.get(sessionId, { silent: true })
     state.value = res
@@ -182,12 +189,14 @@ async function load() {
   } catch (e) {
     if (isApiError(e, 'HEALING_SESSION_EXPIRED')) {
       if (heal.pointer()?.sessionId === sessionId) heal.clear()
-      // A deleted/legacy pointer must not prevent entering a newer assessment.
-      const explicit = typeof route.query.session === 'string' && !!route.query.session
-      const latest = explicit ? '' : await resolveSessionId()
-      if (latest && latest !== sessionId) {
-        await load()
-        return
+      // 后端确认无法恢复旧会话后，最多切换一次到最新测评。
+      if (recoverExpired) {
+        const latest = await latestAssessmentSessionId()
+        if (latest && latest !== sessionId) {
+          await router.replace({ query: { ...route.query, session: latest } })
+          await loadSession(latest, false)
+          return
+        }
       }
       blocked.value = '没有找到可恢复的陪伴或测评记录，先做一次初步筛查吧。'
       loading.value = false
