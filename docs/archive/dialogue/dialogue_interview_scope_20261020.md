@@ -125,4 +125,3 @@
 - 系统提示词 SHA-256：`bc8449aa25155581ef213254efcb27708ca44c380fb110c376e0aeb82a1ec2e9`。
 - 模型：`deepseek-flash`，temperature=0.5，max_tokens=300。三次调用合计8094 tokens，原始输出、完整请求、用量保存在 Git 忽略目录 `.codex-runtime/help_echo_fix_20261020_raw.json`。
 - 提示词及文档仍为本地工作区修改，尚未提交或合并。
-

@@ -121,4 +121,3 @@
 - 连续调用项目的 `/api/session`、同意接口和 `/api/chat`；本组实际发生22次远端模型调用、10次本机决策模型调用。
 - 第11轮由系统按话题覆盖完成对话，返回 `assessment_ready=true`。本实录展示至结果生成入口，尚未调用评估报告接口。
 - 本组采用文字交流；全部学生资料为虚构。对应结构化实录见[JSON 文件](competition_showcase_middle_school_20261020.json)。
-
