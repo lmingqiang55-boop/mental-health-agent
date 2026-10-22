@@ -372,8 +372,21 @@ export type SuggestionExecution =
   | 'declined'
 export type SuggestionEffect = 'unknown' | 'helpful' | 'ineffective' | 'worse'
 
+/** 回答下方那行浅字：知识库原文，学生可见；不含来源信息。 */
+export interface MessageReference {
+  title: string
+  /** 这条方法原本的说法，已连成一段话，直接当一行渲染。 */
+  text: string
+  /** 本来就要求的执行条件；可能为空数组。 */
+  conditions: string[]
+  /** 本来就带的注意事项；可能为空数组。 */
+  cautions: string[]
+}
+
 export interface HealingSuggestion {
   title: string
+  /** 这条方法的知识库原文（目标与步骤已连成一段话），与 messages[].references[].text 同一份文字。 */
+  text: string
   goal: string
   steps: string[]
   prerequisites: string[]
@@ -399,7 +412,13 @@ export interface HealingResponse {
   status: HealingStatus
   turn_count: number
   report: HealingReport
-  messages: { role: 'user' | 'assistant'; content: string; created_at: string }[]
+  messages: {
+    role: 'user' | 'assistant'
+    content: string
+    created_at: string
+    /** 浅字原文；只有新方法/恢复的方法/简化版才附，正常闲聊为 []。旧数据可能没有这个键。 */
+    references?: MessageReference[]
+  }[]
   /** 本会话当前生效的安全结论：后端 HealingResponse.risk 现在是 SafetyVerdict。 */
   risk: SafetyVerdict
   notice: string

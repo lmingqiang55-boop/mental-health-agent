@@ -40,9 +40,9 @@ const TREND_LABELS: Record<string, string> = {
 const trend = computed(() => props.result.report?.trend_and_suggestions)
 
 const consistencyLabels: Record<string, string> = {
-  low: '一致性较低',
-  moderate: '一致性一般',
-  high: '一致性较高',
+  low: '语言与表情：差异较大',
+  moderate: '语言与表情：大体一致',
+  high: '语言与表情：比较一致',
   unknown: '暂不评估',
 }
 
@@ -125,12 +125,6 @@ const dims = computed(() => {
     <PxCard v-if="report" title="多模态观察" class="report__block">
       <div class="report__row">
         <PxTag tone="default">{{ consistencyLabels[report.multimodal_observation.consistency_level] }}</PxTag>
-        <span
-          v-if="report.multimodal_observation.consistency_score != null"
-          class="xq-muted"
-        >
-          一致性分值 {{ Math.round(report.multimodal_observation.consistency_score) }}
-        </span>
       </div>
       <p class="report__summary">{{ report.multimodal_observation.summary }}</p>
     </PxCard>

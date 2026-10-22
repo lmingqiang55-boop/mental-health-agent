@@ -10,7 +10,7 @@ import PxEmpty from '@/components/base/PxEmpty.vue'
 import PxTag from '@/components/base/PxTag.vue'
 import { healingApi, historyApi } from '@/api'
 import { isApiError } from '@/api/http'
-import type { HealingResponse } from '@/api/types'
+import type { HealingResponse, MessageReference } from '@/api/types'
 import { useHealStore } from '@/stores/heal'
 import { useStudentStore } from '@/stores/student'
 import { newMessageId, newRequestId } from '@/utils/id'
@@ -32,9 +32,18 @@ const blocked = ref('')
 /** 输入框草稿。 */
 const draft = ref('')
 /** 乐观插入的那条「我的消息」。 */
-const pending = ref<{ role: 'user' | 'assistant'; content: string; created_at: string } | null>(null)
+const pending = ref<{
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+  references?: MessageReference[]
+} | null>(null)
 /** 发送失败时记住 (消息标识, 内容)，重试复用同一个标识（后端幂等要求）。 */
 const failed = ref<{ id: string; text: string } | null>(null)
+/** 首报生成失败（含 503 HEALING_UNAVAILABLE）：页面上保留一个可点的重试入口，不能白屏。 */
+const startFailed = ref(false)
+/** 重试首报时要用的会话标识。 */
+const retrySessionId = ref('')
 
 const showSuggestions = ref(false)
 const composing = ref(false)
@@ -43,6 +52,8 @@ const scroller = ref<HTMLElement | null>(null)
 const preparing = computed(() => loading.value || (starting.value && !state.value))
 const status = computed(() => state.value?.status ?? 'active')
 const ended = computed(() => status.value === 'ended' || status.value === 'referred')
+/** 首报也可能是 paused：此时后端已把 report.question 置为 null，页面不再补提问气泡。 */
+const paused = computed(() => status.value === 'paused')
 /**
  * 本会话的安全结论来自后端的新版 Safety（HealingResponse.risk 是 SafetyVerdict）。
  * 安全支持模式（risk_level 为 high / imminent，route 为 safety_stop）才给求助方式。
@@ -60,7 +71,7 @@ const riskBadge = computed<{ tone: 'danger' | 'warning' | 'success'; text: strin
   if (riskLevel.value === 'uncertain') return { tone: 'warning', text: '需要留意' }
   return { tone: 'success', text: '状态平稳' }
 })
-const locked = computed(() => ended.value || !!blocked.value)
+const locked = computed(() => ended.value || paused.value || !!blocked.value)
 
 /** 报告里的第一个提问如果没有落进消息流，就补成小晴的开场白。 */
 const visibleMessages = computed(() => {
@@ -74,6 +85,7 @@ const visibleMessages = computed(() => {
             role: 'assistant' as const,
             content: s.report.question,
             created_at: s.report.generated_at,
+            references: [] as MessageReference[],
           },
         ]
       : []
@@ -115,6 +127,8 @@ async function refresh(sessionId: string) {
 async function generate(sessionId: string, regenerate: boolean) {
   starting.value = true
   blocked.value = ''
+  startFailed.value = false
+  retrySessionId.value = sessionId
   try {
     const res = await healingApi.start({
       session_id: sessionId,
@@ -134,12 +148,21 @@ async function generate(sessionId: string, regenerate: boolean) {
     } else if (isApiError(e, 'HEALING_STATE_CHANGED')) {
       toastWarn('陪伴已更新，正在为你刷新')
       await refresh(sessionId)
+    } else if (!state.value) {
+      // 首报失败（含 503 HEALING_UNAVAILABLE）：要留一个可点的重试入口，不能停在空白页。
+      startFailed.value = true
     }
     /* 其余错误由 axios 拦截器统一提示 */
   } finally {
     starting.value = false
     loading.value = false
   }
+}
+
+/** 首报失败后的重试：换一个新的 request_id 重新生成，不覆盖已有报告。 */
+function retryStart() {
+  if (!retrySessionId.value) return
+  void generate(retrySessionId.value, false)
 }
 
 async function load() {
@@ -233,6 +256,15 @@ onMounted(load)
       </div>
     </PxCard>
 
+    <!-- 首报生成失败：保留一个可点的重试入口，不留白屏 -->
+    <PxCard v-else-if="!state && startFailed" title="这次没准备好">
+      <p class="hc__text">小晴刚才没能写完这份报告，你的筛查结果还在。可以再试一次。</p>
+      <div class="hc__row">
+        <PxButton :loading="starting" @click="retryStart">再试一次</PxButton>
+        <PxButton variant="ghost" @click="router.push('/heal')">回到心理自助</PxButton>
+      </div>
+    </PxCard>
+
     <template v-else-if="state">
       <!-- 今日心情小结 -->
       <PxCard tone="primary" class="hc__summary xq-fade-up">
@@ -270,12 +302,12 @@ onMounted(load)
           </button>
           <div v-if="showSuggestions" class="hc__suggs">
             <div v-for="(s, i) in state.report.suggestions" :key="i" class="hc__sugg">
-              <p class="hc__sugg-title">{{ i + 1 }}. {{ s.title }}</p>
-              <p v-if="s.goal" class="hc__text hc__muted">{{ s.goal }}</p>
-              <ol v-if="s.steps.length" class="hc__steps">
-                <li v-for="(st, j) in s.steps" :key="j">{{ st }}</li>
-              </ol>
-              <p v-if="s.cautions.length" class="hc__caution">注意：{{ s.cautions.join('；') }}</p>
+              <p v-if="s.title" class="hc__sugg-title">{{ s.title }}</p>
+              <div class="hc__fine">
+                <p class="hc__fine-line">{{ s.text }}</p>
+                <p v-for="(c, ci) in s.prerequisites" :key="`c${ci}`" class="hc__fine-line">{{ c }}</p>
+                <p v-for="(w, wi) in s.cautions" :key="`w${wi}`" class="hc__fine-line">{{ w }}</p>
+              </div>
             </div>
           </div>
         </template>
@@ -308,20 +340,34 @@ onMounted(load)
           text="先看看上面的报告，有什么想说的都可以告诉她"
         />
         <PxBubble v-for="(m, i) in visibleMessages" :key="i" class="xq-fade-up" :role="m.role">
-          {{ m.content }}
+          <span>{{ m.content }}</span>
+          <div v-if="m.role === 'assistant' && m.references?.length" class="hc__fine">
+            <div v-for="(r, k) in m.references" :key="k" class="hc__fine-group">
+              <p v-if="r.title" class="hc__fine-line">{{ r.title }}</p>
+              <p class="hc__fine-line">{{ r.text }}</p>
+              <p v-for="(c, ci) in r.conditions" :key="`c${ci}`" class="hc__fine-line">{{ c }}</p>
+              <p v-for="(w, wi) in r.cautions" :key="`w${wi}`" class="hc__fine-line">{{ w }}</p>
+            </div>
+          </div>
         </PxBubble>
         <PxBubble v-if="sending" role="assistant">
           <span class="xq-dots">···</span>
         </PxBubble>
       </div>
 
-      <!-- 结束 / 转介 -->
-      <PxCard v-if="ended" class="hc__block" title="这轮陪伴先到这里">
+      <!-- 结束 / 转介 / 暂停 -->
+      <PxCard
+        v-if="ended || paused"
+        class="hc__block"
+        :title="paused ? '这轮陪伴先暂停一下' : '这轮陪伴先到这里'"
+      >
         <p class="hc__text hc__muted">
           {{
-            status === 'referred'
-              ? '小晴觉得你现在需要更专业的帮助，可以把上面的求助方式用起来。'
-              : '你随时可以再开始一轮新的陪伴。'
+            paused
+              ? '你随时可以再开始一轮新的陪伴，也可以先回去看看报告。'
+              : status === 'referred'
+                ? '小晴觉得你现在需要更专业的帮助，可以把上面的求助方式用起来。'
+                : '你随时可以再开始一轮新的陪伴。'
           }}
         </p>
         <div class="hc__row">
@@ -464,10 +510,21 @@ onMounted(load)
   color: var(--xq-text-2);
   line-height: 1.65;
 }
-.hc__caution {
-  margin-top: var(--xq-sp-2);
+/* 浅字：知识库原话，一行一句，不加任何前缀标签 */
+.hc__fine {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--xq-text-disabled);
   font-size: var(--xq-fs-xs);
-  color: var(--xq-level-high);
+  line-height: 1.7;
+  color: var(--xq-text-2);
+  opacity: 0.85;
+}
+.hc__fine-group + .hc__fine-group {
+  margin-top: 6px;
+}
+.hc__fine-line {
+  margin: 0;
 }
 .hc__cautions {
   margin-top: var(--xq-sp-4);
