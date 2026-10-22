@@ -15,7 +15,7 @@ import { useHealStore } from '@/stores/heal'
 import { useStudentStore } from '@/stores/student'
 import { newMessageId, newRequestId } from '@/utils/id'
 import { fmtDateTime } from '@/utils/format'
-import { toastSuccess, toastWarn } from '@/utils/toast'
+import { toastError, toastSuccess, toastWarn } from '@/utils/toast'
 
 const route = useRoute()
 const router = useRouter()
@@ -51,7 +51,7 @@ const scroller = ref<HTMLElement | null>(null)
 
 const preparing = computed(() => loading.value || (starting.value && !state.value))
 const status = computed(() => state.value?.status ?? 'active')
-const ended = computed(() => status.value === 'ended' || status.value === 'referred')
+const ended = computed(() => status.value === 'ended')
 /** 首报也可能是 paused：此时后端已把 report.question 置为 null，页面不再补提问气泡。 */
 const paused = computed(() => status.value === 'paused')
 /**
@@ -100,17 +100,16 @@ async function scrollDown() {
 
 watch([() => visibleMessages.value.length, sending], () => void scrollDown(), { flush: 'post' })
 
-/** 优先用路由带来的 session；其次用上次记住的；最后回退到最近一次测评。 */
+/** 最近测评与入口卡片保持一致；仅在历史不可用时回退到陪伴指针。 */
 async function resolveSessionId(): Promise<string> {
   const q = route.query.session
   if (typeof q === 'string' && q) return q
   const pointer = heal.pointer()
-  if (pointer?.sessionId) return pointer.sessionId
   try {
     const res = await historyApi.byStudent(student.studentRef)
-    return res.records[0]?.result.session_id ?? ''
+    return res.records[0]?.result.session_id ?? pointer?.sessionId ?? ''
   } catch {
-    return ''
+    return pointer?.sessionId ?? ''
   }
 }
 
@@ -162,7 +161,7 @@ async function generate(sessionId: string, regenerate: boolean) {
 /** 首报失败后的重试：换一个新的 request_id 重新生成，不覆盖已有报告。 */
 function retryStart() {
   if (!retrySessionId.value) return
-  void generate(retrySessionId.value, false)
+  void load()
 }
 
 async function load() {
@@ -175,18 +174,31 @@ async function load() {
     return
   }
   try {
-    const res = await healingApi.get(sessionId)
+    const res = await healingApi.get(sessionId, { silent: true })
     state.value = res
     heal.remember(res)
     loading.value = false
     await scrollDown()
   } catch (e) {
     if (isApiError(e, 'HEALING_SESSION_EXPIRED')) {
-      blocked.value = '上一次会话已经过期了，重新做一次初步筛查就能继续。'
+      if (heal.pointer()?.sessionId === sessionId) heal.clear()
+      // A deleted/legacy pointer must not prevent entering a newer assessment.
+      const explicit = typeof route.query.session === 'string' && !!route.query.session
+      const latest = explicit ? '' : await resolveSessionId()
+      if (latest && latest !== sessionId) {
+        await load()
+        return
+      }
+      blocked.value = '没有找到可恢复的陪伴或测评记录，先做一次初步筛查吧。'
       loading.value = false
-    } else {
+    } else if (isApiError(e, 'HEALING_NOT_FOUND')) {
       // HEALING_NOT_FOUND：还没生成过 → 现在生成
       await generate(sessionId, false)
+    } else {
+      retrySessionId.value = sessionId
+      startFailed.value = true
+      loading.value = false
+      toastError(isApiError(e) ? e.message : '暂时无法读取陪伴，请稍后重试')
     }
   }
 }
@@ -290,7 +302,7 @@ onMounted(load)
         <button
           type="button"
           class="hc__report-link"
-          @click="router.push({ name: 'assess-report', params: { resultId: state.assessment_result_id }, query: { session: state.session_id } })"
+          @click="router.push({ name: 'assess-report', params: { resultId: state.assessment_result_id }, query: { session: state.assessment_session_id ?? state.session_id } })"
         >
           查看完整报告 ›
         </button>
@@ -376,8 +388,12 @@ onMounted(load)
         </div>
       </PxCard>
 
-      <!-- 输入条 -->
-      <div v-else class="hc__composer">
+      <p v-if="status === 'referred'" class="hc__text hc__muted">
+        小晴还在，你可以继续说说此刻的感受。当前以安全支持为主，需要时请联系现实中能陪伴你的人。
+      </p>
+
+      <!-- 输入条：安全支持状态也保留交流入口。 -->
+      <div v-if="!ended && !paused" class="hc__composer">
         <div
           class="hc__composer-row"
           @keydown="onKeydown"

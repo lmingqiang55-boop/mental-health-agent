@@ -2,7 +2,7 @@
 
 同一会话串行读写，不同会话的模型请求互不阻塞。保留 TTL 与数量上限。
 
-当前仍为进程内存储，重启清空；持久化是后续任务。
+运行态使用内存缓存；生产实例保存快照供陪伴入口显式恢复。
 """
 
 from collections.abc import Callable
@@ -24,7 +24,8 @@ ReadResult = TypeVar("ReadResult")
 
 class SessionManager:
     def __init__(self, ttl: timedelta = SESSION_TTL,
-                 max_sessions: int = MAX_SESSIONS) -> None:
+                 max_sessions: int = MAX_SESSIONS, archive=None) -> None:
+        self.archive = archive
         self._sessions: dict[str, SessionState] = {}
         self._lock = RLock()
         self._session_locks = WeakValueDictionary()
@@ -44,7 +45,31 @@ class SessionManager:
                 )],
             )
             self._sessions[session.session_id] = session
+            if self.archive is not None:
+                self.archive.save_session(session)
             return session.model_copy(deep=True)
+
+    def resume_for_healing(self, session_id: str, fallback=None) -> SessionState | None:
+        """Resume a saved session explicitly, preserving safety locks and consent."""
+        with self._session_lock(session_id):
+            with self._lock:
+                session = self._sessions.get(session_id)
+                if session is not None and not self._is_expired(session):
+                    return session.model_copy(deep=True)
+                saved = self.archive.load_session(session_id) if self.archive is not None else None
+                if saved is None:
+                    saved = fallback
+                if saved is None:
+                    return None
+                saved = saved.model_copy(deep=True)
+                saved.updated_at = datetime.now(timezone.utc)
+                self._purge_expired_locked()
+                if len(self._sessions) >= self._max:
+                    self._evict_oldest_locked()
+                if self.archive is not None:
+                    self.archive.save_session(saved)
+                self._sessions[session_id] = saved
+                return saved.model_copy(deep=True)
 
     def get_session(self, session_id: str) -> SessionState | None:
         return self.read_session(session_id, lambda session: session)
@@ -88,13 +113,16 @@ class SessionManager:
                 # TTL/容量清理可能已淘汰该会话，不能让迟到结果把它复活。
                 if self._sessions.get(session_id) is not session:
                     return None
+                if self.archive is not None:
+                    self.archive.save_session(working)
                 self._sessions[session_id] = working
             return working.model_copy(deep=True)
 
     def delete_session(self, session_id: str) -> bool:
         with self._session_lock(session_id):
             with self._lock:
-                return self._sessions.pop(session_id, None) is not None
+                archived = self.archive.delete(session_id) if self.archive is not None else False
+                return self._sessions.pop(session_id, None) is not None or archived
 
     def delete_by_student(self, student_ref: str) -> list[str]:
         """删除学生仍在内存中的对话、音频元数据与视觉派生状态。"""
@@ -104,6 +132,8 @@ class SessionManager:
                 for session_id, session in self._sessions.items()
                 if session.student_ref == student_ref
             ]
+        if self.archive is not None:
+            session_ids = list(set(session_ids) | set(self.archive.student_sessions(student_ref)))
         return [sid for sid in session_ids if self.delete_session(sid)]
 
     def count(self) -> int:
@@ -136,4 +166,6 @@ class SessionManager:
         self._sessions.pop(oldest.session_id, None)
 
 
-session_manager = SessionManager()
+from backend.core.conversation_archive import conversation_archive
+
+session_manager = SessionManager(archive=conversation_archive)

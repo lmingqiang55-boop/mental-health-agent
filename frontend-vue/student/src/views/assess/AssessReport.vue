@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { assessmentApi, historyApi } from '@/api'
 import { isApiError } from '@/api/http'
 import type { DimensionKey, EvaluationResult } from '@/api/types'
 import { useAssessStore } from '@/stores/assess'
 import { useStudentStore } from '@/stores/student'
-import { toastSuccess, toastWarn } from '@/utils/toast'
+import { toastSuccess } from '@/utils/toast'
 import PxCard from '@/components/base/PxCard.vue'
 import ReportViewer from '@/components/business/ReportViewer.vue'
 import PxButton from '@/components/base/PxButton.vue'
@@ -26,7 +26,7 @@ const router = useRouter()
 const assess = useAssessStore()
 const student = useStudentStore()
 
-const resultId = String(route.params.resultId ?? '')
+const resultId = computed(() => String(route.params.resultId ?? ''))
 const sessionId = computed(() => {
   const q = route.query.session
   return typeof q === 'string' && q ? q : assess.sessionId
@@ -36,6 +36,8 @@ const loading = ref(true)
 const result = ref<EvaluationResult | null>(null)
 const recordId = ref('')
 const deleting = ref(false)
+const loadError = ref('')
+let loadVersion = 0
 
 const viewer = computed<ViewerResult | null>(() => {
   const r = result.value
@@ -45,22 +47,30 @@ const viewer = computed<ViewerResult | null>(() => {
 })
 
 async function load() {
-  if (!sessionId.value) {
-    loading.value = false
-    toastWarn('缺少会话信息，无法加载报告')
-    return
-  }
+  const version = ++loadVersion
+  const id = resultId.value
   loading.value = true
+  result.value = null
+  recordId.value = ''
+  loadError.value = ''
   try {
-    result.value = await assessmentApi.result(resultId, sessionId.value)
-    const history = await historyApi.byStudent(student.studentRef).catch(() => null)
-    recordId.value = history?.records.find((r) => r.result.result_id === resultId)?.record_id ?? ''
+    // Resolve the exact report's owner session, including old links that used
+    // a companionship session instead. Never substitute a different report.
+    const history = await historyApi.byStudent(student.studentRef, { silent: true }).catch(() => null)
+    const record = history?.records.find((r) => r.result.result_id === id)
+    const ownerSession = record?.result.session_id ?? sessionId.value
+    if (!ownerSession) throw new Error('缺少报告对应的会话信息，请从测评中心重新打开这份报告。')
+    const loaded = await assessmentApi.result(id, ownerSession, { silent: true })
+    if (version !== loadVersion) return
+    result.value = loaded
+    recordId.value = record?.record_id ?? ''
   } catch (e) {
-    if (isApiError(e, 'RESULT_NOT_FOUND') || isApiError(e, 'SESSION_NOT_FOUND')) {
-      toastWarn('报告不存在，或对应会话已过期')
-    }
+    if (version !== loadVersion) return
+    loadError.value = isApiError(e, 'RESULT_NOT_FOUND')
+      ? '未找到这份报告，记录可能已删除，请从测评中心重新打开。'
+      : isApiError(e) ? e.message : e instanceof Error ? e.message : '报告暂时无法加载，请稍后重试。'
   } finally {
-    loading.value = false
+    if (version === loadVersion) loading.value = false
   }
 }
 
@@ -85,9 +95,7 @@ async function deleteCurrentResult() {
   }
 }
 
-onMounted(() => {
-  void load()
-})
+watch([resultId, sessionId], () => void load(), { immediate: true })
 </script>
 
 <template>
@@ -97,7 +105,8 @@ onMounted(() => {
     </PxPageHead>
 
     <PxEmpty v-if="loading" icon="…" text="正在打开报告…" />
-    <PxEmpty v-else-if="!viewer" text="报告未找到或已过期">
+    <PxEmpty v-else-if="!viewer" :text="loadError || '报告暂时无法加载'">
+      <PxButton variant="ghost" @click="load">重试</PxButton>
       <PxButton @click="goCenter">返回测评中心</PxButton>
     </PxEmpty>
 

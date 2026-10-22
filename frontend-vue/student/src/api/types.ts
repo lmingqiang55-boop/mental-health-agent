@@ -410,6 +410,7 @@ export interface HealingResponse {
   session_id: string
   healing_id: string
   assessment_result_id: string
+  assessment_session_id?: string
   status: HealingStatus
   turn_count: number
   report: HealingReport

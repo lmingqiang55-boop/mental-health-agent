@@ -47,7 +47,7 @@ onMounted(async () => {
     <PxPageHead title="心理自助" sub="慢慢来，选一个此刻想做的事" />
 
     <!-- 核心：治愈陪伴 -->
-    <router-link v-if="CORE" to="/heal/chat" class="hh__core">
+    <router-link v-if="CORE" :to="latest ? { path: '/heal/chat', query: { session: latest.result.session_id } } : '/heal/chat'" class="hh__core">
       <span class="hh__core-badge">推荐</span>
       <div class="hh__core-top">
         <span class="hh__core-icon xq-star">✦</span>

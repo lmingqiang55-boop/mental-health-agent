@@ -161,19 +161,20 @@ export const assessmentApi = {
       .then((r) => r.data),
 
   /** 读结果必须同时给 result_id + session_id。后端返回包裹体，这里解包出 result。 */
-  result: (resultId: string, sessionId: string) =>
+  result: (resultId: string, sessionId: string, config?: RequestConfig) =>
     http
-      .get<AssessmentResponse>(`/api/assessment/result/${resultId}`, { params: { session_id: sessionId } })
+      .get<AssessmentResponse>(`/api/assessment/result/${resultId}`, { ...config, params: { session_id: sessionId } })
       .then((r) => r.data.result),
 }
 
 // ---------------- History ----------------
 
 export const historyApi = {
-  byStudent: (studentRef: string) =>
+  byStudent: (studentRef: string, config?: RequestConfig) =>
     http
       .get<{ student_ref: string; records: EvaluationRecord[]; total: number }>(
         `/api/history/${studentRef}`,
+        config,
       )
       .then((r) => ({
         ...r.data,
@@ -202,8 +203,8 @@ export const healingApi = {
     return http.post<HealingResponse>('/api/healing/start', body).then((r) => r.data)
   },
 
-  get: (sessionId: string) =>
-    http.get<HealingResponse>(`/api/healing/${sessionId}`).then((r) => r.data),
+  get: (sessionId: string, config?: RequestConfig) =>
+    http.get<HealingResponse>(`/api/healing/${sessionId}`, config).then((r) => r.data),
 
   chat: (sessionId: string, healingId: string, messageId: string, text: string) =>
     http

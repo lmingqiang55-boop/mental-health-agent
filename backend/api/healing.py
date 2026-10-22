@@ -19,14 +19,15 @@ from backend.api.chat import safety_runner
 from backend.core.healing_adapter import HealingBackgroundInvalid, build_healing_memory
 from backend.core.memory_store import memory_store
 from backend.core.session_manager import session_manager
+from backend.core.conversation_archive import conversation_archive
 from backend.healing.agent import HealingAgent
 from backend.healing.client import HealingUnavailable
 from backend.healing.safety_bridge import most_severe_verdict, session_safety_verdict
 from backend.healing.store import healing_store
 from backend.models.healing import HealingChatRequest, HealingMessage, HealingResponse, StartHealingRequest, student_view
-from backend.models.states import _now
+from backend.models.states import SessionState, _now
 from backend.safety.schemas import SafetyVerdict
-from backend.safety.support import safety_blocks_normal_flow
+from backend.safety.support import safety_blocks_normal_flow, safety_reply_messages
 
 router = APIRouter(prefix="/api/healing", tags=["healing"])
 healing_agent = HealingAgent()
@@ -36,8 +37,29 @@ def error(status, code, message):
     return HTTPException(status_code=status, detail={"code": code, "message": message})
 
 
-def live_session(session_id):
+async def live_session(session_id):
     session = session_manager.get_session(session_id)
+    if session is None:
+        session = session_manager.resume_for_healing(session_id)
+    if session is None and not conversation_archive.is_deleted(session_id):
+        # Legacy reports predate durable conversations. They can seed a new
+        # companionship, but cannot reconstruct messages already lost in memory.
+        record = next((r for r in memory_store.list_all_records()
+                       if r.result.session_id == session_id), None)
+        if record is not None:
+            # Recheck the actual saved report with the same Safety agent used
+            # for new messages; no fabricated normal verdict on restoration.
+            safety = await evaluate_safety(record.result.model_dump_json(), [])
+            if safety is None:
+                raise error(503, "HEALING_UNAVAILABLE", "暂时无法恢复陪伴，请稍后重试。")
+            session = session_manager.resume_for_healing(session_id, SessionState(
+                session_id=session_id, student_ref=record.student_ref,
+                assessment_result_id=record.result.result_id,
+                latest_safety=safety,
+                safety_halted=safety.route.value == "safety_stop",
+                safety_stage=("stopped" if safety.route.value == "safety_stop"
+                              else "review" if safety.halted else "none"),
+            ))
     if session is None:
         raise error(404, "HEALING_SESSION_EXPIRED", "本次会话已过期，陪伴记录不可恢复。请重新开始并进入陪伴。")
     return session
@@ -91,7 +113,8 @@ def publish_state(session_id, slot, candidate=None, *, answer=None, safety=None,
         # 安全状态取更严重的一份，任一要求停止都不得继续普通治愈。
         session_safety = session_safety_verdict(session)
         blocked = not safe_to_continue(session)
-        governing = most_severe_verdict(safety, session_safety)
+        governing = most_severe_verdict(
+            safety, session_safety, state.risk if state.status == "referred" else None)
         if blocked or governing.halted:
             if state.status != "referred" or governing != state.risk:
                 if candidate is not None and answer is not None and state.status != "referred":
@@ -118,6 +141,7 @@ def publish_state(session_id, slot, candidate=None, *, answer=None, safety=None,
         if state is not slot.state:
             slot.state = state
             slot.touched_at = _now()
+        healing_store.persist(session_id, slot)
         return response
 
     response = session_manager.read_session(session_id, publish)
@@ -128,10 +152,10 @@ def publish_state(session_id, slot, candidate=None, *, answer=None, safety=None,
 
 @router.post("/start", response_model=HealingResponse)
 async def start_healing(request: StartHealingRequest):
-    live_session(request.session_id)
+    await live_session(request.session_id)
     slot = get_slot(request.session_id)
     async with slot.lock:
-        session = live_session(request.session_id)
+        session = await live_session(request.session_id)
         digest = fingerprint(request)
         receipt = slot.start_receipts.get(request.request_id)
         if receipt is not None:
@@ -178,7 +202,7 @@ async def start_healing(request: StartHealingRequest):
 
 @router.get("/{session_id}", response_model=HealingResponse)
 async def get_healing(session_id: str):
-    live_session(session_id)
+    await live_session(session_id)
     slot = get_slot(session_id)
     async with slot.lock:
         return publish_state(session_id, slot)
@@ -186,10 +210,10 @@ async def get_healing(session_id: str):
 
 @router.post("/chat", response_model=HealingResponse)
 async def healing_chat(request: HealingChatRequest):
-    live_session(request.session_id)
+    await live_session(request.session_id)
     slot = get_slot(request.session_id)
     async with slot.lock:
-        session = live_session(request.session_id)
+        session = await live_session(request.session_id)
         state = slot.state
         if state is None:
             raise error(404, "HEALING_NOT_FOUND", "本次陪伴记录不可恢复，请重新进入陪伴。")
@@ -208,9 +232,26 @@ async def healing_chat(request: HealingChatRequest):
         if state.turn_count >= 80:
             raise error(409, "HEALING_TURN_LIMIT", "这轮陪伴已达到保存上限，请重新生成一轮支持。")
         if state.status == "referred" or not safe_to_continue(session):
-            # 安全暂停/中止（或本轮陪伴已在安全模式）：不得继续普通治愈，
-            # 不调用支持模型、不写普通治愈进度，只返回安全状态。
-            return publish_state(request.session_id, slot)
+            # Stop ordinary coaching, not communication. Safety alone handles
+            # each new message; keep the stop/review lock and all methods off.
+            history = [(message.role, message.content) for message in state.messages[-20:]]
+            turn_safety = await evaluate_safety(request.text, history)
+            if turn_safety is None:
+                raise error(503, "HEALING_UNAVAILABLE", "陪伴服务暂时不可用，请重试本次回答。")
+            governing = most_severe_verdict(turn_safety, state.risk, session_safety_verdict(session))
+            candidate = state.model_copy(deep=True)
+            candidate.status = "referred"
+            candidate.risk = governing
+            candidate.turn_count += 1
+            candidate.messages.extend([
+                HealingMessage(role="user", content=request.text),
+                HealingMessage(role="assistant", content="\n".join(
+                    safety_reply_messages(turn_safety, already_halted=True))),
+            ])
+            for suggestion in candidate.suggestions:
+                suggestion.active = False
+            return publish_state(request.session_id, slot, candidate, safety=governing,
+                                 message_receipt=(request.message_id, digest))
         # 本条治愈发言的安全结论（新版 Safety），与会话已有的安全结论取更严重的。
         history = [(message.role, message.content) for message in state.messages[-20:]]
         turn_safety = await evaluate_safety(request.text, history)

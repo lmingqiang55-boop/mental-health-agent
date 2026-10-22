@@ -20,6 +20,7 @@ from backend.healing.store import HealingStore
 from backend.main import app
 from backend.models.healing import Evidence, Feedback, HealingBackground, KnowledgeItem, student_view
 from backend.models.states import RiskResult
+from conftest import create_consented_session
 from backend.healing.safety_bridge import session_safety_verdict
 from backend.safety.projection import project_to_risk_result
 from backend.safety.schemas import (
@@ -84,8 +85,7 @@ def support(tmp_path, monkeypatch, evaluation_stub):
     monkeypatch.setattr(healing, "healing_agent", HealingAgent(fake, HealingRetriever([
         knowledge(), knowledge("other", title="另一种压力表达", steps=["在成人指导下表达考试担忧。"]),
     ])))
-    session = client.post("/api/session").json()
-    sid = session["session_id"]
+    sid = create_consented_session(client)
     result = client.post("/api/assessment", json={"session_id": sid, "evaluation_input": {
         "dialogue_history": [{"role": "user", "content": "最近考试压力很大"}],
     }}).json()["result"]

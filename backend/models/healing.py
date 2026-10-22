@@ -266,7 +266,7 @@ class HealingState(StrictModel):
     status: Literal["active", "paused", "ended", "referred"] = "active"
     # 本会话当前生效的安全结论（新版 Safety，唯一安全状态来源）。
     risk: SafetyVerdict
-    # Kept in process memory, never in the student response or assessment database.
+    # Internal archive only; never exposed in student responses or assessment DB.
     audit: list[dict] = Field(default_factory=list)
     memory_update_suggestions: list[dict] = Field(default_factory=list)
     receipts: dict[str, dict] = Field(default_factory=dict)
@@ -322,6 +322,7 @@ class HealingResponse(StrictModel):
     session_id: str
     healing_id: str
     assessment_result_id: str
+    assessment_session_id: str
     status: Literal["active", "paused", "ended", "referred"]
     turn_count: int
     report: StudentReport
@@ -346,6 +347,7 @@ def student_view(state: HealingState) -> HealingResponse:
         session_id=state.memory.session_id,
         healing_id=state.healing_id,
         assessment_result_id=state.memory.assessment.result_id,
+        assessment_session_id=state.memory.assessment.session_id,
         status=state.status, turn_count=state.turn_count,
         report=StudentReport(
             **report.model_dump(exclude={"suggestion_ids", "degraded_reason"}),
