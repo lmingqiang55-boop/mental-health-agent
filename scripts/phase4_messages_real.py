@@ -38,7 +38,7 @@ from backend.llm.config import load_deepseek_config  # noqa: E402
 from backend.llm.deepseek_client import DeepSeekClient  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.policy.client import get_policy_client  # noqa: E402
-from _probe import CountingPolicy, CountingSafety, install_route_recorder  # noqa: E402
+from _probe import CountingPolicy, CountingSafety, install_route_recorder, create_demo_session  # noqa: E402
 
 client = TestClient(app)
 
@@ -118,7 +118,7 @@ def install_recorder() -> list[str]:
 
 
 def new_session() -> str:
-    return client.post("/api/session").json()["session_id"]
+    return create_demo_session(client)
 
 
 def looks_cleaned(raw: str, messages: list[str]) -> str:

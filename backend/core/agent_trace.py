@@ -53,6 +53,9 @@ _TRUTHY = frozenset({"1", "true", "on", "yes"})
 #: Dialogue 自主路由的原因码 → 说给评委听的说法。
 #: 取值口径见 ``backend/prompts/dialogue_prompt`` 的路由提示词。
 ROUTE_REASON_LABELS: dict[str, str] = {
+    "per_turn_decision": "每轮由决策智能体规划目标",
+    "user_requested": "学生主动结束访谈",
+    "turn_limit": "达到35轮上限",
     "continue_topic": "当前话题还值得追问",
     "clarify": "先澄清刚说的内容",
     "topic_exhausted": "当前话题问得差不多了",
@@ -202,7 +205,7 @@ def build_agent_trace(
     else:
         forced = scheduling.forced_reason
         dialogue = TraceDialogue(
-            state="ran",
+            state="skipped" if not scheduling.routed else "ran",
             routed=scheduling.routed,
             need_decision=scheduling.need_decision,
             reason_code=scheduling.route_reason_code,
@@ -214,7 +217,7 @@ def build_agent_trace(
         decision = TraceDecision(
             state="ran" if called else "skipped",
             called=called,
-            label="本轮已调用决策模型" if called else "复用当前策略",
+            label="本轮已调用决策模型" if called else "本轮收尾，无需决策",
             strategy=payload.next_strategy,
         )
         vision = _vision_from_scheduling(payload, scheduling)

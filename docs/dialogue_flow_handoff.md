@@ -10,7 +10,7 @@
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `assessment_ready` | boolean | 本轮是否收尾；`true` 表示停止普通追问、可生成结果 |
-| `completion_reason` | string 或 null | `topic_coverage` / `turn_limit` / `user_requested`；普通对话为 null |
+| `completion_reason` | string 或 null | `model_finished` / `turn_limit` / `user_requested`；普通对话为 null；旧记录可能保留 `topic_coverage` |
 | `screening_progress` | object | 话题交流次数、待回答话题及结束原因；不是量表得分 |
 | `visual_feedback` | object | `reason` 表示触发或跳过原因，`emotion` 为四类线索或 null |
 
@@ -18,14 +18,15 @@
 
 ```json
 {
-  "reply": "你看起来有点难过，最近是很难入睡，还是半夜容易醒？",
-  "next_strategy": "睡眠",
+  "reply": "你看起来有点难过。\n最近是很难入睡，还是半夜容易醒？",
+  "messages": ["你看起来有点难过。", "最近是很难入睡，还是半夜容易醒？"],
+  "next_strategy": "睡眠异常",
   "current_stage": "exploration",
   "assessment_ready": false,
   "completion_reason": null,
   "screening_progress": {
-    "pending_topic": "睡眠",
-    "topic_turns": {"情绪": 2},
+    "pending_topic": "sleep_disturbance",
+    "topic_turns": {"depressed_mood": 2},
     "end_reason": null
   },
   "visual_feedback": {"reason": "mentioned", "emotion": "sad"}
@@ -70,7 +71,7 @@
 | `low_confidence` / `unstable_emotion` | 置信分数不足或多帧结果不稳定 |
 | `discordance` | 文字正向、人脸负向，本轮改用温和核对，不再报表情名字 |
 | `tone` | 表情说不出名字、也不构成矛盾，本轮只凭连续效价说一句整体语气 |
-| `generation_omitted` | 提供了表情名字，但生成器（含一次重写）仍未提及；**这一轮不算提过，不进冷却** |
+| `generation_omitted` | 提供了表情线索，模型本轮选择不提及；不强制重写，**这一轮不算提过，不进冷却** |
 | `safety_stop` / `safety_review` / `closing` | 安全支持、安全澄清或本轮收尾不插入视觉观察 |
 
 只用**同一仍然开启的摄像头**的真实帧。帧的取自范围是发言结束前 5 秒（`dialogue_frames`
@@ -121,7 +122,7 @@
 {
   "current_stage": "assessment_ready",
   "assessment_ready": true,
-  "completion_reason": "topic_coverage",
+  "completion_reason": "turn_limit",
   "next_strategy": "结束本次筛查",
   "reply": "谢谢你愿意分享，我们这次先聊到这里。可以生成本次对话的初步结果。"
 }
@@ -133,14 +134,16 @@
 不要根据聊天回合数显示“PHQ-9 第 n/9 题”，此对话不是九道固定量表题。
 
 `screening_progress` 包含 `topic_turns`、`pending_topic`、`end_reason`。
-计数只表示对应话题下的交流，不等于回答有效或信息完整。
-普通话题包含情绪、兴趣、睡眠、精神状态、食欲、社会功能、躯体症状、自杀倾向。
-训练模型继续选择动作；话题到两次交流后控制器转向尚未覆盖的话题。
-主要话题都交流过且至少十轮时收尾，三十五轮为总上限。
-第 25 轮起若仍有未涉及的话题，每轮向决策模型和对话模型传入当前轮数、总上限及缺失话题，
-提醒尽快补充；图路由此时强制重新决策，避免继续复用旧话题。该提醒不向用户展示内部记录。
-`completion_reason=turn_limit` 表示到达上限，报告只依据已聊内容；
-`user_requested` 表示用户主动停止。所有参数均为演示交互设置，不是临床规范。
+字段名保持兼容，但新会话使用11个评估小项键，如 `sleep_disturbance`。
+次数只表示此前目标收到的回答，不等于回答有效或信息完整。
+每个普通轮都调用决策模型，完整传递 `target_item` 和 `question_goal` 给对话智能体；
+图执行不经过对话路由或复用旧决策。后端维护11项覆盖状态并传给决策模型；
+每项作为目标收到至少一次学生回复后，才接受模型返回空目标和“结束访谈”的请求。
+提前申请结束时，后端提供一个未覆盖项目继续了解；只问出但未回答不计覆盖。
+覆盖齐全不会自动结束，充分性仍由决策模型结合完整历史判断；
+`completion_reason=model_finished` 表示模型主动结束，`turn_limit` 表示第35轮强制收尾，
+`user_requested` 表示学生主动结束。话题覆盖不会被后端直接用于收尾。
+不追加缺失话题补问提醒。轮数上限是项目交互参数，不是临床规范。
 
 重复原 `utterance_id` 的成功请求仍幂等返回原结果；收尾后新普通输入返回
 409 `SCREENING_FINISHED`。新危机表述会优先进入危机支持，不被上限拦截。

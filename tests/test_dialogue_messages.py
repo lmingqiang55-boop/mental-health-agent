@@ -18,6 +18,7 @@ import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from backend.agents.dialogue_agent import (
     DialogueAgent, DialogueAgentError, parse_reply_messages,
@@ -82,7 +83,7 @@ def install(monkeypatch, *outputs: str) -> ReplyStub:
 
 
 def new_session() -> str:
-    return client.post("/api/session").json()["session_id"]
+    return create_consented_session(client)
 
 
 def turn(session_id: str, text: str, **extra) -> dict:
@@ -99,7 +100,7 @@ def history(session_id: str) -> list[dict]:
 def make_request(text: str = "最近睡不好") -> DialogueAgentRequest:
     return DialogueAgentRequest(
         conversation_history=[DialogueHistoryMessage(role="assistant", content="你好呀")],
-        decision=DialogueDecision(actions=["共情安慰", "睡眠"], topic="睡眠"),
+        decision=DialogueDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息'),
         current_user_input=DialogueCurrentUserInput(text=text),
     )
 
@@ -169,7 +170,7 @@ def test_rewrite_keeps_the_multi_message_format():
             DialogueHistoryMessage(role="user", content="嗯"),
             DialogueHistoryMessage(role="assistant", content=repeated),
         ],
-        decision=DialogueDecision(actions=["共情安慰", "睡眠"], topic="睡眠"),
+        decision=DialogueDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息'),
         current_user_input=DialogueCurrentUserInput(text="最近睡不好"),
     )
     response = asyncio.run(DialogueAgent(llm).generate_reply(request))
@@ -335,7 +336,7 @@ def test_visual_observation_still_reaches_dialogue(monkeypatch, policy_stub):
     ``tests/test_visual_acknowledgment.py`` 覆盖，不在这里重复。
     """
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    policy_stub(("共情安慰", "睡眠"))
+    policy_stub('sleep_disturbance')
     stub = install(monkeypatch, "你看起来有点累。\n最近睡得怎么样？")
 
     # 图在编译时按名字绑定了节点里的 select_visual_channels，因此按节点模块打桩。

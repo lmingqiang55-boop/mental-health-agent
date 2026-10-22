@@ -133,19 +133,28 @@ def import_model_package(package: Path) -> None:
 def verify_model_inference() -> None:
     """Exercise the real project client once after import, not just Ollama's model list."""
     from backend.models.enums import MessageRole
-    from backend.models.states import Message
+    from backend.models.states import Message, SessionState
+    from backend.core.dialogue_manager import DialogueManager
     from backend.policy.client import HttpPolicyClient, PolicyClientError
     from evaluation_agent.opening import OPENING_QUESTION
 
-    history = [
-        Message(role=MessageRole.ASSISTANT, content=OPENING_QUESTION),
-        Message(role=MessageRole.USER, content="我最近睡不好。"),
-    ]
+    # 开场仅回答年龄也必须继续采集评估信息，不能只验证 JSON 能解析。
+    client = HttpPolicyClient(base_url=OLLAMA_URL, model=MODEL_ID, timeout=60)
     try:
-        decision = HttpPolicyClient(base_url=OLLAMA_URL, model=MODEL_ID, timeout=60).predict(history)
+        for text in ("我13岁了，初一", "我最近睡不好。"):
+            history = [
+                Message(role=MessageRole.ASSISTANT, content=OPENING_QUESTION),
+                Message(role=MessageRole.USER, content=text),
+            ]
+            decision = DialogueManager(policy_client=client).decide(
+                SessionState(session_id="policy-startup-check", conversation_history=history))
+            if decision.is_finished:
+                raise LocalPolicyError("决策模型在尚未收集评估信息时提前结束访谈，请检查提示词和模型配置。")
     except (PolicyClientError, ValueError) as exc:
         raise LocalPolicyError("模型已导入，但实际决策调用失败，请查看 Ollama 状态。") from exc
-    print(f"[start] 决策模型冒烟验证通过：{', '.join(action.value for action in decision.actions)}", flush=True)
+    finally:
+        client.client.close()
+    print(f"[start] 决策模型冒烟验证通过：{decision.model_dump_json()}", flush=True)
 
 
 def require_local_model() -> None:

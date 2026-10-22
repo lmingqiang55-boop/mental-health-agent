@@ -5,16 +5,18 @@ from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from backend.main import app
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("isolated_result_store")
 SPEECH = {"capture_id": "capture-1", "recording_start_ms": 12000,
           "recording_end_ms": 16800}
 
 
 def new_request():
-    return {"session_id": client.post("/api/session").json()["session_id"],
+    return {"session_id": create_consented_session(client),
             "utterance_id": "utterance-1", "text": "最近晚上经常睡不着",
             "speech": deepcopy(SPEECH)}
 
@@ -155,7 +157,7 @@ def test_changed_full_assessment_does_not_destroy_speech(policy_stub, evaluation
 
 
 def test_external_assessment_preserves_supplied_speech(evaluation_stub):
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_consented_session(client)
     original_time = "2026-10-02T01:00:00Z"
     response = client.post("/api/assessment", json={"session_id": session_id,
         "evaluation_input": {"dialogue_history": [{"role": "user", "content": "没有",

@@ -1,0 +1,270 @@
+{
+  "title": "中学生功能展示：考试前，我总怕自己做不完",
+  "created_at": "2026-10-20T11:34:40.739797+00:00",
+  "synthetic_student_inputs": true,
+  "student_profile": "虚构14岁初二学生；近两周作业与期中复习压力较大，入睡慢、写作业易走神，仍喜欢篮球，有同学与家长支持，无自伤想法。",
+  "commit": "458ebfbc769a5bc98eddb62a862ec3413ce6b3e9",
+  "dialogue_model": "deepseek-flash",
+  "system_sha256": "3763df681c72beddb8063fb6614f9cdbda1be2ddbff63dde1d4cd7d242698ad3",
+  "opening_message": "你好呀，我们先认识一下吧。你今年几岁、读几年级？最近有什么想和我聊聊的吗？",
+  "opening_source": "fixed_project_welcome",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "我14岁，读初二。最近两周作业总写得很晚，马上又要期中考试了。一坐到书桌前就紧张，越怕写不完，越容易发呆。",
+      "reply": "一坐到书桌前就紧张，还越怕写不完越发呆，这样熬两周确实挺累的。\n这种紧张是只在写作业时出现，还是想到考试也会这样？",
+      "messages": [
+        "一坐到书桌前就紧张，还越怕写不完越发呆，这样熬两周确实挺累的。",
+        "这种紧张是只在写作业时出现，还是想到考试也会这样？"
+      ],
+      "turn_count": 1,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "情绪",
+        "topic_turns": {},
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 2,
+      "user": "想到考试也会。上次数学比以前低了十几分，妈妈最近常问我复习得怎么样，我就怕这次还是考不好。这两周一周有四五天会这样，晚上最明显，白天跟同学在一起会好一点。",
+      "reply": "数学比之前低了十几分，妈妈又总问复习得怎么样，难怪一想到考试就更紧张。\n这两周一周有四五天都这样，晚上最明显，那这种紧张有没有影响到你晚上睡觉？",
+      "messages": [
+        "数学比之前低了十几分，妈妈又总问复习得怎么样，难怪一想到考试就更紧张。",
+        "这两周一周有四五天都这样，晚上最明显，那这种紧张有没有影响到你晚上睡觉？"
+      ],
+      "turn_count": 2,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "情绪",
+        "topic_turns": {
+          "情绪": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 3,
+      "user": "有。我一般十点半上床，这两周经常翻四五十分钟才睡着，一周大概四五晚，脑子里总在想没做完的题。睡着以后基本不醒，早上六点四十要起床，有时早读会犯困。",
+      "reply": "躺着四五十分钟都在想没做完的题，早上还要六点四十起床，这样确实挺磨人的。\n早读犯困的时候，是困得睁不开眼，还是勉强能撑住但听不进去？",
+      "messages": [
+        "躺着四五十分钟都在想没做完的题，早上还要六点四十起床，这样确实挺磨人的。",
+        "早读犯困的时候，是困得睁不开眼，还是勉强能撑住但听不进去？"
+      ],
+      "turn_count": 3,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "睡眠",
+        "topic_turns": {
+          "情绪": 2
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 4,
+      "user": "能撑住，就是读着读着不知道读到哪儿了。上课没有睡着，但有时会漏听一点。晚上我越想把错题全看完，就越着急，最后又拖晚了。",
+      "reply": "越想把错题全看完越着急，结果反而拖得更晚，这种越急越卡住的感觉挺让人无力的。\n除了写作业和考试，这两周有没有哪段时间是明显提不起劲、什么都不想做的？",
+      "messages": [
+        "越想把错题全看完越着急，结果反而拖得更晚，这种越急越卡住的感觉挺让人无力的。",
+        "除了写作业和考试，这两周有没有哪段时间是明显提不起劲、什么都不想做的？"
+      ],
+      "turn_count": 4,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "精神状态",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 5,
+      "user": "放学回家那会儿比较没劲，一周有四五天想在沙发上躺一会儿，不过吃过饭还能写作业。我以前挺爱打篮球的，最近少打了，但同学来叫我，我还是想跟他们玩。",
+      "reply": "放学回家先想在沙发上躺一会儿，但同学来叫你，你还是愿意去打篮球，说明你对以前喜欢的事还有兴趣。\n最近少打了，是没时间，还是提不起劲去？",
+      "messages": [
+        "放学回家先想在沙发上躺一会儿，但同学来叫你，你还是愿意去打篮球，说明你对以前喜欢的事还有兴趣。",
+        "最近少打了，是没时间，还是提不起劲去？"
+      ],
+      "turn_count": 5,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "兴趣",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 6,
+      "user": "主要是怕回来作业写不完。上周六还是跟同学打了半小时，打的时候挺开心的，回来心里也没那么堵。我还想这周再去一次，就是有点纠结。",
+      "reply": "打半小时球回来心里没那么堵，说明这件事对你是有点帮助的，想再去一次很正常，不用太纠结。\n这周想去的话，可以先把作业分个先后，留出半小时打球的时间，不用等全部写完才去。\n对了，这阵子你吃饭的情况怎么样，胃口和以前比有变化吗？",
+      "messages": [
+        "打半小时球回来心里没那么堵，说明这件事对你是有点帮助的，想再去一次很正常，不用太纠结。",
+        "这周想去的话，可以先把作业分个先后，留出半小时打球的时间，不用等全部写完才去。",
+        "对了，这阵子你吃饭的情况怎么样，胃口和以前比有变化吗？"
+      ],
+      "turn_count": 6,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "食欲",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1,
+          "兴趣": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 7,
+      "user": "早上紧张的时候不太想吃，这周有三四天早餐比以前少一些，妈妈会让我带个面包去学校。中午和晚饭基本正常，也没觉得自己明显瘦了。",
+      "reply": "早上紧张时吃得少，妈妈还让你带个面包，中午和晚饭正常，这样听着还不算太糟。\n除了早上紧张的时候，平时有没有哪顿饭是明明不饿、却还是吃不下？",
+      "messages": [
+        "早上紧张时吃得少，妈妈还让你带个面包，中午和晚饭正常，这样听着还不算太糟。",
+        "除了早上紧张的时候，平时有没有哪顿饭是明明不饿、却还是吃不下？"
+      ],
+      "turn_count": 7,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "食欲",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1,
+          "兴趣": 1,
+          "食欲": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 8,
+      "user": "别的时候基本都能正常吃，就是早上想到考试会没胃口。我觉得妈妈也是关心我，可她一问成绩我就紧张。我想告诉她我最近睡不好，又怕她觉得我在找借口，我该怎么开口？",
+      "reply": "你既知道妈妈是关心你，又怕说了睡不好会被当成找借口，这种想开口又犹豫的心情我能理解。\n可以试着先不提成绩，只说“最近晚上总睡不着，早上没胃口，有点担心影响上课”，看她怎么回应。",
+      "messages": [
+        "你既知道妈妈是关心你，又怕说了睡不好会被当成找借口，这种想开口又犹豫的心情我能理解。",
+        "可以试着先不提成绩，只说“最近晚上总睡不着，早上没胃口，有点担心影响上课”，看她怎么回应。"
+      ],
+      "turn_count": 8,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "社会功能",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1,
+          "兴趣": 1,
+          "食欲": 2
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 9,
+      "user": "这样说我能试试，今晚吃完饭跟她讲。其实她平时也会听我说学校的事。我跟同桌关系挺好的，他知道我最近担心数学，说课间可以一起看错题；我也一直正常去上课，没有躲着同学。",
+      "reply": "能试着今晚跟妈妈开口，同桌也愿意陪你一起看错题，这些支持都挺实在的。\n除了早上紧张时胃口差，最近身体上还有没有别的不舒服，比如头疼、肚子不舒服或者心慌？",
+      "messages": [
+        "能试着今晚跟妈妈开口，同桌也愿意陪你一起看错题，这些支持都挺实在的。",
+        "除了早上紧张时胃口差，最近身体上还有没有别的不舒服，比如头疼、肚子不舒服或者心慌？"
+      ],
+      "turn_count": 9,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "躯体症状",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1,
+          "兴趣": 1,
+          "食欲": 2,
+          "社会功能": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 10,
+      "user": "偶尔写作业坐久了脖子和肩膀有点酸，这两周大概有两三次，起来走走、伸伸胳膊就好了。没有明显头疼、肚子疼或者心慌，体育课也能正常上。",
+      "reply": "脖子肩膀酸，起来走走就能缓解，应该不用太担心，体育课也能正常上，说明身体状态还可以。\n另外我想单独问你一句，这两周有没有过觉得活着没意思，或者想过伤害自己的时候？",
+      "messages": [
+        "脖子肩膀酸，起来走走就能缓解，应该不用太担心，体育课也能正常上，说明身体状态还可以。",
+        "另外我想单独问你一句，这两周有没有过觉得活着没意思，或者想过伤害自己的时候？"
+      ],
+      "turn_count": 10,
+      "current_stage": "exploration",
+      "assessment_ready": false,
+      "completion_reason": null,
+      "screening_progress": {
+        "pending_topic": "自杀倾向",
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1,
+          "兴趣": 1,
+          "食欲": 2,
+          "社会功能": 1,
+          "躯体症状": 1
+        },
+        "end_reason": null
+      }
+    },
+    {
+      "turn": 11,
+      "user": "没有，没有想过伤害自己，也没有觉得活着没意思。我就是怕考不好，还是想把数学慢慢补上来，也想继续跟同学打球。今晚我先跟妈妈说说最近睡不好，再请她陪我把复习的事排一排。",
+      "reply": "今晚先跟妈妈说说睡不好，再一起把复习排一排，这个打算挺具体的。\n你提到怕考不好，也还想继续跟同学打球，这些我们都聊到了，今天先到这里。\n可以点击“生成结果”，看看这次对话整理出的初步情况。",
+      "messages": [
+        "今晚先跟妈妈说说睡不好，再一起把复习排一排，这个打算挺具体的。",
+        "你提到怕考不好，也还想继续跟同学打球，这些我们都聊到了，今天先到这里。",
+        "可以点击“生成结果”，看看这次对话整理出的初步情况。"
+      ],
+      "turn_count": 11,
+      "current_stage": "assessment_ready",
+      "assessment_ready": true,
+      "completion_reason": "topic_coverage",
+      "screening_progress": {
+        "pending_topic": null,
+        "topic_turns": {
+          "情绪": 2,
+          "睡眠": 1,
+          "精神状态": 1,
+          "兴趣": 1,
+          "食欲": 2,
+          "社会功能": 1,
+          "躯体症状": 1,
+          "自杀倾向": 1
+        },
+        "end_reason": "topic_coverage"
+      }
+    }
+  ],
+  "actual_calls": {
+    "remote": 22,
+    "local_policy": 10
+  },
+  "assessment_report_generated": false
+}

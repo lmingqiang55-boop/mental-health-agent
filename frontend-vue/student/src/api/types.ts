@@ -139,6 +139,7 @@ export interface SessionState {
   turn_count: number
   current_stage: Stage
   latest_vision_state: VisionState | null
+  vision_capture_generation: number
   latest_audio_state: AudioState | null
   vision_state_log: VisionState[]
   audio_state_log: AudioState[]
@@ -170,8 +171,8 @@ export interface ChatRequest {
   speech?: SpeechMetadata | null
 }
 
-/** 收尾原因：主要话题聊完 / 到轮数上限 / 用户主动停止。 */
-export type CompletionReason = 'topic_coverage' | 'turn_limit' | 'user_requested'
+/** 收尾原因；topic_coverage 仅兼容旧记录，新流程由模型结束、轮数上限或用户停止。 */
+export type CompletionReason = 'topic_coverage' | 'turn_limit' | 'user_requested' | 'model_finished'
 
 /** 话题覆盖度（不是量表得分，也不代表信息完整）。 */
 export interface ScreeningProgress {

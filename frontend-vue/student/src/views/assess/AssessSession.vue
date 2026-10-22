@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { audioApi, chatApi, sessionApi } from '@/api'
 import { isApiError } from '@/api/http'
-import type { ChatResponse, SpeechMetadata, VisionState } from '@/api/types'
+import type { ChatRequest, ChatResponse, SpeechMetadata, VisionState } from '@/api/types'
 import { useRecorder, type RecordingResult } from '@/composables/useRecorder'
 import { useVision } from '@/composables/useVision'
 import { useTts } from '@/composables/useTts'
@@ -88,10 +88,13 @@ const closing = ref(false)
 const safetyHotlines = ref<string[]>([])
 // 摄像头开启但起流/上报失败（begin() 里兜底为仅语音）。
 const camFailed = ref(false)
+let captureGeneration = -1
 // 【演示用】手动输入文字直接送给后端决策模型（跳过语音转写）。
 // 竞赛演示的台词是预先设计好的，走这条通道可以避免 ASR 识别抖动；
 // 正式面向学生上线前需要重新评估是否保留。
 const manualText = ref('')
+// 超时可能发生在服务端已完成这一轮之后；重试须复用标识和冻结快照。
+let pendingManualRequest: ChatRequest | null = null
 let guard = 0
 const processingController = new AbortController()
 
@@ -160,7 +163,7 @@ function pushMessage(role: Msg['role'], text: string, items?: string[] | null) {
  */
 function pushAssistantMessage(text: string, items?: string[] | null) {
   const bubbles = toBubbles(text, items)
-  const msg: Msg = { role: 'assistant', text, bubbles, shown: 1 }
+  const msg = reactive<Msg>({ role: 'assistant', text, bubbles, shown: 1 })
   messages.value.push(msg)
   void scrollToEnd()
   for (let index = 1; index < bubbles.length; index += 1) {
@@ -182,6 +185,7 @@ async function init() {
   loading.value = true
   try {
     const state = await sessionApi.get(sid)
+    if (processingController.signal.aborted) return
     if (state.consent.status !== 'granted') {
       toastWarn('本次会话尚未完成知情同意')
       await router.replace({ name: 'assess-consent' })
@@ -189,6 +193,13 @@ async function init() {
     }
     assess.setSession(state.session_id, state.turn_count)
     assess.setConsentScopes(state.consent.scope)
+    captureGeneration = state.vision_capture_generation
+    if (state.current_stage === 'completed' && state.assessment_result_id) {
+      closing.value = true
+      await router.replace({ name: 'assess-report',
+        params: { resultId: state.assessment_result_id }, query: { session: sid } })
+      return
+    }
     for (const m of state.conversation_history) {
       if (m.role === 'user' || m.role === 'assistant') pushMessage(m.role, m.content, m.messages)
     }
@@ -201,6 +212,7 @@ async function init() {
     if (state.current_stage === 'assessment_ready' || state.current_stage === 'completed') {
       closing.value = true
     }
+    if (started.value && !closing.value && cameraAllowed.value) await enableVision()
     // 续测时恢复安全支持热线：从历史里找一条带号码的安全结论。
     // 只看 last_safety 不够——中途若有一轮判为 normal，那一轮就不会带号码。
     if (state.safety_halted || state.safety_stage === 'stopped') {
@@ -225,18 +237,21 @@ async function begin() {
   started.value = true
   busy.value = true
   try {
-    if (cameraAllowed.value && assess.camEnabled) {
-      try {
-        await startVision(sid, originMs())
-        camFailed.value = false
-      } catch {
-        camFailed.value = true
-        toastWarn('摄像头不可用，已切换为仅语音')
-      }
-    }
-    await speak(sid, 0, opener.value)
+    if (cameraAllowed.value) await enableVision()
+    if (!processingController.signal.aborted) await speak(sid, 0, opener.value)
   } finally {
     busy.value = false
+  }
+}
+
+async function enableVision() {
+  try {
+    await startVision(sid, originMs(), captureGeneration)
+    camFailed.value = false
+  } catch {
+    if (processingController.signal.aborted) return
+    camFailed.value = true
+    toastWarn('摄像头不可用，已切换为仅语音')
   }
 }
 
@@ -253,7 +268,7 @@ async function startRecord() {
       void finishRecord()
     }, RECORD_GUARD_MS)
   } catch {
-    toastError('无法访问麦克风，请检查权限后重试')
+    if (!processingController.signal.aborted) toastError('无法访问麦克风，请检查权限后重试')
   } finally {
     busy.value = false
   }
@@ -266,11 +281,21 @@ async function stopCapture() {
     guard = 0
   }
   try {
-    if (recording.value) cancelRecording()
+    cancelRecording()
   } catch {
     /* ignore */
   }
   await stopVision()
+}
+
+async function handleTurnError(e: unknown) {
+  if (processingController.signal.aborted) return
+  if (isApiError(e, 'SCREENING_FINISHED')) {
+    closing.value = true
+    await stopCapture()
+    return
+  }
+  toastError(isApiError(e) ? e.message : '本轮处理失败，请重试')
 }
 
 function callHotline(number: string) {
@@ -285,6 +310,7 @@ function callHotline(number: string) {
  * 因此不会漏读第 2、3 条，也不会因为 reply 兼容字段把同一句话读两遍。
  */
 async function applyChatResult(res: ChatResponse) {
+  if (processingController.signal.aborted) return
   const bubbles = toBubbles(res.reply, res.messages)
   pushAssistantMessage(res.reply, bubbles)
   assess.setSession(sid, res.turn_count)
@@ -349,12 +375,7 @@ async function finishRecord() {
     assess.saveProgress(utteranceId)
     await applyChatResult(res)
   } catch (e) {
-    // 后端已收尾：普通输入被拒绝(409)，进入收尾态等待生成结果。
-    if (isApiError(e, 'SCREENING_FINISHED')) {
-      closing.value = true
-      await stopCapture()
-    }
-    /* 其余错误拦截器已 toastError */
+    await handleTurnError(e)
   } finally {
     busy.value = false
   }
@@ -369,34 +390,29 @@ async function sendManualText() {
   const text = manualText.value.trim()
   if (!text || busy.value || speaking.value || recording.value || closing.value) return
   busy.value = true
-  const utteranceId = newUtteranceId()
   try {
-    let visionSnapshot: VisionState | null = null
-    try {
-      const now = originMs()
-      visionSnapshot = await segment(utteranceId, Math.max(0, now - 1000), now)
-    } catch {
-      visionSnapshot = null
+    if (!started.value) {
+      started.value = true
+      if (cameraAllowed.value) await enableVision()
+      if (processingController.signal.aborted) return
     }
-
-    pushMessage('user', text)
-    const res = await chatApi.send({
-      session_id: sid,
-      text,
-      vision_snapshot: visionSnapshot,
-      utterance_id: utteranceId,
-    }, processingController.signal)
-    lastUtteranceId.value = utteranceId
-    assess.saveProgress(utteranceId)
+    if (pendingManualRequest?.text !== text) {
+      const utteranceId = newUtteranceId()
+      const now = originMs()
+      const visionSnapshot = await segment(utteranceId, Math.max(0, now - 1000), now)
+      pendingManualRequest = {
+        session_id: sid, text, vision_snapshot: visionSnapshot, utterance_id: utteranceId,
+      }
+      pushMessage('user', text)
+    }
+    const res = await chatApi.send(pendingManualRequest, processingController.signal)
+    lastUtteranceId.value = pendingManualRequest.utterance_id ?? null
+    assess.saveProgress(lastUtteranceId.value)
+    pendingManualRequest = null
     manualText.value = ''
     await applyChatResult(res)
   } catch (e) {
-    // 后端已收尾：普通输入被拒绝(409)，进入收尾态等待生成结果。
-    if (isApiError(e, 'SCREENING_FINISHED')) {
-      closing.value = true
-      await stopCapture()
-    }
-    /* 其余错误拦截器已 toastError */
+    await handleTurnError(e)
   } finally {
     busy.value = false
   }
@@ -405,8 +421,8 @@ async function sendManualText() {
 async function stopAll() {
   clearRevealTimers()
   processingController.abort()
-  await stopCapture()
   stopTts()
+  await stopCapture()
 }
 
 function cancelCurrentRecording() {
@@ -427,8 +443,8 @@ async function withdrawConsent() {
   if (!window.confirm('撤回后会立即停止设备、取消未完成请求并删除当前会话。已保存的历史结果不会自动删除，是否继续？')) return
   processingController.abort()
   cancelRecording()
-  await stopVision()
   stopTts()
+  await stopVision()
   await sessionApi.consent(sid, false, []).catch(() => undefined)
   await sessionApi.remove(sid).catch(() => undefined)
   messages.value = []

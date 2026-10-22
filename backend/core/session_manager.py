@@ -1,9 +1,6 @@
 """Session 生命周期管理（C 模块）。
 
-修复点：
-- ``modify_session`` 把读-改-写放进同一把锁，消除 chat 与 vision/audio 之间的
-  lost-update 竞态。
-- TTL 过期与最大数量，避免内存无限增长。
+同一会话串行读写，不同会话的模型请求互不阻塞。保留 TTL 与数量上限。
 
 当前仍为进程内存储，重启清空；持久化是后续任务。
 """
@@ -13,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from threading import RLock
 from typing import TypeVar
 from uuid import uuid4
+from weakref import WeakValueDictionary
 
 from evaluation_agent.opening import OPENING_QUESTION
 
@@ -29,6 +27,7 @@ class SessionManager:
                  max_sessions: int = MAX_SESSIONS) -> None:
         self._sessions: dict[str, SessionState] = {}
         self._lock = RLock()
+        self._session_locks = WeakValueDictionary()
         self._ttl = ttl
         self._max = max_sessions
 
@@ -58,11 +57,12 @@ class SessionManager:
         reader 必须是短时同步操作，不得等待模型或网络。用于将依赖最新风险的
         陪伴响应与 session 写入串行化，避免检查后、提交前又发生风险更新。
         """
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None or self._is_expired(session):
-                self._sessions.pop(session_id, None)
-                return None
+        with self._session_lock(session_id):
+            with self._lock:
+                session = self._sessions.get(session_id)
+                if session is None or self._is_expired(session):
+                    self._sessions.pop(session_id, None)
+                    return None
             return reader(session.model_copy(deep=True))
 
     def modify_session(
@@ -74,21 +74,27 @@ class SessionManager:
         所有需要「读-改-写」的流程（chat / vision merge / 评估）都必须走这里，
         不得在路由层 get → 改 → update 分三步操作。
         """
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None or self._is_expired(session):
-                self._sessions.pop(session_id, None)
-                return None
+        with self._session_lock(session_id):
+            with self._lock:
+                session = self._sessions.get(session_id)
+                if session is None or self._is_expired(session):
+                    self._sessions.pop(session_id, None)
+                    return None
             # 模型调用失败时不能留下只有用户消息、没有助手回复的半轮对话。
             working = session.model_copy(deep=True)
             mutator(working)
             working.updated_at = datetime.now(timezone.utc)
-            self._sessions[session_id] = working
+            with self._lock:
+                # TTL/容量清理可能已淘汰该会话，不能让迟到结果把它复活。
+                if self._sessions.get(session_id) is not session:
+                    return None
+                self._sessions[session_id] = working
             return working.model_copy(deep=True)
 
     def delete_session(self, session_id: str) -> bool:
-        with self._lock:
-            return self._sessions.pop(session_id, None) is not None
+        with self._session_lock(session_id):
+            with self._lock:
+                return self._sessions.pop(session_id, None) is not None
 
     def delete_by_student(self, student_ref: str) -> list[str]:
         """删除学生仍在内存中的对话、音频元数据与视觉派生状态。"""
@@ -98,15 +104,21 @@ class SessionManager:
                 for session_id, session in self._sessions.items()
                 if session.student_ref == student_ref
             ]
-            for session_id in session_ids:
-                self._sessions.pop(session_id, None)
-            return session_ids
+        return [sid for sid in session_ids if self.delete_session(sid)]
 
     def count(self) -> int:
         with self._lock:
             return len(self._sessions)
 
     # -- 内部清理 --------------------------------------------------------
+
+    def _session_lock(self, session_id: str):
+        with self._lock:
+            lock = self._session_locks.get(session_id)
+            if lock is None:
+                lock = RLock()
+                self._session_locks[session_id] = lock
+            return lock
 
     def _is_expired(self, session: SessionState) -> bool:
         return datetime.now(timezone.utc) - session.updated_at > self._ttl

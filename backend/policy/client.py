@@ -2,35 +2,17 @@
 
 import json
 import os
-from enum import Enum
+from collections.abc import Mapping
 from urllib.parse import urlsplit
 
 import httpx
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
 from backend.llm.config import DEFAULT_ENV_FILE
 from backend.models.states import Message
 from backend.policy.prompt import POLICY_SYSTEM_PROMPT, build_policy_user_prompt
-
-
-class DialogueAction(str, Enum):
-    OTHER = "其它"
-    EMPATHY = "共情安慰"
-    MENTAL_STATE = "精神状态"
-    SLEEP = "睡眠"
-    MOOD = "情绪"
-    SUICIDE = "自杀倾向"
-    PHYSICAL = "躯体症状"
-    APPETITE = "食欲"
-    SOCIAL = "社会功能"
-    INTEREST = "兴趣"
-    SCREENING = "筛查"
-
-
-class PolicyDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    actions: list[DialogueAction] = Field(min_length=1)
+from backend.policy.schemas import MAX_INTERVIEW_TURNS, PolicyDecision
 
 
 class PolicyClientError(RuntimeError):
@@ -49,7 +31,7 @@ def parse_policy_content(content: str) -> PolicyDecision:
     try:
         return PolicyDecision.model_validate(json.loads(content))
     except (json.JSONDecodeError, ValidationError) as exc:
-        raise PolicyClientError("Policy model returned invalid actions JSON") from exc
+        raise PolicyClientError("Policy model returned invalid target_item/question_goal JSON") from exc
 
 
 class HttpPolicyClient:
@@ -81,16 +63,19 @@ class HttpPolicyClient:
         self.headers = {"Authorization": f"Bearer {key}"} if key else {}
 
     def predict(self, conversation_history: list[Message], *,
-                coverage_reminder: str | None = None) -> PolicyDecision:
+                turn_count: int | None = None,
+                max_turns: int = MAX_INTERVIEW_TURNS,
+                item_answer_counts: Mapping[str, int] | None = None) -> PolicyDecision:
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": POLICY_SYSTEM_PROMPT},
                 {"role": "user", "content": build_policy_user_prompt(
-                    conversation_history, coverage_reminder=coverage_reminder)},
+                    conversation_history, turn_count=turn_count, max_turns=max_turns,
+                    item_answer_counts=item_answer_counts)},
             ],
             "temperature": 0,
-            "max_tokens": 64,
+            "max_tokens": 512,
         }
         try:
             response = self.client.post(

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 from PIL import Image
 
 from backend.api import vision
@@ -48,7 +49,7 @@ def detector(monkeypatch):
 
 
 def session():
-    return client.post("/api/session").json()["session_id"]
+    return create_consented_session(client)
 
 
 def frame(sid, at, cap="capture"):

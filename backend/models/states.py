@@ -186,18 +186,15 @@ class ConsentRecord(BaseModel):
 
 
 class ScreeningProgress(BaseModel):
-    """Conversation coverage only; not symptom scores or clinical completeness."""
+    """后端维护的逐项回答次数，11项各至少一次是接受模型结束的门槛。
+
+    保留 pending_topic/topic_turns 的 API 名称；新记录使用11个评估小项键。
+    提问后收到学生回复才计数；不能代表症状、有效证据或评分信息充分。
+    topic_coverage 仅用于读取旧会话，新流程只产生后三种结束原因。
+    """
     pending_topic: str | None = None
     topic_turns: dict[str, int] = Field(default_factory=dict)
-    end_reason: Literal["topic_coverage", "turn_limit", "user_requested"] | None = None
-    # 下面两项是图调度的内部记账，刻意用 exclude=True 排除在 API 响应之外，
-    # 前端契约（frontend-vue/student/src/api/types.ts）保持不变。
-    #: 当前正在推进的全局评估话题。Dialogue 自主追问期间**保持不变**——
-    #: Dialogue 没有更换全局话题的权限，只有决策模型能换。
-    active_topic: str | None = Field(default=None, exclude=True)
-    #: 与 active_topic 对应的本轮全局动作值。跳过决策时据此复用上一条仍然
-    #: 有效的决策，而不是为了填 Schema 伪造一个不符合当前话题的决策。
-    active_actions: list[str] = Field(default_factory=list, exclude=True)
+    end_reason: Literal["topic_coverage", "turn_limit", "user_requested", "model_finished"] | None = None
 
 
 class SessionState(BaseModel):

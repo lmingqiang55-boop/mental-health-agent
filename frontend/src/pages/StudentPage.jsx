@@ -340,7 +340,7 @@ export default function StudentPage() {
                 {risk === 'low' ? '低' : risk === 'medium' ? '中' : '高'}
               </dd>
             </dl>
-            <p className="device-hint">对话没有自动结束条件，确认聊完后点「生成初步结果」。</p>
+            <p className="device-hint">信息基本充分时结束访谈，最多35轮；也可提前点击「生成初步结果」。</p>
           </section>
           <section className="card camera-preview">
             <h3>摄像头预览</h3>

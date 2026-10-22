@@ -11,7 +11,7 @@ from conftest import create_consented_session
 
 from backend.agents.dialogue_agent import DialogueAgent, DialogueAgentError
 from backend.api import chat, vision
-from backend.core.screening_flow import MAX_TURNS, TOPICS
+from backend.core.screening_flow import MAX_TURNS
 from backend.core.session_manager import session_manager
 from backend.main import app
 from backend.models.dialogue import DialogueAgentRequest, DialogueAgentResponse
@@ -45,7 +45,7 @@ def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(
     monkeypatch, policy_stub, safety_stub
 ):
     _natural_stub(monkeypatch)
-    policy_stub(('情绪',))
+    policy_stub('depressed_mood')
     sid = _session()
     strategies = []
     for turn in range(MAX_TURNS):
@@ -56,10 +56,11 @@ def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(
         if body['assessment_ready']:
             break
     assert body['current_stage'] == 'assessment_ready'
-    assert body['completion_reason'] == 'topic_coverage'
+    assert body['completion_reason'] == 'turn_limit'
+    assert body['turn_count'] == MAX_TURNS == 35
     assert '？' not in body['reply'] and '?' not in body['reply']
-    assert all(strategies.count(topic.value) <= 2 for topic in TOPICS)
-    assert set(body['screening_progress']['topic_turns']) == {topic.value for topic in TOPICS}
+    # 后端不按次数换题，也不把次数当作充分性依据。
+    assert body['screening_progress']['topic_turns'] == {'depressed_mood': 34}
     assert session_manager.get_session(sid).assessment_result_id is None
     repeat = _send(sid, f'第 {turn} 次回答', utterance_id=f'u{turn}')
     assert repeat.json() == body
@@ -78,7 +79,7 @@ def test_repeated_policy_topic_visits_gaps_then_stops_without_assessment(
 
 def test_turn_limit_and_user_requested_end(monkeypatch, policy_stub):
     _natural_stub(monkeypatch)
-    policy_stub(('睡眠',))
+    policy_stub('sleep_disturbance')
     sid = _session()
     session_manager.modify_session(sid, lambda state: setattr(state, 'turn_count', MAX_TURNS - 1))
     response = _send(sid, '一个月了').json()
@@ -92,7 +93,7 @@ def test_turn_limit_and_user_requested_end(monkeypatch, policy_stub):
 
 def test_failed_closing_does_not_commit_progress_or_ready_stage(monkeypatch, policy_stub):
     _natural_stub(monkeypatch)
-    policy_stub(('睡眠',))
+    policy_stub('sleep_disturbance')
     sid = _session()
     _send(sid, '最近睡不着')
     previous = session_manager.get_session(sid)
@@ -117,7 +118,7 @@ def test_custom_real_detector_short_reply_uses_frozen_recent_window(monkeypatch,
     real = Real()
     monkeypatch.setattr(detection, '_detector', real)
     _natural_stub(monkeypatch)
-    policy_stub(('睡眠',))
+    policy_stub('sleep_disturbance')
     sid = _session()
     _send(sid, '第一句'); _send(sid, '第二句')
     client.post('/api/vision/capture', json={
@@ -176,7 +177,7 @@ def test_generator_rewrites_near_duplicate_opening_or_closing_question(first, se
     llm = LLM()
     request = DialogueAgentRequest.model_validate({
         'conversation_history': [{'role': 'assistant', 'content': text} for text in history],
-        'decision': {'actions': ['食欲']}, 'current_user_input': {'text': '暴饮暴食'},
+        'decision': {'target_item': 'appetite_change', 'question_goal': '了解过去两周该项表现及尚缺的信息'}, 'current_user_input': {'text': '暴饮暴食'},
         'finish_screening': closing,
     })
     assert asyncio.run(DialogueAgent(llm).generate_reply(request)).reply == second

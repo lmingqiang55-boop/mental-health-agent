@@ -140,10 +140,10 @@ class DialogueTurnRunner:
         # 只是搬运，不改判定、不额外调用；没开 trace 时前端也不会看到它。
         payload.scheduling = summarize_scheduling(
             engine=ENGINE_GRAPH,
-            routed=final.get("route") is not None,
-            need_decision=bool(final.get("need_decision")),
-            route_reason_code=final.get("route_reason") or "",
-            forced_reason=final.get("forced_reason"),
+            routed=False,
+            need_decision=final.get("decision") is not None,
+            route_reason_code=("per_turn_decision" if final.get("decision") is not None
+                               else final.get("ending") or ""),
             channels=final.get("channels"),
         )
         return payload

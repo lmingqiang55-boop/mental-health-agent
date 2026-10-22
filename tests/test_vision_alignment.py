@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 from PIL import Image
 
 from backend.api import vision
@@ -15,6 +16,7 @@ from backend.main import app
 from backend.models.states import VisionState, _now
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("isolated_result_store")
 image = BytesIO()
 Image.new("RGB", (64, 64)).save(image, format="JPEG")
 FRAME = base64.b64encode(image.getvalue()).decode()
@@ -35,7 +37,7 @@ def detector(monkeypatch):
 
 
 def session():
-    return client.post("/api/session").json()["session_id"]
+    return create_consented_session(client)
 
 
 def capture(sid, cap="capture", generation=1, active=True):

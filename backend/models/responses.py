@@ -90,7 +90,7 @@ class TraceDialogue(BaseModel):
 
 
 class TraceDecision(BaseModel):
-    """Decision Agent：本轮真的调用了，还是复用已有效策略。"""
+    """Decision Agent：普通轮每轮调用；主动结束或达到轮数上限时跳过。"""
 
     state: TraceState
     called: bool | None = None

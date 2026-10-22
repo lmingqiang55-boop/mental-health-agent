@@ -33,9 +33,8 @@ def build_request() -> DialogueAgentRequest:
             ],
             "user_memory": {"facts": ["用户最近正在准备考试"]},
             "decision": {
-                "actions": ["共情安慰", "当前话题从睡眠转到食欲"],
-                "topic": "食欲",
-                "reason": "睡眠话题达到次数限制",
+                "target_item": "appetite_change",
+                "question_goal": "了解近期食欲和饭量是否出现变化",
             },
             "current_user_input": {
                 "text": "最近每天都睡得很晚，白天也没精神。",
@@ -61,7 +60,7 @@ async def main() -> int:
 
     print(f"\nmodel: {config.model}")
     print("\ndecision:")
-    print("共情安慰 + 睡眠 -> 食欲")
+    print(request.decision.model_dump_json())
 
     # 单次调用。失败即如实报告，不做重试。
     try:

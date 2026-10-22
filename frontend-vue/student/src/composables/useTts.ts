@@ -13,6 +13,10 @@ export function useTts() {
 
   let audio: HTMLAudioElement | null = null
   let objectUrl: string | null = null
+  let controller: AbortController | null = null
+  let generation = 0
+  let disposed = false
+  let finishPlayback: (() => void) | null = null
 
   async function checkStatus() {
     try {
@@ -25,9 +29,15 @@ export function useTts() {
   }
 
   function stop() {
+    generation += 1
+    controller?.abort()
+    controller = null
+    finishPlayback?.()
+    finishPlayback = null
     if (audio) {
       audio.pause()
       audio.onended = null
+      audio.onerror = null
       audio = null
     }
     if (objectUrl) {
@@ -38,23 +48,25 @@ export function useTts() {
     speaking.value = false
   }
 
-  function speakBrowser(text: string): Promise<void> {
+  function speakBrowser(text: string, current: number): Promise<void> {
     return new Promise((resolve) => {
-      if (!('speechSynthesis' in window)) {
+      if (current !== generation || !('speechSynthesis' in window)) {
         resolve()
         return
       }
       const u = new SpeechSynthesisUtterance(text)
       u.lang = 'zh-CN'
       u.rate = 1
-      u.onend = () => {
+      const finish = () => {
+        u.onend = null
+        u.onerror = null
+        if (finishPlayback === finish) finishPlayback = null
         speaking.value = false
         resolve()
       }
-      u.onerror = () => {
-        speaking.value = false
-        resolve()
-      }
+      finishPlayback = finish
+      u.onend = finish
+      u.onerror = finish
       speaking.value = true
       window.speechSynthesis.cancel()
       window.speechSynthesis.speak(u)
@@ -67,39 +79,55 @@ export function useTts() {
    * @param fallbackText 后端 TTS 不可用时用于浏览器语音的文本
    */
   async function speak(sessionId: string, turnCount: number, fallbackText = ''): Promise<void> {
+    if (disposed) return
     stop()
+    const current = generation
+    const request = new AbortController()
+    controller = request
     try {
-      const blob = await ttsApi.synth(sessionId, turnCount)
+      const blob = await ttsApi.synth(sessionId, turnCount, request.signal)
+      if (current !== generation) return
       objectUrl = URL.createObjectURL(blob)
       audio = new Audio(objectUrl)
       speaking.value = true
       await new Promise<void>((resolve) => {
         if (!audio) return resolve()
-        audio.onended = () => {
+        const playing = audio
+        const finish = () => {
+          playing.onended = null
+          playing.onerror = null
+          if (finishPlayback === finish) finishPlayback = null
           speaking.value = false
           resolve()
         }
-        audio.onerror = () => {
-          speaking.value = false
-          resolve()
-        }
-        audio.play().catch(() => {
-          speaking.value = false
-          resolve()
-        })
+        finishPlayback = finish
+        playing.onended = finish
+        playing.onerror = finish
+        playing.play().catch(finish)
       })
     } catch (e) {
+      if (current !== generation || request.signal.aborted) return
       if (isApiError(e, 'TTS_UNAVAILABLE') || isApiError(e, 'NETWORK_ERROR')) {
         available.value = false
-        if (fallbackText) await speakBrowser(fallbackText)
+        if (fallbackText) await speakBrowser(fallbackText, current)
       } else if (fallbackText) {
         // 其它错误（如 REPLY_NOT_FOUND）也降级，避免打断流程
-        await speakBrowser(fallbackText)
+        await speakBrowser(fallbackText, current)
+      }
+    } finally {
+      if (current === generation) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl)
+        objectUrl = null
+        audio = null
+        controller = null
       }
     }
   }
 
-  onUnmounted(stop)
+  onUnmounted(() => {
+    disposed = true
+    stop()
+  })
 
   return { speaking, available, checkStatus, speak, stop }
 }

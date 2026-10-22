@@ -1,4 +1,4 @@
-"""决策模型选动作，对话 Agent 根据完整上下文生成真正的下一句。
+"""决策模型规划具体评估目标，对话 Agent 根据完整上下文生成真正的下一句。
 
 本模块同时服务两条**等价**调用路径，二者共用下面这些模块级函数，
 以保证两条路径不会行为漂移：
@@ -11,11 +11,10 @@ import asyncio
 from dataclasses import dataclass
 
 from backend.agents.dialogue_agent import (
-    DialogueAgent, DialogueAgentError, route_fallback,
+    DialogueAgent, DialogueAgentError,
 )
 from backend.core.screening_flow import (
-    MAX_TOPIC_TURNS, MAX_TURNS, MIN_TURNS, completion_reason, coverage_reminder,
-    limit_topic, record_answer,
+    MAX_TURNS, adopt_decision, check_model_completion, completion_reason, record_answer,
 )
 from backend.core.multimodal_consistency import TurnDiscordance
 from backend.core.visual_acknowledgment import (
@@ -29,14 +28,12 @@ from backend.llm.config import DeepSeekConfigError, load_deepseek_config
 from backend.llm.deepseek_client import DeepSeekClient, DeepSeekClientError
 from backend.models.dialogue import (
     DialogueAgentRequest, DialogueAgentResponse, DialogueCurrentUserInput,
-    DialogueDecision, DialogueHistoryMessage, DialogueRouteDecision,
-    DialogueRouteRequest, DialogueVisual, DialogueVisualDiscordance,
+    DialogueDecision, DialogueHistoryMessage, DialogueVisual, DialogueVisualDiscordance,
 )
 from backend.models.enums import MessageRole, SessionStage
 from backend.models.responses import DialogueResponsePayload, VisualFeedback
 from backend.models.states import SessionState, VisionState, _now
 from backend.policy.client import (
-    DialogueAction,
     HttpPolicyClient,
     PolicyClientError,
     PolicyDecision,
@@ -188,7 +185,7 @@ def closing_payload(
 
 
 class DialogueManager:
-    """决策模型决定下一步动作，对话 Agent 生成真正的下一句。
+    """决策模型规划下一轮访谈目标，对话 Agent 生成真正的下一句。
 
     **本类不做任何安全判定。** 安全由 ``backend/safety`` 的 Safety Agent
     在进入本类之前完成（见 ``backend/api/chat.py``）：安全分支不会走到这里。
@@ -216,14 +213,18 @@ class DialogueManager:
             return self.finish_screening(
                 user_text, session, current_vision, ending)
 
-        decision = limit_topic(session, self.decide(session))
+        decision = self.decide(session)
+        if decision.is_finished:
+            return self.finish_screening(
+                user_text, session, current_vision, "model_finished")
+        adopt_decision(session, decision)
         channels = select_visual_channels(
             session, utterance_id, current_vision, user_text)
         response = self.reply_for_decision(
             session, user_text, current_vision, decision, channels)
         finalize_visual_feedback(session, channels, response.reply)
         return open_payload(
-            session, response, decision.actions[-1].value, channels.feedback)
+            session, response, decision.target_label, channels.feedback)
 
     # -- 供 backend.graph 复用的公开入口 ---------------------------------
     #
@@ -231,8 +232,8 @@ class DialogueManager:
     # 这样"决策怎么调""回复怎么生成"只有一份实现，两条路径不会漂移。
 
     def decide(self, session: SessionState) -> PolicyDecision:
-        """调用决策模型取得本轮动作。"""
-        return self._decide(session)
+        """调用决策模型，接受结束前校验11项是否各收到过一次回答。"""
+        return check_model_completion(session, self._decide(session))
 
     def reply_for_decision(self, session: SessionState, user_text: str,
                            current_vision: VisionState | None,
@@ -251,78 +252,8 @@ class DialogueManager:
             session, user_text, current_vision, None, None, closing_reason=ending)
         session.current_stage = SessionStage.ASSESSMENT_READY
         session.screening_progress.end_reason = ending
+        session.screening_progress.pending_topic = None
         return response
-
-    def route_turn(self, session: SessionState, user_text: str,
-                   current_vision: VisionState | None) -> DialogueRouteDecision:
-        """Dialogue 主控：判断本轮是否需要新的全局策略。
-
-        **路由失败不中断这一轮**，一律回退为"需要决策"（即迁移前的既有流程）。
-        多调一次决策模型是安全的；因为路由坏掉而停止话题推进不是。
-        """
-        request = self._route_request(session, user_text, current_vision)
-        if self._dialogue_agent is not None:
-            try:
-                return asyncio.run(self._dialogue_agent.route(request))
-            except (DialogueAgentError, DeepSeekClientError) as exc:
-                return route_fallback(f"路由调用失败：{type(exc).__name__}")
-            except Exception as exc:  # noqa: BLE001 - 路由绝不能成为单点故障
-                return route_fallback(f"路由意外失败：{type(exc).__name__}")
-
-        try:
-            client = DeepSeekClient(load_deepseek_config())
-        except DeepSeekConfigError:
-            return route_fallback("缺少有效的 DeepSeek 配置")
-
-        async def decide() -> DialogueRouteDecision:
-            try:
-                return await DialogueAgent(client).route(request)
-            finally:
-                # 每个节点自建自关客户端，绝不跨已关闭的事件循环复用。
-                await client.client.close()
-
-        try:
-            return asyncio.run(decide())
-        except (DialogueAgentError, DeepSeekClientError) as exc:
-            return route_fallback(f"路由调用失败：{type(exc).__name__}")
-        except Exception as exc:  # noqa: BLE001 - 路由绝不能成为单点故障
-            return route_fallback(f"路由意外失败：{type(exc).__name__}")
-
-    def reuse_decision(self, session: SessionState) -> PolicyDecision:
-        """复用当前仍然有效的全局策略，供跳过决策的轮次生成回复。
-
-        这不是"为了填 Schema 伪造一个决策"，而是把上一条**仍然有效**的决策
-        原样还原。调用方（``resolve_topic``）只在 ``should_force_decision``
-        判定策略有效时才会走到这里，因此 ``active_actions`` 必然合法且非空。
-        """
-        stored = session.screening_progress.active_actions
-        if not stored:
-            raise DialogueUnavailable("跳过决策时没有可复用的全局策略")
-        try:
-            actions = [DialogueAction(action) for action in stored]
-        except ValueError as exc:
-            raise DialogueUnavailable("已存全局策略含无效动作，无法复用") from exc
-        return PolicyDecision(actions=actions)
-
-    def _route_request(self, session: SessionState, user_text: str,
-                       current_vision: VisionState | None) -> DialogueRouteRequest:
-        progress = session.screening_progress
-        return DialogueRouteRequest(
-            conversation_history=history_before_turn(session, user_text),
-            current_user_input=DialogueCurrentUserInput(
-                text=user_text, visual=_dialogue_visual(current_vision),
-            ),
-            active_actions=list(progress.active_actions),
-            active_topic=progress.active_topic,
-            active_topic_turns=progress.topic_turns.get(
-                progress.active_topic or "", 0),
-            topic_turns=dict(progress.topic_turns),
-            topic_limit=MAX_TOPIC_TURNS,
-            turn_count=session.turn_count,
-            min_turns=MIN_TURNS,
-            max_turns=MAX_TURNS,
-            coverage_reminder=coverage_reminder(session),
-        )
 
     def finish_screening(self, user_text: str, session: SessionState,
                          current_vision: VisionState | None,
@@ -341,11 +272,10 @@ class DialogueManager:
             except ValueError as exc:
                 raise PolicyClientError(
                     f"决策模型配置无效：{exc}") from exc
-        reminder = coverage_reminder(session)
-        if reminder:
-            return self._policy.predict(
-                session.conversation_history, coverage_reminder=reminder)
-        return self._policy.predict(session.conversation_history)
+        return self._policy.predict(
+            session.conversation_history, turn_count=session.turn_count + 1,
+            max_turns=MAX_TURNS,
+            item_answer_counts=session.screening_progress.topic_turns)
 
     def _generate_reply(self, session: SessionState, user_text: str,
                         current_vision: VisionState | None,
@@ -354,27 +284,16 @@ class DialogueManager:
                         *, closing_reason: str | None = None,
                         visual_discordance: TurnDiscordance | None = None,
                         visual_tone: str | None = None) -> DialogueAgentResponse:
-        """Pass the selected actions to the dialogue Agent; never use canned questions.
+        """Pass the exact target and question goal to the dialogue Agent.
 
         返回 :class:`DialogueAgentResponse`（1~3 条 ``messages`` + 全文 ``reply``），
         由调用方决定怎么消费；本函数不写会话状态。分段的唯一来源仍是 Dialogue Agent。
         """
         previous = history_before_turn(session, user_text)
-        actions = [action.value for action in decision.actions] if decision else ["结束本次筛查"]
-        topics = [action for action in actions if action != "共情安慰"]
         request = DialogueAgentRequest(
             conversation_history=previous,
-            decision=DialogueDecision(
-                actions=actions,
-                topic=topics[-1] if topics else None,
-                reason=closing_reason,
-                extra={
-                    "topic_turns": dict(session.screening_progress.topic_turns),
-                    "coverage_reminder": (
-                        coverage_reminder(session) if closing_reason is None else None
-                    ),
-                },
-            ),
+            decision=(DialogueDecision(**decision.model_dump()) if decision else
+                      DialogueDecision(target_item=None, question_goal="结束访谈")),
             current_user_input=DialogueCurrentUserInput(
                 text=user_text, visual=_dialogue_visual(current_vision),
             ),

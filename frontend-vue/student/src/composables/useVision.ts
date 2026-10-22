@@ -26,6 +26,7 @@ export function useVision() {
   let sessionId = ''
   let originAt = 0
   let requestController: AbortController | null = null
+  let lifecycle = 0
 
   function bindVideo(el: HTMLVideoElement | null) {
     videoEl.value = el
@@ -44,10 +45,16 @@ export function useVision() {
 
   async function openCamera(): Promise<MediaStream> {
     if (stream) return stream
-    stream = await navigator.mediaDevices.getUserMedia({
+    const current = lifecycle
+    const opened = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' },
       audio: false,
     })
+    if (current !== lifecycle) {
+      opened.getTracks().forEach((track) => track.stop())
+      throw new Error('摄像头采集已取消')
+    }
+    stream = opened
     if (videoEl.value) {
       videoEl.value.srcObject = stream
       await videoEl.value.play().catch(() => undefined)
@@ -72,6 +79,8 @@ export function useVision() {
   }
 
   async function sendFrame() {
+    const current = lifecycle
+    if (!active.value) return
     const image = grabFrameBase64()
     if (!image || !sessionId || !captureId) return
     try {
@@ -87,33 +96,46 @@ export function useVision() {
         },
         { silent: true, signal: requestController?.signal },
       )
+      if (current !== lifecycle) return
       framesSent.value += 1
       uploadError.value = ''
     } catch (e) {
+      if (current !== lifecycle) return
       // 单帧失败不打断采集，但要把原因记下来给 UI 用。
       uploadError.value = isApiError(e) ? e.message : '摄像头数据未能上传'
     }
   }
 
   /** 开启采集：sessionId + 摄像头流，并开始定时送帧（约 1 帧/秒）。 */
-  async function start(sid: string, originMs: number) {
+  async function start(sid: string, originMs: number, previousGeneration = -1) {
+    if (active.value) return
+    const current = ++lifecycle
     error.value = ''
     uploadError.value = ''
     framesSent.value = 0
     sessionId = sid
-    originAt = originMs
+    originAt = performance.now() - originMs
     requestController?.abort()
-    requestController = new AbortController()
+    const controller = new AbortController()
+    requestController = controller
     try {
       await openCamera()
-      generation += 1
+      if (current !== lifecycle) return
+      generation = Math.max(generation, previousGeneration) + 1
       captureId = ensureCaptureId()
-      await visionApi.capture(sid, captureId, generation, true, requestController.signal)
+      const state = await visionApi.capture(sid, captureId, generation, true, controller.signal)
+      if (current !== lifecycle) return
+      generation = state.generation
+      if (state.capture_id !== captureId) throw new Error('摄像头采集已被替换，请重新进入会话')
       active.value = true
       timer = window.setInterval(sendFrame, 1000)
     } catch (e) {
+      if (current !== lifecycle) return
       error.value = (e as Error)?.message || '摄像头不可用'
       active.value = false
+      stream?.getTracks().forEach((track) => track.stop())
+      stream = null
+      if (videoEl.value) videoEl.value.srcObject = null
       throw e
     }
   }
@@ -139,22 +161,25 @@ export function useVision() {
   }
 
   async function stop() {
+    lifecycle += 1
     window.clearInterval(timer)
     timer = 0
     requestController?.abort()
     requestController = null
-    if (active.value && sessionId) {
+    const wasActive = active.value
+    active.value = false
+    stream?.getTracks().forEach((t) => t.stop())
+    stream = null
+    if (videoEl.value) videoEl.value.srcObject = null
+    // 先释放本地设备，服务端确认即使缓慢也不能继续占用摄像头。
+    if ((wasActive || captureId) && sessionId) {
       try {
         generation += 1
         await visionApi.capture(sessionId, captureId, generation, false)
       } catch {
         /* ignore */
       }
-      active.value = false
     }
-    stream?.getTracks().forEach((t) => t.stop())
-    stream = null
-    if (videoEl.value) videoEl.value.srcObject = null
   }
 
   onUnmounted(() => {
