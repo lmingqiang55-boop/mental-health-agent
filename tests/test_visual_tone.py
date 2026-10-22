@@ -30,7 +30,7 @@ from backend.models.states import (
     VisionSegment,
     VisionState,
 )
-from backend.policy.client import DialogueAction, PolicyDecision
+from backend.policy.client import PolicyDecision
 from backend.prompts.dialogue_prompt import build_dialogue_user_prompt
 from backend.vision.aggregation import aggregate_frames
 
@@ -171,16 +171,16 @@ def test_tone_thresholds_are_overridable():
 
 def test_prompt_describes_tone_without_naming_an_emotion():
     request = DialogueAgentRequest(
-        conversation_history=[], decision=DialogueDecision(actions=["情绪"]),
+        conversation_history=[], decision=DialogueDecision(target_item='depressed_mood', question_goal='了解过去两周该项表现及尚缺的信息'),
         current_user_input=DialogueCurrentUserInput(text=SAD_WORDS),
         visual_tone="low",
     )
     prompt = build_dialogue_user_prompt(request)
-    # 必须真说出来（否则模型只把它当上下文背景，一个字都不提——实测过），
-    # 但又不许升级成一个情绪名字。
+    # 新提示词允许模型只调整语气，也可以完全不提外观。
     assert "外观线索" in prompt
-    assert "必须用一句外观描述把它带进回复" in prompt
-    assert "你看起来有点累" in prompt
+    assert "优先用试探语气简短描述一次" in prompt
+    assert "可以暂不提及" in prompt
+    assert "必须用一句外观描述" not in prompt
     assert "不能命名具体情绪" in prompt
     assert "不要提摄像头、检测器或数值" in prompt
 
@@ -197,8 +197,8 @@ def test_dialogue_manager_mentions_the_tone(monkeypatch):
     session.conversation_history.append(Message(role=MessageRole.USER, content="最近挺累"))
 
     class Policy:
-        def predict(self, history):
-            return PolicyDecision(actions=[DialogueAction.SLEEP])
+        def predict(self, history, **kwargs):
+            return PolicyDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息')
 
     class Dialogue:
         request = None
@@ -227,8 +227,8 @@ def test_checkin_wins_over_tone(monkeypatch):
     session.conversation_history.append(Message(role=MessageRole.USER, content="挺好"))
 
     class Policy:
-        def predict(self, history):
-            return PolicyDecision(actions=[DialogueAction.SLEEP])
+        def predict(self, history, **kwargs):
+            return PolicyDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息')
 
     class Dialogue:
         request = None

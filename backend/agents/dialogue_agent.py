@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Dialogue Agent：受控对话生成 + 路由判断。
+"""Dialogue Agent：执行上游目标，生成对话。旧路由接口仅供历史脚本兼容。
 
-本模块只有两条链路，都是「结构化输入 -> Prompt -> LLM -> 结构化输出」::
+当前主流程只调用 generate_reply；route 不再参与调度。以下接口均为「结构化输入 -> Prompt -> LLM -> 结构化输出」::
 
     generate_reply: DialogueAgentRequest -> build_dialogue_user_prompt
                     -> llm_client.generate -> DialogueAgentResponse(reply=...)
@@ -18,7 +18,7 @@
 - 随机选择、重试策略或所谓「Agent 自主规划」。
 
 ``route`` 只回答"这一轮要不要新的全局策略"这一个布尔问题，**它不决定换成哪个
-话题**——那仍然是决策模型 + 话题次数约束器的职责。``generate_reply`` 的 decision
+话题**——当前由每轮决策模型规划目标，已取消话题次数约束。``generate_reply`` 的 decision
 由上游给出，本 Agent 只负责执行，不修改、不补充、不重新决定。
 """
 
@@ -29,7 +29,6 @@ from difflib import SequenceMatcher
 import json
 import re
 
-from backend.core.visual_acknowledgment import mentions_appearance
 from backend.models.dialogue import (
     MAX_REPLY_MESSAGES,
     DialogueAgentRequest,
@@ -282,25 +281,18 @@ class DialogueAgent:
         repeated_question = _near_repeated_question(reply, recent_replies)
         mechanical_opening = _repeated_opening(reply, recent_replies)
         closing_question = request.finish_screening and bool(re.search(r"[？?]", reply))
-        # 这里只管"报出情绪名字"这条通道；语气与核对通道的判词由
-        # backend/core/visual_acknowledgment 统一给出，不再各写一份。
-        missed_visual = (request.visual_observation is not None
-                         and not mentions_appearance(reply))
-        if repeated or repeated_question or mechanical_opening or closing_question or missed_visual:
+        if repeated or repeated_question or mechanical_opening or closing_question:
             requirements = []
             if repeated:
                 requirements.append(
-                    "上一版回复与历史中已说过的话完全相同。请针对用户刚才的新信息换一种具体追问。")
+                    "上一版回复与历史中已说过的话完全相同。请根据本轮目标和学生当前意愿重新组织回复；"
+                    "拒绝时只回应，收尾时不提问。")
             if repeated_question:
                 requirements.append("上一版的主要问题与近期已问的问题高度相似。请使用用户已经给出的答案，补问尚缺的信息。")
             if mechanical_opening:
-                requirements.append("近期已连续使用同一个共情开头。请直接推进，省略套话和对上一句的复述。")
+                requirements.append("近期已连续使用同一个共情开头。请按需直接回应或提问，省略套话和对上一句的复述。")
             if closing_question:
                 requirements.append("这轮已经收尾，请删掉所有问句，不再邀请继续回答，只提示生成结果。")
-            if missed_visual:
-                requirements.append(
-                    "上一版没有自然提及本轮允许的外观线索。请把它融入完整句子，"
-                    "例如用‘你看起来……’承接当前话题，不要在句首机械拼接固定短语。")
             # 重写同样受输出格式约束，否则重写会把多条消息压回一行。
             requirements.append("格式保持不变：1~3 条消息，每条单独一行。")
             retry_prompt = (

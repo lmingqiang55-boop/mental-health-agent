@@ -37,6 +37,30 @@ def test_missing_trained_model_does_not_fall_back(monkeypatch):
         local_policy.require_local_model()
 
 
+def test_model_smoke_check_applies_backend_coverage_guard(monkeypatch):
+    from backend.policy import client as policy_module
+    from backend.policy.schemas import PolicyDecision
+
+    closed = []
+    inputs = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.client = self
+
+        def close(self):
+            closed.append(True)
+
+        def predict(self, history, **kwargs):
+            inputs.append(history[-1].content)
+            return PolicyDecision(target_item=None, question_goal="结束访谈")
+
+    monkeypatch.setattr(policy_module, "HttpPolicyClient", FakeClient)
+    local_policy.verify_model_inference()
+    assert inputs == ["我13岁了，初一", "我最近睡不好。"]
+    assert closed == [True]
+
+
 def test_import_uses_repository_template_not_package_template(tmp_path, monkeypatch):
     model = b"small test model"
     package = tmp_path / "model.zip"

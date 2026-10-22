@@ -12,6 +12,12 @@ if not defined PY if exist "%ROOT%.conda-env\python.exe" set "PY=%ROOT%.conda-en
 if not defined PY if exist "%ROOT%.venv\Scripts\python.exe" set "PY=%ROOT%.venv\Scripts\python.exe"
 if not defined PY if exist "%USERPROFILE%\anaconda3\envs\mental-health-agent\python.exe" set "PY=%USERPROFILE%\anaconda3\envs\mental-health-agent\python.exe"
 if not defined PY if exist "%USERPROFILE%\miniconda3\envs\mental-health-agent\python.exe" set "PY=%USERPROFILE%\miniconda3\envs\mental-health-agent\python.exe"
+REM Conda may be installed on another drive; use its registered environment paths.
+if not defined PY if exist "%USERPROFILE%\.conda\environments.txt" (
+  for /f "usebackq delims=" %%E in ("%USERPROFILE%\.conda\environments.txt") do (
+    if not defined PY if /i "%%~nxE"=="mental-health-agent" if exist "%%E\python.exe" set "PY=%%E\python.exe"
+  )
+)
 
 set "OLLAMA=%ROOT%..\tools\Ollama\ollama.exe"
 if not exist "%OLLAMA%" set "OLLAMA=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"

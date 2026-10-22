@@ -22,7 +22,10 @@ from backend.models.requests import ChatRequest
 from backend.models.states import (
     Message, SessionState, VisionFrameObservation, VisionSegment, VisionState,
 )
-from backend.policy.client import DialogueAction, PolicyDecision
+from backend.policy.client import PolicyDecision
+from conftest import create_consented_session
+from fastapi.testclient import TestClient
+from backend.main import app
 from backend.safety.schemas import SafetyLevel
 from backend.vision.aggregation import aggregate_frames
 
@@ -90,7 +93,7 @@ def test_four_supported_emotions_and_turn_cooldown(label):
 ])
 def test_prompt_asks_agent_to_integrate_each_cue_naturally(label, zh):
     request = DialogueAgentRequest(
-        conversation_history=[], decision=DialogueDecision(actions=["情绪"]),
+        conversation_history=[], decision=DialogueDecision(target_item='depressed_mood', question_goal='了解过去两周该项表现及尚缺的信息'),
         current_user_input=DialogueCurrentUserInput(text="最近有点累"),
         visual_observation=label,
     )
@@ -108,8 +111,8 @@ def test_dialogue_manager_says_the_qualified_observation(monkeypatch):
     session.conversation_history.append(Message(role=MessageRole.USER, content="睡不着"))
 
     class Policy:
-        def predict(self, history):
-            return PolicyDecision(actions=[DialogueAction.SLEEP])
+        def predict(self, history, **kwargs):
+            return PolicyDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息')
 
     class Dialogue:
         request = None
@@ -134,9 +137,9 @@ def test_safety_branch_never_mentions_appearance(policy_stub, dialogue_stub, saf
     先行，安全分支根本不会调用 ``DialogueManager`` 与视觉通道。这条保护因此
     必须锁在 API 层，否则「高危轮次不谈外观」就没有守卫了。
     """
-    policy_stub(("情绪",))
+    policy_stub('depressed_mood')
     safety_stub.force(SafetyLevel.HIGH, message="我很担心你，请先联系身边可信任的人。")
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(TestClient(app))
     result = chat.chat(ChatRequest(
         session_id=session_id, text="我想自杀",
         vision_snapshot=VisionState(emotion="sad", valence=-0.8, face_detected=True)))
@@ -152,8 +155,8 @@ def test_safety_branch_never_mentions_appearance(policy_stub, dialogue_stub, saf
 def test_chat_route_passes_frozen_turn_to_visual_frequency_gate(
         monkeypatch, policy_stub, dialogue_stub):
     monkeypatch.setattr("backend.core.dialogue_manager.asyncio.run", _resolve_synchronous_stub)
-    policy_stub(("情绪",))
-    session_id = session_manager.create_session().session_id
+    policy_stub('depressed_mood')
+    session_id = create_consented_session(TestClient(app))
     for text in ("第一句", "第二句"):
         chat.chat(ChatRequest(session_id=session_id, text=text))
 
@@ -175,25 +178,24 @@ def test_chat_route_passes_frozen_turn_to_visual_frequency_gate(
     assert dialogue_stub.requests[-1].current_user_input.visual is not None
 
 
-def test_agent_rewrites_missing_visual_observation_without_fixed_prefix():
+def test_agent_can_omit_visual_observation_without_rewriting():
     class Client:
         prompts = []
 
         async def generate(self, *, system_prompt, user_prompt):
             self.prompts.append(user_prompt)
-            return ("最近睡得怎么样？" if len(self.prompts) == 1 else
-                    "你看起来有点紧张，最近睡眠怎么样？")
+            return "最近睡得怎么样？"
 
     client = Client()
     agent = DialogueAgent(client)
     request = DialogueAgentRequest(
-        conversation_history=[], decision=DialogueDecision(actions=["睡眠"]),
+        conversation_history=[], decision=DialogueDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息'),
         current_user_input=DialogueCurrentUserInput(text="睡不着"),
         visual_observation="fearful",
     )
     result = _resolve_synchronous_stub(agent.generate_reply(request))
-    assert result.reply == "你看起来有点紧张，最近睡眠怎么样？"
-    assert len(client.prompts) == 2
+    assert result.reply == "最近睡得怎么样？"
+    assert len(client.prompts) == 1
 
 
 # ---------------------------------------------------------------------------

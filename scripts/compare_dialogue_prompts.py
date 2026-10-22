@@ -22,7 +22,7 @@ import re
 import subprocess
 import sys
 import time
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -35,12 +35,15 @@ from backend.prompts import dialogue_prompt  # noqa: E402
 
 
 def case(name, topic, text, *, history=(), goal, **extra):
+    mapping = {"情绪": "depressed_mood", "睡眠": "sleep_disturbance",
+               "精神状态": "concentration_indecision", "社会功能": "social_daily_impairment"}
+    target = mapping.get(topic)
     return {
         "name": name, "review_goal": goal,
         "request": DialogueAgentRequest.model_validate({
             "conversation_history": [
                 {"role": role, "content": content} for role, content in history],
-            "decision": {"actions": [topic], "topic": topic},
+            "decision": {"target_item": target, "question_goal": "结束访谈" if target is None else goal},
             "current_user_input": {"text": text}, **extra,
         }),
     }
@@ -48,7 +51,7 @@ def case(name, topic, text, *, history=(), goal, **extra):
 
 CASES = [
     case("情绪开场", "情绪", "最近心里总是堵得慌。",
-         goal="回应具体感受，避免只有频率问句或泛泛安慰。"),
+         goal="自然了解具体表现，允许直接提问，不用复述加评价作为固定开头。"),
     case("短句反问", "睡眠", "这算严重吗？", history=[
         ("user", "最近夜里老醒，已经十来天了。"),
         ("assistant", "白天上课会受影响吗？")],
@@ -65,7 +68,7 @@ CASES = [
     case("简短求助", "精神状态", "现在怎么办？", history=[
         ("user", "作业堆了好多，打开本子就不知道先写什么。"),
         ("assistant", "最难的是开始动笔，还是写着写着就停了？")],
-         goal="先回应具体求助，至多给一个可选择的小建议，避免只有新问题。"),
+         goal="简短回应求助，继续了解情况；具体调节建议由治愈智能体负责，不在测评中布置行动任务。"),
     case("尊重拒答", "社会功能", "这部分我不想聊了。",
          goal="接纳拒绝，不变着问法继续追问被拒绝的内容。"),
     case("不确定回答", "睡眠", "说不准。", history=[
@@ -81,7 +84,7 @@ CASES = [
         ("user", "这一个月经常半夜醒，白天上课也容易走神。"),
         ("assistant", "和朋友相处呢？"),
         ("user", "还好，朋友会约我一起吃饭。")], finish_screening=True,
-         goal="简短承接真实信息，提示生成结果，没有新问题或已确诊表述。"),
+         goal="简短结束并提示生成结果，无需复述回答，没有新问题、调节建议或已确诊表述。"),
 ]
 
 
@@ -128,11 +131,17 @@ async def compare(args, baseline, cases):
                 "review_goal": item["review_goal"],
                 "request": item["request"].model_dump(mode="json"),
             }
+            request = item["request"]
+            if variant == "baseline":
+                # 历史提示词使用旧接口；只在比较工具中适配，生产接口保持新契约。
+                label = request.decision.target_label
+                request = request.model_copy(update={"decision": SimpleNamespace(
+                    actions=[label], topic=label, reason=None, extra={})})
             try:
                 async with asyncio.timeout(30):
                     reply = await client.generate(
                         module.DIALOGUE_AGENT_SYSTEM_PROMPT,
-                        module.build_dialogue_user_prompt(item["request"]),
+                        module.build_dialogue_user_prompt(request),
                     )
                 messages = parse_reply_messages(reply)
                 result.update(reply=reply, message_count=len(messages),
@@ -171,7 +180,7 @@ def main():
     cases = [item for item in CASES if not args.case or item["name"] in args.case]
     for item in cases:
         for module in (baseline, dialogue_prompt):
-            assert module.build_dialogue_user_prompt(item["request"])
+            assert module.build_dialogue_user_prompt(request)
     if not args.live:
         print(f"Validated {len(cases)} synthetic cases and both prompt builders; no API calls.")
         return 0

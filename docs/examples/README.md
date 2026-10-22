@@ -2,6 +2,12 @@
 
 这里保留接口示例和历史验收原始证据。文件名中的日期表示对应批次，不能用来声明当前代码已重新验收。JSON 路径及内容保持原样，便于现有文档和工具继续使用。
 
+## 竞赛展示实录
+
+- [初二学生旧版对话实录（2026-10-20）](competition_showcase_middle_school_20261020.md)：实际接口连续生成11轮，保留原文作对照；存在复述多、建议多和提前收尾问题，不再作为推荐展示稿。
+- [测评问诊职责与表达调整](../archive/dialogue/dialogue_interview_scope_20261020.md)：改后6轮真实 graph 文字片段及范围说明。
+- [逐轮学生台词](competition_showcase_middle_school_20261020_student_lines.txt)与[结构化实录](competition_showcase_middle_school_20261020.json)。
+
 ## 文件清单
 
 | 文件 | 体积（十进制 MB） | 用途 |

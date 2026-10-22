@@ -1,21 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Phase 2.5：用**真实模型**验收 Dialogue 自主追问（不注入任何模型桩）。
+"""用真实模型记录每轮访谈目标、回复、安全分支及调用耗时。
 
-与 ``scripts/compare_decision_budget.py`` 的区别：那个脚本把两个模型都换成桩，
-只证明调度逻辑；本脚本**真的调用** DeepSeek（Safety / Router / Dialogue）
-与本地 Qwen3-8B（Decision），回答的是"真实模型下这套调度表现如何"。
-
-逐轮记录：用户输入、路由结论与理由、是否真的调用了决策模型、当前话题、
-话题计数、最终回复、以及 Safety / Router / Decision / Dialogue 四类调用的
-次数与耗时。**四类都要统计**——"Decision 调用减少"不等于"总模型调用减少"。
-
-用法::
-
-    python scripts/phase25_real_dialogue.py                    # 跑全部场景
-    python scripts/phase25_real_dialogue.py --scenario A B     # 只跑指定场景
-    python scripts/phase25_real_dialogue.py --out docs/x.md
-
-所有用户输入均为**模拟学生输入**，不含任何真实学生数据。
+普通访谈每轮调用本地决策模型，再由 DeepSeek 生成1~3个气泡。
+保留旧报告的 Router 统计列用于对照，当前调用次数应为0。
+所有学生输入均为虚构场景；运行 python scripts/phase25_real_dialogue.py --help 查看选项。
 """
 
 from __future__ import annotations
@@ -38,7 +26,7 @@ load_dotenv(ROOT / ".env", override=False)
 from fastapi.testclient import TestClient  # noqa: E402
 
 from _probe import (  # noqa: E402
-    CountingDialogueAgent, CountingPolicy, CountingSafety, install_route_recorder,
+    CountingDialogueAgent, CountingPolicy, CountingSafety, install_route_recorder, create_demo_session,
     level_of,
 )
 from backend.api import chat  # noqa: E402
@@ -56,7 +44,7 @@ client = TestClient(app)
 SCENARIOS: dict[str, dict] = {
     "A": {
         "title": "睡眠话题逐步展开，验证 Dialogue 是否合理追问",
-        "expect": "前几轮应由 Dialogue 自主追问，不每轮调用决策模型",
+        "expect": "普通访谈每轮调用决策模型，由它规划下一轮目标",
         "texts": [
             "最近总是睡不好，躺下要很久才睡得着",
             "大概一两点才能睡着吧，明明十一点就上床了",
@@ -71,7 +59,7 @@ SCENARIOS: dict[str, dict] = {
         "expect": "用户表示不想聊之后，应出现新的决策调用并换到别的话题",
         "texts": [
             "晚上睡不好，白天没精神",
-            "室友打呼噜，我戴耳塞也没什么用",
+            "睡觉时外面很吵，我戴耳塞也没什么用",
             "这个不太想聊了，能聊点别的吗",
             "其实我最近跟同学关系有点紧张",
             "感觉他们在背后说我，但我不确定",
@@ -80,7 +68,7 @@ SCENARIOS: dict[str, dict] = {
     },
     "C": {
         "title": "较长筛查过程，验证话题计数、覆盖率与收尾",
-        "expect": "在 MAX_TURNS 以内靠覆盖率收尾，话题次数不超上限",
+        "expect": "话题覆盖不提前收尾，最后由学生明确请求结束",
         "texts": [
             "最近心情一直不太好",
             "说不上来为什么，就是提不起劲",
@@ -98,6 +86,7 @@ SCENARIOS: dict[str, dict] = {
             "我也不知道该怎么办",
             "你觉得我这样正常吗",
             "我该做点什么吗",
+            "结束对话",
         ],
     },
     "D": {
@@ -118,8 +107,8 @@ SCENARIOS: dict[str, dict] = {
         ],
     },
     "C2": {
-        "title": "安全澄清后恢复普通评估，并靠覆盖率收尾",
-        "expect": "澄清后用户明确否认风险 → 恢复普通图 → 覆盖 8/8 → topic_coverage 收尾",
+        "title": "安全澄清后恢复普通评估，并由学生请求结束",
+        "expect": "澄清后用户明确否认风险 → 恢复普通图 → 用户请求结束后收尾",
         "texts": [
             "最近心情一直不太好",
             "说不上来为什么，就是提不起劲",
@@ -135,6 +124,7 @@ SCENARIOS: dict[str, dict] = {
             "家里人不知道这些，我也不想说，怕他们担心",
             "有时候莫名其妙就想哭，但又哭不出来",
             "没有，我没有那种想法，就是最近太累了",
+            "结束对话",
         ],
     },
 }
@@ -145,7 +135,7 @@ SCENARIOS: dict[str, dict] = {
 # ---------------------------------------------------------------------------
 
 def new_session() -> str:
-    return client.post("/api/session").json()["session_id"]
+    return create_demo_session(client)
 
 
 def run_scenario(key: str, dialogue: CountingDialogueAgent, policy: CountingPolicy,
@@ -206,7 +196,7 @@ def run_scenario(key: str, dialogue: CountingDialogueAgent, policy: CountingPoli
         else:
             record["node_forced_reason"] = None
             record["node_need_decision"] = None
-            record["node_route_reason"] = "（未进入路由：收尾轮或安全分支）"
+            record["node_route_reason"] = "（未执行决策：收尾轮或安全分支）"
 
         if dialogue.routes and route_calls:
             record["router"] = dialogue.routes[-1]
@@ -260,7 +250,7 @@ def render(result: dict) -> str:
     lines: list[str] = []
     lines.append(f"### 场景 {result['key']}（{result.get('engine', 'graph')}）：{result['title']}\n")
     lines.append(f"**预期**：{result['expect']}\n")
-    lines.append("| 轮 | 用户输入 | Router need_decision | reason_code | 后端强制 | "
+    lines.append("| 轮 | 用户输入 | Decision 已执行 | reason_code | 后端强制 | "
                  "是否调Decision | pending_topic | topic_turns | 耗时 |")
     lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for turn in result["turns"]:
@@ -297,7 +287,7 @@ def render(result: dict) -> str:
     progress = result["final_progress"]
     lines.append(f"**收尾**：{result['turn_count']} 轮，stage={result['final_stage']}，"
                  f"话题计数={json.dumps(progress['topic_turns'], ensure_ascii=False)}，"
-                 f"覆盖话题数={len(progress['topic_turns'])}/8，"
+                 f"已回答目标数={len(progress['topic_turns'])}/11，"
                  f"end_reason={progress['end_reason']}")
     lines.append("")
     return "\n".join(lines)
@@ -334,60 +324,27 @@ def summarize(results: list[dict]) -> str:
         f"{grand['decision']} | {grand['reply']} | **{total_calls}** | "
         f"{grand['sec']:.1f}s | — |")
     lines.append("")
-    lines.append("读法提醒：**Decision 调用次数少不等于模型总调用次数少。**"
-                 "按需模式下每轮仍有 Safety + Dialogue，"
-                 "只是把「决策」省下来了；Decision 是本地 Qwen3-8B，"
-                 "其余三类是 DeepSeek。")
+    lines.append("普通访谈每轮执行 Decision；Router 已退出主流程，调用次数应为0。安全分支和硬性收尾不执行普通决策。")
     lines.append("")
     return "\n".join(lines)
 
 
 def analyze_router(results: list[dict]) -> str:
-    lines = ["## 路由协议一致性检查\n"]
+    lines = ["## 每轮决策调度检查\n"]
     conflicts: list[str] = []
-    stats = {"route_called": 0, "need_true": 0, "need_false": 0, "forced": 0}
-    codes: dict[str, int] = {}
     for result in results:
         for turn in result["turns"]:
             if turn.get("status") != 200:
                 continue
             if turn["route_calls"]:
-                stats["route_called"] += 1
-                router = turn.get("router") or {}
-                if router.get("need_decision"):
-                    stats["need_true"] += 1
-                else:
-                    stats["need_false"] += 1
-                code = router.get("reason_code") or "（空）"
-                codes[code] = codes.get(code, 0) + 1
-                # 语义冲突：要决策却说"继续当前话题"
-                if router.get("need_decision") and code in ("continue_topic", "clarify"):
-                    conflicts.append(
-                        f"场景 {result['key']} 第 {turn['turn']} 轮："
-                        f"need_decision=True 但 reason_code={code}"
-                        f"（理由：{router.get('reason')}）")
-                if not router.get("need_decision") and code in (
-                        "topic_exhausted", "user_wants_change", "off_topic"):
-                    conflicts.append(
-                        f"场景 {result['key']} 第 {turn['turn']} 轮："
-                        f"need_decision=False 但 reason_code={code}"
-                        f"（理由：{router.get('reason')}）")
-            if turn.get("node_forced_reason"):
-                stats["forced"] += 1
-    lines.append(f"- 进入路由判断的轮次：{stats['route_called']}")
-    lines.append(f"- 其中 Dialogue 说“需要新决策”：{stats['need_true']}，"
-                 f"说“不需要”：{stats['need_false']}")
-    lines.append(f"- 被后端强制（未调用路由）：{stats['forced']}")
-    lines.append(f"- reason_code 分布：{json.dumps(codes, ensure_ascii=False)}")
-    lines.append("")
-    if conflicts:
-        lines.append("**发现语义不一致：**\n")
-        for item in conflicts:
-            lines.append(f"- {item}")
-    else:
-        lines.append("**未发现 need_decision 与 reason_code 的语义冲突。**")
-    lines.append("")
-    return "\n".join(lines)
+                conflicts.append(f"场景 {result['key']} 第 {turn['turn']} 轮仍调用旧路由")
+            if (not turn.get("assessment_ready") and turn.get("safety_level") == "normal"
+                    and turn["decision_calls"] != 1):
+                conflicts.append(f"场景 {result['key']} 第 {turn['turn']} 轮未执行一次决策")
+    lines.extend(f"- {item}" for item in conflicts)
+    if not conflicts:
+        lines.append("未发现普通访谈跳过决策或调用旧路由的情况。")
+    return "\n".join(lines) + "\n"
 
 
 def main() -> int:
@@ -419,7 +376,7 @@ def main() -> int:
         results.append(result)
         closed = result["final_progress"]["end_reason"]
         print(f"    完成 {result['turn_count']} 轮，end_reason={closed}，"
-              f"覆盖 {len(result['final_progress']['topic_turns'])}/8 话题，"
+              f"已回答目标 {len(result['final_progress']['topic_turns'])}/11 项目标，"
               f"stage={result['final_stage']}")
         for turn in result["turns"]:
             if turn.get("status") != 200:

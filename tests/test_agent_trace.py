@@ -12,6 +12,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from backend.api import chat
 from backend.core.agent_trace import TRACE_ENV
@@ -30,7 +31,12 @@ client = TestClient(app)
 
 #: 与 ``test_dialogue_autonomy`` 同一套策略桩：「共情安慰」不是话题，
 #: 「睡眠」才是，这样第 1 轮强制决策后才会有可复用的当前话题。
-SLEEP = ("共情安慰", "睡眠")
+SLEEP = "sleep_disturbance"
+
+
+@pytest.fixture(autouse=True)
+def offline_policy(policy_stub):
+    policy_stub()
 
 
 def _chat(session_id: str, text: str, **extra):
@@ -44,7 +50,7 @@ def _turn(session_id: str, text: str) -> str:
 
 def _preset_vision_session(*, emotion="sad", confidence=0.92, valence=None):
     """与线上结构一致的预设视觉帧（测试输入，不是真实摄像头）。"""
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
     frames = [VisionState(face_detected=True, emotion=emotion,
                           emotion_confidence=confidence, valence=valence)
               for _ in range(3)]
@@ -73,7 +79,7 @@ def _preset_vision_session(*, emotion="sad", confidence=0.92, valence=None):
 
 def test_trace_is_off_unless_switched_on(monkeypatch):
     monkeypatch.delenv(TRACE_ENV, raising=False)
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
 
     body = client.post("/api/chat", json={
         "session_id": session_id, "text": "最近有点累"}).json()
@@ -85,7 +91,7 @@ def test_trace_is_off_unless_switched_on(monkeypatch):
 
 def test_trace_can_be_switched_on(monkeypatch):
     monkeypatch.setenv(TRACE_ENV, "on")
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
 
     body = client.post("/api/chat", json={
         "session_id": session_id, "text": "最近有点累"}).json()
@@ -99,77 +105,43 @@ def test_trace_can_be_switched_on(monkeypatch):
 # 2. 场景 A：Dialogue 自主追问 -> Decision 复用
 # ---------------------------------------------------------------------------
 
-def test_scenario_a_reuse_shows_decision_skipped(
+def test_each_turn_trace_reports_a_new_decision_without_router(
         monkeypatch, policy_stub, dialogue_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    requests: list = []
+    requests = []
     policy_stub(SLEEP, requests=requests)
-    session_id = session_manager.create_session().session_id
-
-    # 第 1 轮后端强制决策建起策略；第 2 轮策略仍有效，Dialogue 自主追问。
-    _chat(session_id, "最近睡不好")
-    assert len(requests) == 1
-    dialogue_stub.set_route(False, "continue_topic")
-
-    trace = _chat(session_id, "半夜总是醒").trace
-
-    assert len(requests) == 1, "复用策略那一轮不应再调用决策模型"
-    assert trace.engine == ENGINE_GRAPH
-    assert trace.dialogue.state == "ran"
-    assert trace.dialogue.routed is True
-    assert trace.dialogue.need_decision is False
-    assert trace.dialogue.reason_code == "continue_topic"
-    assert trace.dialogue.reason_label == "当前话题还值得追问"
-    assert trace.dialogue.forced_reason is None
-    assert trace.decision.state == "skipped"
-    assert trace.decision.called is False
-    assert trace.decision.label == "复用当前策略"
-    assert trace.vision.state == "ran"
-
-
-# ---------------------------------------------------------------------------
-# 3. 场景 B：需要切换话题 -> Decision 真实调用
-# ---------------------------------------------------------------------------
-
-def test_scenario_b_new_strategy_shows_decision_called(
-        monkeypatch, policy_stub, dialogue_stub):
-    monkeypatch.setenv(TRACE_ENV, "on")
-    monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    requests: list = []
-    policy_stub(SLEEP, requests=requests)
-    session_id = session_manager.create_session().session_id
-    _chat(session_id, "最近睡不好")
-    assert len(requests) == 1
-    dialogue_stub.set_route(True, "topic_exhausted")
-
-    trace = _chat(session_id, "半夜总是醒").trace
-
-    assert len(requests) == 2, "请求新策略那一轮必须真的调用决策模型"
-    assert trace.dialogue.routed is True
-    assert trace.dialogue.need_decision is True
-    assert trace.dialogue.reason_code == "topic_exhausted"
-    assert trace.dialogue.reason_label == "当前话题问得差不多了"
+    sid = create_consented_session(client)
+    _chat(sid, "最近睡不好")
+    trace = _chat(sid, "半夜总是醒").trace
+    assert len(requests) == 2
+    assert dialogue_stub.route_requests == []
+    assert trace.dialogue.state == "skipped"
+    assert trace.dialogue.routed is False
+    assert trace.dialogue.reason_code == "per_turn_decision"
+    assert trace.dialogue.reason_label == "每轮由决策智能体规划目标"
     assert trace.decision.state == "ran"
     assert trace.decision.called is True
-    assert trace.decision.label == "本轮已调用决策模型"
-    assert trace.decision.strategy
+    assert trace.decision.strategy == "睡眠异常"
 
 
-def test_backend_forced_decision_is_shown_as_router_short_circuit(
-        monkeypatch, dialogue_stub):
-    """后端强制换策略时会短路掉路由模型调用，面板要说清"没问 Dialogue"。"""
+@pytest.mark.parametrize("kind,called", [("model_finished", True), ("user_requested", False)])
+def test_closing_trace_reports_whether_decision_was_called(
+        monkeypatch, policy_stub, kind, called):
     monkeypatch.setenv(TRACE_ENV, "on")
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    dialogue_stub.need_decision = True
-    session_id = session_manager.create_session().session_id
-
-    trace = _chat(session_id, "第一句").trace
-
-    assert trace.dialogue.routed is False
-    assert trace.dialogue.forced_reason == "no_active_decision"
-    assert trace.dialogue.forced_label == "还没有有效策略"
-    assert trace.decision.called is True
+    policy_stub(None, question_goal="结束访谈")
+    sid = create_consented_session(client)
+    if kind == "model_finished":
+        from backend.core.session_manager import session_manager
+        from evaluation_agent.schemas import ITEM_KEYS
+        session_manager.modify_session(sid, lambda state: state.screening_progress.topic_turns.update(
+            {item: 1 for item in ITEM_KEYS}))
+    response = _chat(sid, "结束对话" if kind == "user_requested" else "最近还好")
+    assert response.completion_reason == kind
+    assert response.trace.decision.called is called
+    assert response.trace.decision.state == ("ran" if called else "skipped")
+    assert "复用" not in response.trace.decision.label
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +152,7 @@ def test_safety_is_labelled_as_a_pre_graph_check(monkeypatch, safety_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
     safety_stub.force(SafetyLevel.NORMAL)
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
 
     trace = _chat(session_id, "最近有点累").trace
 
@@ -195,7 +167,7 @@ def test_safety_branch_marks_downstream_as_short_circuit(monkeypatch, safety_stu
     monkeypatch.setenv(TRACE_ENV, "on")
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
     safety_stub.force(SafetyLevel.HIGH)
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
 
     response = _chat(session_id, "我不想活了")
     trace = response.trace
@@ -216,7 +188,7 @@ def test_safety_branch_marks_downstream_as_short_circuit(monkeypatch, safety_stu
 def test_safety_branch_without_hotline_is_review(monkeypatch, safety_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
     safety_stub.force(SafetyLevel.UNCERTAIN)
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
 
     trace = _chat(session_id, "最近还行吧").trace
 
@@ -234,7 +206,7 @@ def test_vision_trace_separates_valid_cue_from_being_spoken(
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
     monkeypatch.setattr("backend.core.dialogue_manager.asyncio.run",
                         _resolve_synchronous_stub)
-    policy_stub(("情绪",))
+    policy_stub('depressed_mood')
     session_id, snapshot = _preset_vision_session()
     for text in ("第一句", "第二句"):
         _chat(session_id, text)
@@ -263,7 +235,7 @@ def test_vision_trace_marks_spoken_when_the_reply_mentions_appearance(
         return DialogueAgentResponse(reply="你看起来有点累，最近睡得怎么样？")
 
     dialogue_stub.generate_reply = mention
-    policy_stub(("情绪",))
+    policy_stub('depressed_mood')
     session_id, snapshot = _preset_vision_session()
     for text in ("第一句", "第二句"):
         _chat(session_id, text)
@@ -279,8 +251,8 @@ def test_vision_trace_marks_spoken_when_the_reply_mentions_appearance(
 def test_vision_trace_without_a_cue_is_invalid(monkeypatch, policy_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    policy_stub(("情绪",))
-    session_id = session_manager.create_session().session_id
+    policy_stub('depressed_mood')
+    session_id = create_consented_session(client)
 
     trace = _chat(session_id, "第一句").trace
 
@@ -297,8 +269,8 @@ def test_vision_trace_without_a_cue_is_invalid(monkeypatch, policy_stub):
 def test_legacy_engine_reports_scheduling_unavailable(monkeypatch, policy_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_LEGACY)
-    policy_stub(("情绪",))
-    session_id = session_manager.create_session().session_id
+    policy_stub('depressed_mood')
+    session_id = create_consented_session(client)
 
     trace = _chat(session_id, "第一句").trace
 
@@ -318,14 +290,14 @@ def test_legacy_engine_reports_scheduling_unavailable(monkeypatch, policy_stub):
 
 def test_trace_does_not_change_the_reply(monkeypatch, policy_stub, dialogue_stub):
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    policy_stub(("情绪",))
+    policy_stub('depressed_mood')
 
     monkeypatch.delenv(TRACE_ENV, raising=False)
-    off_id = session_manager.create_session().session_id
+    off_id = create_consented_session(client)
     without = _chat(off_id, "最近有点累")
 
     monkeypatch.setenv(TRACE_ENV, "on")
-    on_id = session_manager.create_session().session_id
+    on_id = create_consented_session(client)
     with_trace = _chat(on_id, "最近有点累")
 
     assert with_trace.reply == without.reply
@@ -339,7 +311,7 @@ def test_trace_never_carries_reasoning_text_or_raw_vision(
         monkeypatch, safety_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
     safety_stub.force(SafetyLevel.HIGH, message="我们先确保你的安全。")
-    session_id = session_manager.create_session().session_id
+    session_id = create_consented_session(client)
 
     body = client.post("/api/chat", json={
         "session_id": session_id, "text": "我不想活了"}).json()
@@ -361,7 +333,7 @@ def test_trace_never_carries_reasoning_text_or_raw_vision(
 
 def test_idempotent_replay_returns_the_same_trace(monkeypatch, policy_stub):
     monkeypatch.setenv(TRACE_ENV, "on")
-    payload = {"session_id": session_manager.create_session().session_id,
+    payload = {"session_id": create_consented_session(client),
                "text": "最近有点累", "utterance_id": "same-turn"}
     first = client.post("/api/chat", json=payload)
     replay = client.post("/api/chat", json=payload)

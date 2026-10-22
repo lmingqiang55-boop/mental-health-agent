@@ -13,7 +13,29 @@ from backend.core.evaluation_engine import evaluation_engine
 from backend.models.dialogue import DialogueAgentResponse
 from backend.policy.client import HttpPolicyClient
 
-DEFAULT_ACTIONS = ("共情安慰", "情绪")
+DEFAULT_TARGET = "depressed_mood"
+DEFAULT_GOAL = "了解过去两周情绪变化的频率"
+
+
+@pytest.fixture
+def isolated_result_store(monkeypatch):
+    import sqlite3
+    from contextlib import contextmanager
+    from backend.core.memory_store import MemoryStore
+
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
+
+    class InMemoryStore(MemoryStore):
+        @contextmanager
+        def _connection(self):
+            with connection:
+                yield connection
+
+    store = InMemoryStore(":memory:")
+    monkeypatch.setattr("backend.api.assessment.memory_store", store)
+    monkeypatch.setattr("backend.api.history.memory_store", store)
+    yield store
+    connection.close()
 
 
 def create_consented_session(client) -> str:
@@ -65,7 +87,7 @@ def dialogue_stub(monkeypatch):
 
         async def generate_reply(self, request):
             self.requests.append(request)
-            topic = request.decision.topic or "现在的感受"
+            topic = request.decision.target_label
             return DialogueAgentResponse(
                 reply=f"听起来你说的是「{request.current_user_input.text}」。我们继续聊聊{topic}。"
             )
@@ -131,14 +153,15 @@ def safety_stub(monkeypatch):
     return stub
 
 
-def build_policy_client(actions=DEFAULT_ACTIONS, *, status_code: int = 200,
+def build_policy_client(target_item=DEFAULT_TARGET, *, question_goal=DEFAULT_GOAL,
+                        status_code: int = 200,
                         requests: list[httpx.Request] | None = None) -> HttpPolicyClient:
     def handle(request: httpx.Request) -> httpx.Response:
         if requests is not None:
             requests.append(request)
         return httpx.Response(status_code, json={
             "choices": [{"message": {"content": json.dumps(
-                {"actions": list(actions)}, ensure_ascii=False)}}],
+                {"target_item": target_item, "question_goal": question_goal}, ensure_ascii=False)}}],
         })
 
     return HttpPolicyClient(
@@ -150,8 +173,8 @@ def policy_stub(monkeypatch):
     """把 /api/chat 使用的决策模型替换成离线模拟响应。"""
     from backend.api import chat
 
-    def install(actions=DEFAULT_ACTIONS, **kwargs) -> HttpPolicyClient:
-        client = build_policy_client(actions, **kwargs)
+    def install(target_item=DEFAULT_TARGET, **kwargs) -> HttpPolicyClient:
+        client = build_policy_client(target_item, **kwargs)
         monkeypatch.setattr(chat.dialogue_manager, "_policy", client)
         return client
 

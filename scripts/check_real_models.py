@@ -16,7 +16,8 @@ from dotenv import load_dotenv  # noqa: E402
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
-from backend.core.screening_flow import MAX_TURNS, MIN_TURNS, TOPICS  # noqa: E402
+from backend.core.screening_flow import MAX_TURNS  # noqa: E402
+from evaluation_agent.schemas import ITEM_KEYS  # noqa: E402
 from backend.llm.config import DeepSeekConfigError, load_deepseek_config  # noqa: E402
 from backend.llm.deepseek_client import DeepSeekClient  # noqa: E402
 
@@ -87,8 +88,8 @@ def check_deepseek() -> bool:
 
 
 def main() -> int:
-    print(f"筛查参数：MIN_TURNS={MIN_TURNS} MAX_TURNS={MAX_TURNS} "
-          f"话题数={len(TOPICS)}\n")
+    print(f"筛查参数：MAX_TURNS={MAX_TURNS} "
+          f"评估小项数={len(ITEM_KEYS)}\n")
     check_env()
     ollama_ok = check_ollama()
     deepseek_ok = check_deepseek()

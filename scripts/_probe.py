@@ -25,7 +25,7 @@ from backend.llm.deepseek_client import DeepSeekClient  # noqa: E402
 
 __all__ = [
     "CallLog", "CountingSafety", "CountingPolicy", "CountingDialogueAgent",
-    "install_route_recorder", "level_of",
+    "install_route_recorder", "create_demo_session", "level_of",
 ]
 
 
@@ -73,10 +73,10 @@ class CountingPolicy:
         self._inner = inner
         self.log = CallLog()
 
-    def predict(self, history):
+    def predict(self, history, **kwargs):
         started = time.perf_counter()
         try:
-            return self._inner.predict(history)
+            return self._inner.predict(history, **kwargs)
         finally:
             self.log.elapsed.append(time.perf_counter() - started)
 
@@ -118,20 +118,34 @@ class CountingDialogueAgent:
 
 
 def install_route_recorder() -> list[dict]:
-    """记录 ``dialogue_route`` 节点实际返回的状态（含后端强制原因）。
+    """沿用旧脚本函数名，现记录每轮 ``decision``，不再调用旧路由。
 
     必须在图第一次编译**之前**安装：``backend/graph/build.py`` 在编译时
     就把节点方法绑定进图了。
     """
     from backend.graph.nodes import TurnNodes
 
-    original = TurnNodes.dialogue_route
+    original = TurnNodes.decision
     records: list[dict] = []
 
     def recording(self, state):
         result = original(self, state)
-        records.append(dict(result))
+        records.append({**result, "need_decision": True})
         return result
 
-    TurnNodes.dialogue_route = recording
+    TurnNodes.decision = recording
     return records
+
+
+def create_demo_session(client) -> str:
+    """为虚构演示创建会话，并走正式的同意接口。"""
+    from backend.api.consent_guard import ALLOWED_SCOPES
+
+    response = client.post("/api/session")
+    response.raise_for_status()
+    session_id = response.json()["session_id"]
+    response = client.put(f"/api/session/{session_id}/consent", json={
+        "session_id": session_id, "granted": True, "scope": sorted(ALLOWED_SCOPES),
+    })
+    response.raise_for_status()
+    return session_id

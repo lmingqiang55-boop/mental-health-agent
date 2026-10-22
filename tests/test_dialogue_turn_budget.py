@@ -1,101 +1,99 @@
-"""第 25 轮提醒、第 35 轮收尾在两条执行路径上的边界回归。"""
-
-import json
+"""35轮硬上限、主动结束和历史安全补判；不按回答次数提前结束。"""
 
 import pytest
 from fastapi.testclient import TestClient
 from conftest import create_consented_session
 
-from backend.core.screening_flow import (
-    TOPICS, coverage_reminder, record_answer, should_force_decision,
-)
+from backend.core.screening_flow import MAX_TURNS, completion_reason, record_answer
 from backend.core.session_manager import session_manager
-from backend.graph.engine import DIALOGUE_ENGINE_ENV, ENGINE_GRAPH, ENGINE_LEGACY
 from backend.main import app
 from backend.models.states import SessionState
 from backend.prompts.dialogue_prompt import build_dialogue_user_prompt
+from evaluation_agent.schemas import ITEM_KEYS
 
 client = TestClient(app)
 
 
-@pytest.mark.parametrize("engine", [ENGINE_GRAPH, ENGINE_LEGACY])
-@pytest.mark.parametrize("current_turn", [20, 24, 25, 34, 35])
-def test_turn_budget_reaches_both_models_and_closes_at_35(
-        monkeypatch, policy_stub, dialogue_stub, engine, current_turn):
-    monkeypatch.setenv(DIALOGUE_ENGINE_ENV, engine)
+@pytest.mark.parametrize("engine", ["graph", "legacy"])
+@pytest.mark.parametrize("current_turn", [1, 25, 34, 35])
+@pytest.mark.parametrize("covered", [False, True])
+def test_hard_limit_with_no_catch_up_reminder(
+        monkeypatch, policy_stub, dialogue_stub, engine, current_turn, covered):
+    monkeypatch.setenv("DIALOGUE_ENGINE", engine)
     requests = []
-    policy_stub(("睡眠",), requests=requests)
+    policy_stub("sleep_disturbance", requests=requests)
     sid = create_consented_session(client)
 
     def seed(state):
         state.turn_count = current_turn - 1
-        state.screening_progress.topic_turns = {"睡眠": 1}
-        state.screening_progress.active_topic = "睡眠"
-        state.screening_progress.active_actions = ["睡眠"]
+        state.screening_progress.topic_turns = {item: 1 for item in ITEM_KEYS} if covered else {}
 
     session_manager.modify_session(sid, seed)
-    response = client.post("/api/chat", json={"session_id": sid, "text": "白天还好"})
+    response = client.post("/api/chat", json={"session_id": sid, "text": "最近还是这样"})
     assert response.status_code == 200, response.text
     body = response.json()
+    assert MAX_TURNS == 35
     assert body["turn_count"] == current_turn
-    request = dialogue_stub.requests[-1]
-
-    if current_turn == 35:
-        assert body["assessment_ready"] is True
-        assert body["completion_reason"] == "turn_limit"
-        assert request.finish_screening is True
-        assert "【后端话题补充要求】" not in build_dialogue_user_prompt(request)
-        assert requests == [], "强制收尾不再决策或提问"
-        assert client.post("/api/chat", json={
-            "session_id": sid, "text": "还想再说一句"}).status_code == 409
-        return
-
-    assert body["assessment_ready"] is False
-    assert request.finish_screening is False
-    policy_prompt = json.loads(requests[-1].content)["messages"][1]["content"]
-    dialogue_prompt = build_dialogue_user_prompt(request)
-    for prompt in (policy_prompt, dialogue_prompt):
-        if current_turn < 25:
-            assert "【后端话题补充要求】" not in prompt
-        else:
-            assert "【后端话题补充要求】" in prompt
-            assert f"当前是第 {current_turn} 轮" in prompt
-            assert "第 35 轮必须结束" in prompt
-            missing = [topic.value for topic in TOPICS if topic.value != "睡眠"]
-            assert f"尚未涉及的话题：{'、'.join(missing)}。" in prompt
-
-
-def test_reminder_uses_the_latest_answer_and_stops_when_topics_are_covered():
-    session = SessionState(session_id="latest-coverage", turn_count=24)
-    session.screening_progress.topic_turns = {
-        topic.value: 1 for topic in TOPICS if topic.value != "食欲"
-    }
-    assert "尚未涉及的话题：食欲。" in coverage_reminder(session)
-    session.screening_progress.pending_topic = "食欲"
-    record_answer(session)
-    assert coverage_reminder(session) is None
-
-
-@pytest.mark.parametrize("engine", [ENGINE_GRAPH, ENGINE_LEGACY])
-def test_user_can_end_during_the_reminder_phase_without_a_catch_up_request(
-        monkeypatch, policy_stub, dialogue_stub, engine):
-    monkeypatch.setenv(DIALOGUE_ENGINE_ENV, engine)
-    requests = []
-    policy_stub(requests=requests)
-    sid = create_consented_session(client)
-    session_manager.modify_session(sid, lambda state: setattr(state, "turn_count", 24))
-    response = client.post("/api/chat", json={"session_id": sid, "text": "结束对话"})
-    assert response.json()["completion_reason"] == "user_requested"
-    assert requests == []
+    assert body["assessment_ready"] is (current_turn == 35)
+    assert body["completion_reason"] == ("turn_limit" if current_turn == 35 else None)
+    assert dialogue_stub.requests[-1].finish_screening is (current_turn == 35)
+    assert len(requests) == (0 if current_turn == 35 else 1)
     assert "【后端话题补充要求】" not in build_dialogue_user_prompt(dialogue_stub.requests[-1])
 
 
-@pytest.mark.parametrize("completed_turns, expected", [(23, None), (24, "coverage_lag")])
-def test_reminder_phase_cannot_skip_the_policy_model(completed_turns, expected):
-    session = SessionState(session_id="route-budget", turn_count=completed_turns)
-    session.screening_progress.active_topic = "睡眠"
-    session.screening_progress.active_actions = ["睡眠"]
-    assert should_force_decision(session) == expected
+@pytest.mark.parametrize("engine", ["graph", "legacy"])
+def test_premature_model_finish_collects_each_item_before_ending(
+        monkeypatch, policy_stub, dialogue_stub, engine):
+    monkeypatch.setenv("DIALOGUE_ENGINE", engine)
+    requests = []
+    policy_stub(None, question_goal="结束访谈", requests=requests)
+    sid = create_consented_session(client)
+
+    for index, item in enumerate(ITEM_KEYS):
+        text = "我13岁了，初一" if index == 0 else "这两周没有这种变化。"
+        request = {"session_id": sid, "text": text, "utterance_id": f"answer-{index}"}
+        response = client.post("/api/chat", json=request)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert not body["assessment_ready"]
+        assert body["completion_reason"] is None
+        assert body["screening_progress"]["pending_topic"] == item
+        assert body["screening_progress"]["topic_turns"] == {
+            previous: 1 for previous in ITEM_KEYS[:index]}
+        assert dialogue_stub.requests[-1].decision.target_item == item
+        assert not dialogue_stub.requests[-1].finish_screening
+        # 重试回执不多记一次回答，也不会触发第二次模型调用。
+        assert client.post("/api/chat", json=request).json() == body
+        assert len(requests) == index + 1
+
+    # 第11个话题问出但尚未回复时，仍然不允许收尾；最后一个回复才补齐覆盖。
+    response = client.post("/api/chat", json={"session_id": sid, "text": "这两周也没有这方面的困难。"})
+    body = response.json()
+    assert response.status_code == 200, response.text
+    assert body["assessment_ready"]
+    assert body["completion_reason"] == "model_finished"
+    assert body["turn_count"] == len(ITEM_KEYS) + 1
+    assert body["screening_progress"]["topic_turns"] == {item: 1 for item in ITEM_KEYS}
+    assert body["screening_progress"]["pending_topic"] is None
+    assert dialogue_stub.requests[-1].finish_screening
+    assert len(requests) == len(ITEM_KEYS) + 1
+
+
+@pytest.mark.parametrize("current_turn", [1, 10, 25, 35])
+def test_explicit_end_without_minimum(current_turn):
+    session = SessionState(session_id="end", turn_count=current_turn - 1)
+    assert completion_reason(session, "结束对话") == "user_requested"
+    assert completion_reason(session, "不要结束对话") == (
+        "turn_limit" if current_turn == 35 else None)
+
+
+def test_answer_count_is_consumed_once_and_does_not_measure_evidence():
+    session = SessionState(session_id="count")
+    session.screening_progress.pending_topic = "sleep_disturbance"
+    record_answer(session)
+    record_answer(session)
+    assert session.screening_progress.topic_turns == {"sleep_disturbance": 1}
+    assert session.screening_progress.pending_topic is None
 
 
 def test_imported_dialogue_checks_safety_through_the_35th_turn(monkeypatch, safety_stub):

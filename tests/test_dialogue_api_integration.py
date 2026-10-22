@@ -3,6 +3,7 @@
 import asyncio
 
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from backend.agents.dialogue_agent import DialogueAgent
 from backend.api import chat
@@ -13,7 +14,7 @@ from backend.models.dialogue import DialogueAgentRequest
 
 def test_repeated_policy_action_generates_contextual_follow_up(
         monkeypatch, policy_stub):
-    policy_stub(("共情安慰", "睡眠"))
+    policy_stub('sleep_disturbance')
 
     class RecordingClient:
         def __init__(self):
@@ -21,14 +22,14 @@ def test_repeated_policy_action_generates_contextual_follow_up(
 
         async def generate(self, system_prompt, user_prompt):
             self.prompts.append(user_prompt)
-            current = user_prompt.split("用户刚刚说：", 1)[1].splitlines()[0]
+            current = user_prompt.split("【学生最新回复】\n", 1)[1].splitlines()[0]
             question = "入睡困难时通常要多久才能睡着？" if current == "入睡困难" else "是入睡困难，还是睡着后容易醒？"
             return question
 
     generator = RecordingClient()
     monkeypatch.setattr(chat.dialogue_manager, "_dialogue_agent", DialogueAgent(generator))
     client = TestClient(app)
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_consented_session(client)
 
     first = client.post("/api/chat", json={
         "session_id": session_id, "text": "最近睡眠不好",
@@ -39,17 +40,18 @@ def test_repeated_policy_action_generates_contextual_follow_up(
     })
 
     assert first.status_code == second.status_code == 200
-    assert first.json()["next_strategy"] == second.json()["next_strategy"] == "睡眠"
+    assert first.json()["next_strategy"] == second.json()["next_strategy"] == "睡眠异常"
     assert first.json()["reply"] != second.json()["reply"]
     assert "入睡困难时" in second.json()["reply"]
-    assert "actions：共情安慰、睡眠" in generator.prompts[1]
+    assert "target_item: sleep_disturbance" in generator.prompts[1]
     assert "助手：" + first.json()["reply"] in generator.prompts[1]
-    assert "valence=-0.3" in generator.prompts[1]
-    assert generator.prompts[1].count("用户刚刚说：入睡困难") == 1
+    assert "valence=-0.3" not in generator.prompts[1]
+    assert "本轮没有可口头提及的视觉观察" in generator.prompts[1]
+    assert generator.prompts[1].count("【学生最新回复】\n入睡困难") == 1
 
 
 def test_dialogue_unavailable_does_not_save_partial_turn(monkeypatch, policy_stub):
-    policy_stub(("睡眠",))
+    policy_stub('sleep_disturbance')
     monkeypatch.setattr(chat.dialogue_manager, "_dialogue_agent", None)
 
     def missing_config():
@@ -58,7 +60,7 @@ def test_dialogue_unavailable_does_not_save_partial_turn(monkeypatch, policy_stu
     monkeypatch.setattr("backend.core.dialogue_manager.load_deepseek_config",
                         missing_config)
     client = TestClient(app)
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_consented_session(client)
 
     result = client.post("/api/chat", json={
         "session_id": session_id, "text": "我睡不着",
@@ -85,7 +87,7 @@ def test_dialogue_agent_rewrites_an_exact_repeat():
         "conversation_history": [
             {"role": "assistant", "content": "最近睡眠怎么样？"},
         ],
-        "decision": {"actions": ["睡眠"], "topic": "睡眠"},
+        "decision": {'target_item': 'sleep_disturbance', 'question_goal': '了解过去两周该项表现及尚缺的信息'},
         "current_user_input": {"text": "入睡困难"},
     })
     client = SequencedClient()

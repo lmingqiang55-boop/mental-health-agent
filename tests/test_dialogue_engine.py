@@ -249,25 +249,20 @@ def test_safety_branch_never_enters_the_graph(monkeypatch, safety_stub, policy_s
 # 话题计数 / 收尾规则 / 视觉线索
 # ---------------------------------------------------------------------------
 
-def test_topic_budget_is_enforced_under_graph(monkeypatch, policy_stub):
-    """模型反复要求同一话题时，后端的话题次数上限仍然生效。"""
+def test_repeated_target_is_not_overridden_under_graph(monkeypatch, policy_stub):
+    """模型反复选择同一小项时，后端保持其目标，不按次数改题。"""
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
-    policy_stub(("睡眠",))
+    policy_stub('sleep_disturbance')
     session_id = new_session()
     drive(session_id, ("睡不好",) * 4)
 
     counts = progress_of(session_state(session_id))["topic_turns"]
-    # 单话题上限为 2（backend/core/screening_flow.py: MAX_TOPIC_TURNS）。
-    assert counts.get("睡眠", 0) <= 2
-    assert len(counts) >= 2, counts
+    # 4次输入中有3次是在回答此前选定的小项。
+    assert counts == {"sleep_disturbance": 3}
 
 
 def test_screening_closes_within_the_turn_limit_under_graph(monkeypatch):
-    """轮数上限内必须收尾（MAX_TURNS=35），收尾后不再接受普通轮。
-
-    收尾原因可能是 ``topic_coverage``（8 个话题问到且已过 ``MIN_TURNS=10``），
-    所以这里不断言具体哪一种，只断言"在上限内收尾"。
-    """
+    """普通回答持续至第35轮强制收尾，收尾后不再接受普通轮。"""
     monkeypatch.setenv(DIALOGUE_ENGINE_ENV, ENGINE_GRAPH)
     session_id = new_session()
     closing = None
@@ -280,8 +275,8 @@ def test_screening_closes_within_the_turn_limit_under_graph(monkeypatch):
             closing = response.json()
             break
     assert closing is not None, f"{MAX_TURNS} 轮之内没有收尾"
-    assert closing["completion_reason"] in {
-        "topic_coverage", "turn_limit", "user_requested"}
+    assert closing["completion_reason"] == "turn_limit"
+    assert closing["turn_count"] == MAX_TURNS == 35
     assert chat(session_id, "还想再说一句").status_code == 409
 
 
@@ -321,7 +316,7 @@ def test_visual_feedback_is_unchanged_under_graph(monkeypatch, dialogue_stub,
     from backend.models.states import VisionFrameObservation, VisionSegment, VisionState
     from backend.vision.aggregation import aggregate_frames
 
-    policy_stub(("情绪",))
+    policy_stub('depressed_mood')
 
     def make_frozen(session) -> None:
         frames = [VisionState(face_detected=True, emotion="sad", emotion_confidence=0.95)
@@ -466,15 +461,16 @@ def test_each_session_pins_its_own_engine(monkeypatch):
 def test_route_after_closing_splits_closing_from_open():
     assert TurnNodes.route_after_closing({"ending": None}) == "open"
     assert TurnNodes.route_after_closing({}) == "open"
-    for ending in ("user_requested", "turn_limit", "topic_coverage"):
+    for ending in ("user_requested", "turn_limit"):
         assert TurnNodes.route_after_closing({"ending": ending}) == "closing"
 
 
-def test_route_after_dialogue_needs_an_explicit_decision():
-    assert TurnNodes.route_after_dialogue({"need_decision": True}) == "need_decision"
-    assert TurnNodes.route_after_dialogue({"need_decision": False}) == "reuse_decision"
-    # 缺省必须落到"决策"这一侧：多调一次决策是安全的，漏掉一次不是。
-    assert TurnNodes.route_after_dialogue({}) == "reuse_decision"
+def test_graph_has_no_dialogue_router_or_decision_reuse():
+    from backend.graph.build import build_turn_graph
+    from backend.core.dialogue_manager import DialogueManager
+    names = set(build_turn_graph(DialogueManager()).get_graph().nodes)
+    assert 'dialogue_route' not in names
+    assert 'resolve_topic' not in names
 
 
 def test_graph_calls_are_synchronous_and_never_nest_asyncio_run():
@@ -535,8 +531,8 @@ def test_graph_node_names_are_stable():
 
     graph = build_turn_graph(DialogueManager())
     assert set(graph.get_graph().nodes) >= {
-        "prepare_turn", "closing_check", "dialogue_route", "decision",
-        "resolve_topic", "visual_prepare", "dialogue_execute",
+        "prepare_turn", "closing_check", "decision",
+        "resolve_target", "visual_prepare", "dialogue_execute",
         "dialogue_close", "commit",
     }
 

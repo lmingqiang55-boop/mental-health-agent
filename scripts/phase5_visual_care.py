@@ -45,7 +45,7 @@ from backend.llm.deepseek_client import DeepSeekClient  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.policy.client import get_policy_client  # noqa: E402
 from backend.vision.aggregation import aggregate_frames  # noqa: E402
-from _probe import CountingPolicy, CountingSafety, install_route_recorder  # noqa: E402
+from _probe import CountingPolicy, CountingSafety, install_route_recorder, create_demo_session  # noqa: E402
 
 client = TestClient(app)
 
@@ -208,7 +208,7 @@ def main() -> int:
     for scenario in SCENARIOS:
         print(f"--- {scenario['key']}：{scenario['title']}")
         print(f"    预设视觉标签：{scenario['vision']}")
-        session_id = client.post("/api/session").json()["session_id"]
+        session_id = create_demo_session(client)
         turns: list[dict] = []
 
         for index, text in enumerate(scenario["texts"], start=1):

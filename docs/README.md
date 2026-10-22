@@ -22,6 +22,7 @@
 
 - [架构记录（2026-10-04）](architecture.md)
 - [对话流程交接](dialogue_flow_handoff.md)
+- [测评问诊职责与表达调整（2026-10-20）](archive/dialogue/dialogue_interview_scope_20261020.md)
 - [对话提示词优化依据与范围（2026-10-20）](archive/dialogue/dialogue_prompt_naturalness_20261020.md)
 - [LangGraph 工作流规划](langgraph_workflow_plan.md)
 - [Safety Agent 替换记录](safety_agent_replacement_report.md)

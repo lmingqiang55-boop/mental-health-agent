@@ -40,8 +40,7 @@ FAILURES: List[str] = []
 TMP_ENV_DIR = PROJECT_ROOT / "_tmp_envs"
 
 FAKE_REPLY = (
-    "听起来这段时间睡不好确实挺让人疲惫的。除了睡眠之外，"
-    "最近吃饭和食欲有没有什么变化？"
+    "最近胃口和以前比有变化吗？"
 )
 
 
@@ -92,9 +91,8 @@ def build_request() -> DialogueAgentRequest:
             ],
             "user_memory": {"facts": ["用户最近正在准备考试"]},
             "decision": {
-                "actions": ["共情安慰", "当前话题从睡眠转到食欲"],
-                "topic": "食欲",
-                "reason": "睡眠话题达到次数限制",
+                "target_item": "appetite_change",
+                "question_goal": "了解近期食欲和饭量是否出现变化",
             },
             "current_user_input": {
                 "text": "最近每天都睡得很晚，白天也没精神",
@@ -133,13 +131,14 @@ def main() -> int:
         "历史对话分区": "【历史对话】" in user_prompt,
         "历史内容「最近睡眠怎么样？」": "最近睡眠怎么样？" in user_prompt,
         "历史内容「最近晚上总是睡不着。」": "最近晚上总是睡不着。" in user_prompt,
-        "历史 user 的 visual（valence=-0.4）": "valence=-0.4" in user_prompt,
+        "不将历史视觉标签当作当前观察": "valence=-0.4" not in user_prompt,
         "用户记忆分区": "【用户记忆】" in user_prompt,
         "记忆内容「用户最近正在准备考试」": "用户最近正在准备考试" in user_prompt,
-        "当前用户输入分区": "【当前用户输入】" in user_prompt,
+        "当前用户输入分区": "【学生最新回复】" in user_prompt,
         "当前输入文本": "最近每天都睡得很晚，白天也没精神" in user_prompt,
-        "当前输入 visual（valence=-0.5）": "valence=-0.5" in user_prompt,
-        "decision 分区": "【上游最终决策】" in user_prompt,
+        "不输出未筛选的原始视觉标签": "valence=-0.5" not in user_prompt,
+        "decision 分区": "【本轮评估目标】" in user_prompt,
+        "结束状态分区": "finish_screening: false" in user_prompt,
         "任务分区": "【任务】" in user_prompt,
     }
     print("    4) user_prompt 内容检查：")
@@ -148,10 +147,8 @@ def main() -> int:
     check("4) user_prompt 包含历史/visual/记忆/decision/当前输入", all(assert_all.values()))
 
     decision_checks = {
-        "action「共情安慰」": "共情安慰" in user_prompt,
-        "action「当前话题从睡眠转到食欲」": "当前话题从睡眠转到食欲" in user_prompt,
-        "topic「食欲」": "topic：食欲" in user_prompt,
-        "reason「睡眠话题达到次数限制」": "reason：睡眠话题达到次数限制" in user_prompt,
+        "评估小项": "target_item: appetite_change" in user_prompt,
+        "信息目标": "question_goal: 了解近期食欲和饭量是否出现变化" in user_prompt,
     }
     print("    5) decision 字段完整性：")
     for label, ok in decision_checks.items():

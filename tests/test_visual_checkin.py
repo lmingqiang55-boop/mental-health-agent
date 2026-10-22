@@ -32,7 +32,7 @@ from backend.models.states import (
     VisionSegment,
     VisionState,
 )
-from backend.policy.client import DialogueAction, PolicyDecision
+from backend.policy.client import PolicyDecision
 from backend.prompts.dialogue_prompt import build_dialogue_user_prompt
 from backend.vision.aggregation import aggregate_frames
 
@@ -192,7 +192,7 @@ def test_checkin_shares_the_observation_gates():
 
 def test_prompt_asks_for_one_gentle_checkin():
     request = DialogueAgentRequest(
-        conversation_history=[], decision=DialogueDecision(actions=["情绪"]),
+        conversation_history=[], decision=DialogueDecision(target_item='depressed_mood', question_goal='了解过去两周该项表现及尚缺的信息'),
         current_user_input=DialogueCurrentUserInput(text=HAPPY_WORDS),
         visual_discordance=DialogueVisualDiscordance(
             text_polarity=0.76, vision_valence=-0.6),
@@ -216,8 +216,8 @@ def test_dialogue_manager_asks_the_checkin(monkeypatch):
     session.conversation_history.append(Message(role=MessageRole.USER, content="还好"))
 
     class Policy:
-        def predict(self, history):
-            return PolicyDecision(actions=[DialogueAction.SLEEP])
+        def predict(self, history, **kwargs):
+            return PolicyDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息')
 
     class Dialogue:
         request = None
@@ -248,8 +248,8 @@ def test_labelled_observation_wins_over_checkin(monkeypatch):
     session.conversation_history.append(Message(role=MessageRole.USER, content="还好"))
 
     class Policy:
-        def predict(self, history):
-            return PolicyDecision(actions=[DialogueAction.SLEEP])
+        def predict(self, history, **kwargs):
+            return PolicyDecision(target_item='sleep_disturbance', question_goal='了解过去两周该项表现及尚缺的信息')
 
     class Dialogue:
         request = None

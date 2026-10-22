@@ -22,6 +22,7 @@ import type {
   TranscriptionResponse,
   TtsStatusResponse,
   VisionSegmentResponse,
+  VisionCaptureResponse,
 } from './types'
 
 // ---------------- 健康检查 ----------------
@@ -81,7 +82,7 @@ export const visionApi = {
   /** 开关采集（代次隔离）。注意 extra=forbid，不要多传字段。 */
   capture: (sessionId: string, captureId: string, generation: number, active: boolean, signal?: AbortSignal) =>
     http
-      .post('/api/vision/capture', {
+      .post<VisionCaptureResponse>('/api/vision/capture', {
         session_id: sessionId,
         capture_id: active ? captureId : null,
         generation,
@@ -144,9 +145,9 @@ export const ttsApi = {
   status: () => http.get<TtsStatusResponse>('/api/tts/status').then((r) => r.data),
 
   /** 返回 audio/mpeg 二进制；失败抛 ApiError（503 时页面降级浏览器语音）。 */
-  synth: (sessionId: string, turnCount: number) =>
+  synth: (sessionId: string, turnCount: number, signal?: AbortSignal) =>
     http
-      .post('/api/tts', { session_id: sessionId, turn_count: turnCount }, { responseType: 'blob' })
+      .post('/api/tts', { session_id: sessionId, turn_count: turnCount }, { responseType: 'blob', signal, silent: true })
       .then((r) => r.data as Blob),
 }
 

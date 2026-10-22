@@ -30,16 +30,25 @@ export function useRecorder() {
   let startAt = 0
   let t0 = 0
   let tickTimer = 0
+  let generation = 0
+  let cancelStop: (() => void) | null = null
 
   async function ensureStream(): Promise<MediaStream> {
     if (stream) return stream
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const current = generation
+    const opened = await navigator.mediaDevices.getUserMedia({ audio: true })
+    if (current !== generation) {
+      opened.getTracks().forEach((track) => track.stop())
+      throw new Error('录音已取消')
+    }
+    stream = opened
     return stream
   }
 
   /** originMs：会话开始到「按下开始录音」的毫秒数（用于对齐视觉时间轴）。 */
   async function start(originMs = 0): Promise<void> {
     error.value = ''
+    const requestedAt = performance.now()
     try {
       const s = await ensureStream()
       const mime = pickMime()
@@ -48,7 +57,7 @@ export function useRecorder() {
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data)
       }
-      startAt = originMs
+      startAt = originMs + performance.now() - requestedAt
       recorder.start()
       recording.value = true
       elapsedMs.value = 0
@@ -71,8 +80,11 @@ export function useRecorder() {
       }
       window.clearInterval(tickTimer)
       const durationMs = Math.round(performance.now() - t0)
+      const stoppedRecorder = recorder
+      cancelStop = () => reject(new Error('录音已取消'))
       recorder.onstop = () => {
-        const type = recorder?.mimeType || 'audio/webm'
+        cancelStop = null
+        const type = stoppedRecorder.mimeType || 'audio/webm'
         const blob = new Blob(chunks, { type })
         recording.value = false
         resolve({
@@ -83,27 +95,24 @@ export function useRecorder() {
           endMs: Math.round(startAt + durationMs),
         })
       }
-      recorder.onerror = () => reject(new Error('录音失败'))
+      recorder.onerror = () => {
+        cancelStop = null
+        recording.value = false
+        reject(new Error('录音失败'))
+      }
       recorder.stop()
     })
   }
 
   function dispose() {
-    window.clearInterval(tickTimer)
-    try {
-      if (recorder && recorder.state !== 'inactive') recorder.stop()
-    } catch {
-      /* ignore */
-    }
-    stream?.getTracks().forEach((t) => t.stop())
-    stream = null
-    recorder = null
-    recording.value = false
-    chunks = []
+    cancel()
   }
 
   /** 取消本次录音：丢弃缓冲并释放设备，不生成 Blob，也不会触发上传。 */
   function cancel() {
+    generation += 1
+    cancelStop?.()
+    cancelStop = null
     window.clearInterval(tickTimer)
     if (recorder) {
       recorder.ondataavailable = null

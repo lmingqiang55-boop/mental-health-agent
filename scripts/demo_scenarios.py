@@ -44,7 +44,7 @@ load_dotenv(ROOT / ".env", override=False)
 from fastapi.testclient import TestClient  # noqa: E402
 
 from _probe import (  # noqa: E402
-    CountingDialogueAgent, CountingPolicy, CountingSafety, install_route_recorder,
+    CountingDialogueAgent, CountingPolicy, CountingSafety, install_route_recorder, create_demo_session,
     level_of,
 )
 from backend.api import chat  # noqa: E402
@@ -59,9 +59,7 @@ client = TestClient(app)
 # 预设台词（模拟学生输入，不含任何真实学生数据）
 # ---------------------------------------------------------------------------
 
-#: 场景 A 前 13 轮：自然的筛查推进，逐步覆盖各个评估话题。
-#: 第 13 轮由后端 ``coverage_lag`` 把话题补到「自杀倾向」，Dialogue 会问出
-#: 风险问题——这正是下面那轮安全澄清的触发点。
+#: 虚构学生台词；实际评估目标由每轮决策给出，不预设补问题目。
 DEMO_A_SCREENING = [
     "最近心情一直不太好",
     "说不上来为什么，就是提不起劲",
@@ -70,28 +68,25 @@ DEMO_A_SCREENING = [
     "体重好像掉了三四斤",
     "上课注意力集中不了，看两行书就走神",
     "作业拖到最后一刻才写",
-    "跟室友基本不怎么说话",
-    "周末就在宿舍躺着刷手机",
+    "跟同学基本不怎么说话",
+    "周末就在家里躺着刷手机",
     "身体上倒是没什么毛病，就是容易累",
     "早上起来还是觉得很困",
     "家里人不知道这些，我也不想说，怕他们担心",
     "有时候莫名其妙就想哭，但又哭不出来",
 ]
 
-#: 第 14~15 轮：含糊回答 → 预期 Safety 判 UNCERTAIN，进入澄清模式。
-#: 「自杀倾向」话题由后端 ``coverage_lag`` 在第 13 或第 14 轮补上，
-#: 所以这里放**两条**含糊回答，保证风险提问之后一定还有含糊回答可用；
-#: 若前一条就被判为 CONTINUE，筛查会提前收尾，脚本会如实提示偏差。
+#: 普通求助表达是否触发安全澄清，以真实安全模型结论为准。
 DEMO_A_PROBES = [
     "我也不知道该怎么办",
     "你觉得我这样正常吗",
 ]
 
-#: 最后一轮：明确否认 → 预期 Safety 判 CONTINUE，普通图恢复，
-#: 「自杀倾向」被计入，覆盖率 8/8，本轮靠 topic_coverage 收尾。
+#: 明确否认 → 预期 Safety 判 CONTINUE，普通图恢复；
+#: 话题覆盖不再触发收尾，随后由模拟学生明确请求结束。
 DEMO_A_DENIAL = "没有，我没有伤害自己的想法，就是最近太累了"
 
-DEMO_A_TURNS = [*DEMO_A_SCREENING, *DEMO_A_PROBES, DEMO_A_DENIAL]
+DEMO_A_TURNS = [*DEMO_A_SCREENING, *DEMO_A_PROBES, DEMO_A_DENIAL, "结束对话"]
 
 #: 场景 B：一句普通表达 + 一句明确风险表达 + 一句支持模式下的后续表达。
 DEMO_B_TURNS = [
@@ -119,7 +114,7 @@ def snapshot_safety(body: dict) -> dict:
 
 def run_turns(texts: list[str], dialogue, policy, safety, route_records) -> dict:
     os.environ[DIALOGUE_ENGINE_ENV] = ENGINE_GRAPH
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_demo_session(client)
     route_records.clear()
     turns: list[dict] = []
 
@@ -299,7 +294,7 @@ def main() -> int:
         last = run_a["turns"][-1]
         print(f"  收尾：end_reason={last.get('completion_reason')}，"
               f"stage={last.get('current_stage')}，"
-              f"覆盖 {len(last.get('topic_turns') or {})}/8 话题")
+              f"已回答目标 {len(last.get('topic_turns') or {})}/11 项目标")
 
         assessment = call_assessment(run_a["session_id"])
         if assessment["status"] == 200:
@@ -316,9 +311,9 @@ def main() -> int:
                 "含糊回答可能都被判为 continue，需重新调试预设台词。")
         elif not any(t["turn"] > reviewed[-1]["turn"] for t in ok):
             notes.append("场景 A 出现了安全澄清，但澄清之后没有恢复普通评估的轮次。")
-        if last.get("completion_reason") != "topic_coverage":
+        if last.get("completion_reason") not in {"user_requested", "model_finished"}:
             notes.append(
-                f"场景 A 预期靠 topic_coverage 收尾，"
+                f"场景 A 预期由学生明确请求结束，"
                 f"实际 {last.get('completion_reason')}。")
 
         lines = ["## 场景 A：正常心理筛查闭环\n",

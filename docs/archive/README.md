@@ -12,6 +12,7 @@
 
 | 归档文档 | 原路径 |
 | --- | --- |
+| [测评问诊职责与表达调整（2026-10-20）](dialogue/dialogue_interview_scope_20261020.md) | 直接归档；含6轮真实 graph 文字片段及检查范围 |
 | [对话提示词优化依据与范围（2026-10-20）](dialogue/dialogue_prompt_naturalness_20261020.md) | `docs/dialogue_prompt_naturalness_20261020.md` |
 | [对话提示词 35 次真实调用实录（2026-10-20）](dialogue/dialogue_prompt_ab_20261020.md) | `docs/dialogue_prompt_ab_20261020.md` |
 | [对话流程修复验证（2026-10-11）](dialogue/dialogue_flow_validation_20261011.md) | `docs/dialogue_flow_validation_20261011.md` |

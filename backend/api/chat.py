@@ -167,13 +167,30 @@ def chat(request: ChatRequest) -> ChatResponse:
         else:
             # 澄清结束且未落入停止锁：结束安全模式，回到普通评估。
             # 不还原会话阶段会让学生永久卡在安全澄清页。
-            if session.current_stage is SessionStage.SAFETY_REVIEW:
-                session.current_stage = SessionStage.EXPLORATION
-            kwargs = {"vision_snapshot": request.vision_snapshot,
-                      "utterance_id": request.utterance_id}
-            if request.speech is not None or "vision_snapshot" in request.model_fields_set:
-                kwargs["use_latest_states"] = False
-            payload = dialogue_runner.process_turn(text, session, **kwargs)
+            resolving_review = session.current_stage is SessionStage.SAFETY_REVIEW
+            if resolving_review and (
+                    session.screening_progress.end_reason or session.assessment_result_id):
+                session.current_stage = (
+                    SessionStage.COMPLETED if session.assessment_result_id
+                    else SessionStage.ASSESSMENT_READY)
+                # 安全澄清可以解除，已经结束的普通访谈不能因此重开。
+                reply = "本次访谈已结束，可以查看已生成的结果。" if session.assessment_result_id else (
+                    "本次访谈已结束，点击“生成结果”查看本次对话的初步情况。")
+                payload = DialogueResponsePayload(
+                    reply=reply, messages=[reply], next_strategy="结束本次筛查",
+                    current_stage=session.current_stage.value, assessment_ready=True,
+                    completion_reason=session.screening_progress.end_reason,
+                    screening_progress=session.screening_progress,
+                    visual_feedback=VisualFeedback(reason="closing"),
+                )
+            else:
+                if resolving_review:
+                    session.current_stage = SessionStage.EXPLORATION
+                kwargs = {"vision_snapshot": request.vision_snapshot,
+                          "utterance_id": request.utterance_id}
+                if request.speech is not None or "vision_snapshot" in request.model_fields_set:
+                    kwargs["use_latest_states"] = False
+                payload = dialogue_runner.process_turn(text, session, **kwargs)
             # 本轮的气泡（1~3 条）由 Dialogue 决定；reply 是它的全文投影。
             messages = payload.messages or [payload.reply]
             reply = payload.reply

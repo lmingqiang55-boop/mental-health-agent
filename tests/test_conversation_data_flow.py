@@ -3,7 +3,9 @@
 import json
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from evaluation_agent.llm_client import EvaluationLLMClient, HttpResponse, LLMConfig
 from evaluation_agent.schemas import ITEM_KEYS
@@ -13,6 +15,8 @@ from backend.api import chat
 from backend.core.evaluation_engine import evaluation_engine
 from backend.main import app
 from backend.policy.client import HttpPolicyClient
+
+pytestmark = pytest.mark.usefixtures("isolated_result_store")
 
 
 class ModelResponseTransport:
@@ -48,7 +52,7 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
     def policy_reply(request: httpx.Request) -> httpx.Response:
         policy_requests.append(json.loads(request.content))
         return httpx.Response(200, json={
-            "choices": [{"message": {"content": '{"actions":["共情安慰","睡眠"]}'}}],
+            "choices": [{"message": {"content": '{"target_item":"sleep_disturbance","question_goal":"了解睡眠问题频率"}'}}],
         })
 
     policy = HttpPolicyClient(
@@ -64,7 +68,7 @@ def test_conversation_flows_through_policy_evaluation_storage_and_queries(monkey
                         EvaluationService(client=model_client))
 
     client = TestClient(app)
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_consented_session(client)
     frame = client.post("/api/vision", json={
         "session_id": session_id,
         "state": {"face_detected": True, "valence": 0.2, "engagement": 0.8},
@@ -145,7 +149,7 @@ def test_upstream_two_level_vision_reaches_actual_evaluation_client(monkeypatch)
                         EvaluationService(client=model_client))
 
     client = TestClient(app)
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_consented_session(client)
     response = client.post("/api/assessment", json={
         "session_id": session_id,
         "evaluation_input": {

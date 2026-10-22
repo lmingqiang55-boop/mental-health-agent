@@ -90,3 +90,56 @@ def test_locked_read_commit_serializes_with_screening_worker_update():
         assert reading.result(timeout=3) is False
         writing.result(timeout=3)
     assert manager.read_session(session.session_id, lambda state: state.safety_halted) is True
+
+
+def test_slow_model_in_one_session_does_not_block_other_sessions():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from backend.core.session_manager import SessionManager
+
+    manager = SessionManager()
+    first, second = manager.create_session(), manager.create_session()
+    entered, release = Event(), Event()
+
+    def slow_model(state):
+        entered.set()
+        assert release.wait(timeout=3)
+        state.turn_count += 1
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        waiting = pool.submit(manager.modify_session, first.session_id, slow_model)
+        assert entered.wait(timeout=3)
+        other = pool.submit(manager.modify_session, second.session_id,
+                            lambda state: setattr(state, "turn_count", 1))
+        try:
+            assert other.result(timeout=1).turn_count == 1
+        finally:
+            release.set()
+        assert waiting.result(timeout=3).turn_count == 1
+
+
+def test_eviction_during_model_request_does_not_restore_the_evicted_session():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from backend.core.session_manager import SessionManager
+
+    manager = SessionManager(max_sessions=1)
+    first = manager.create_session()
+    entered, release = Event(), Event()
+
+    def slow_model(state):
+        entered.set()
+        assert release.wait(timeout=3)
+        state.turn_count += 1
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        waiting = pool.submit(manager.modify_session, first.session_id, slow_model)
+        assert entered.wait(timeout=3)
+        try:
+            second = manager.create_session()
+        finally:
+            release.set()
+        assert waiting.result(timeout=3) is None
+    assert manager.get_session(first.session_id) is None
+    assert manager.get_session(second.session_id) is not None
+    assert manager.count() == 1

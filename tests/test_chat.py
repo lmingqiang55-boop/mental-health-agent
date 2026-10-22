@@ -1,9 +1,12 @@
 import base64
 import json
+import sqlite3
+from contextlib import contextmanager
 from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 from PIL import Image
 
 from backend.main import app
@@ -22,7 +25,7 @@ def _stub_decision_model(policy_stub):
 
 
 def new_session() -> str:
-    return client.post("/api/session").json()["session_id"]
+    return create_consented_session(client)
 
 
 def test_chat_without_multimodal_or_api_key() -> None:
@@ -33,7 +36,7 @@ def test_chat_without_multimodal_or_api_key() -> None:
     assert first.status_code == 200
     body = first.json()
     assert body["reply"]
-    assert body["next_strategy"] == "情绪"
+    assert body["next_strategy"] == "情绪低落"
     # 安全结论来自新版 Safety，且普通对话必须给出 continue 路由
     assert body["safety"]["risk_level"] == "normal"
     assert body["safety"]["route"] == "continue"
@@ -58,12 +61,12 @@ def test_chat_without_multimodal_or_api_key() -> None:
 
 def test_chat_uses_decision_model_actions(policy_stub) -> None:
     """提问方向来自决策模型的动作，而不是按维度固定顺序推进。"""
-    policy_stub(("睡眠",))
+    policy_stub('sleep_disturbance')
     session_id = new_session()
     body = client.post("/api/chat", json={
         "session_id": session_id, "text": "我最近总失眠"
     }).json()
-    assert body["next_strategy"] == "睡眠"
+    assert body["next_strategy"] == "睡眠异常"
     assert "睡眠" in body["reply"]
     # 不再出现六维状态机的策略名
     assert not body["next_strategy"].startswith("explore_")
@@ -71,7 +74,7 @@ def test_chat_uses_decision_model_actions(policy_stub) -> None:
 
 def test_chat_sends_accumulated_history_to_decision_model(policy_stub) -> None:
     requests = []
-    policy_stub(("共情安慰", "睡眠"), requests=requests)
+    policy_stub('sleep_disturbance', requests=requests)
     session_id = new_session()
     first = client.post("/api/chat", json={
         "session_id": session_id, "text": "我最近睡不好"})
@@ -79,8 +82,8 @@ def test_chat_sends_accumulated_history_to_decision_model(policy_stub) -> None:
 
     first_prompt = json.loads(requests[0].content)["messages"][1]["content"]
     second_prompt = json.loads(requests[1].content)["messages"][1]["content"]
-    assert first_prompt.endswith("用户：我最近睡不好")
-    assert second_prompt.endswith(
+    assert first_prompt.split("\n\n【当前任务】")[0].endswith("用户：我最近睡不好")
+    assert second_prompt.split("\n\n【当前任务】")[0].endswith(
         f"用户：我最近睡不好\n助手：{first.json()['reply']}\n用户：经常凌晨醒")
 
 
@@ -357,10 +360,43 @@ def test_uncertain_message_enters_review_and_can_resume_on_normal(safety_stub) -
         "session_id": session_id, "text": "我最近就是睡不好"
     }).json()
     assert follow["current_stage"] == "exploration"
-    assert follow["next_strategy"] == "情绪"
+    assert follow["next_strategy"] == "情绪低落"
     session = client.get(f"/api/session/{session_id}").json()
     assert session["safety_halted"] is False
     assert session["safety_stage"] == "none"
+
+
+@pytest.mark.parametrize("engine", ["legacy", "graph"])
+@pytest.mark.parametrize("completed", [False, True])
+def test_safety_review_does_not_reopen_finished_interview(
+        safety_stub, dialogue_stub, monkeypatch, engine, completed):
+    from backend.core.session_manager import session_manager
+    from backend.models.enums import SessionStage
+
+    monkeypatch.setenv("DIALOGUE_ENGINE", engine)
+    sid = new_session()
+
+    def close(state):
+        state.current_stage = SessionStage.COMPLETED if completed else SessionStage.ASSESSMENT_READY
+        state.screening_progress.end_reason = "model_finished"
+        if completed:
+            state.assessment_result_id = "saved-result"
+
+    session_manager.modify_session(sid, close)
+    safety_stub.force(SafetyLevel.UNCERTAIN)
+    review = client.post("/api/chat", json={"session_id": sid, "text": "有点想不开"})
+    assert review.status_code == 200
+    assert review.json()["current_stage"] == "safety_review"
+    safety_stub.force(SafetyLevel.NORMAL)
+    resolved = client.post("/api/chat", json={"session_id": sid, "text": "我很安全，刚才只是随口说的"})
+    assert resolved.status_code == 200
+    assert resolved.json()["assessment_ready"] is True
+    assert resolved.json()["current_stage"] == ("completed" if completed else "assessment_ready")
+    assert dialogue_stub.requests == []
+    assert session_manager.get_session(sid).safety_stage == "none"
+    again = client.post("/api/chat", json={"session_id": sid, "text": "接着聊吗"})
+    assert again.status_code == 409
+    assert again.json()["error"]["code"] == "SCREENING_FINISHED"
 
 
 def test_normal_verdict_does_not_enter_safety_branch(safety_stub) -> None:
@@ -382,9 +418,22 @@ def test_normal_verdict_does_not_enter_safety_branch(safety_stub) -> None:
 
 
 def test_short_chat_does_not_auto_assess_and_manual_assessment_is_explicit(
-    evaluation_stub,
+    evaluation_stub, monkeypatch,
 ) -> None:
     """短对话仍可继续；聊天收尾与生成报告是两个独立动作。"""
+    from backend.core.memory_store import MemoryStore
+
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
+
+    class InMemoryStore(MemoryStore):
+        @contextmanager
+        def _connection(self):
+            with connection:
+                yield connection
+
+    store = InMemoryStore(":memory:")
+    monkeypatch.setattr("backend.api.assessment.memory_store", store)
+    monkeypatch.setattr("backend.api.history.memory_store", store)
     session_id = new_session()
     for text in ("我想说说最近的情况", "晚上常常睡不着", "和室友关系也一般"):
         assert client.post("/api/chat", json={
@@ -414,3 +463,5 @@ def test_short_chat_does_not_auto_assess_and_manual_assessment_is_explicit(
     # 记忆库可查到记录
     history = client.get(f"/api/history/{session_id}").json()
     assert history["total"] == 1
+    assert history["records"][0]["result"]["result_id"] == triggered.json()["result"]["result_id"]
+    connection.close()

@@ -4,7 +4,7 @@
 本模块只负责定义数据结构（schema），不包含任何 LLM 调用、API、决策逻辑
 或用户记忆的提取/写入/检索逻辑。
 
-Dialogue Agent 的职责：根据上游（决策 Agent + 话题次数约束器）给出的决策，
+Dialogue Agent 的职责：根据上游决策 Agent给出的决策，
 生成"下一句对用户说的话"。它不决定话题，也不允许重新做决策，
 因此 DialogueDecision 是它的**输入**而非输出。
 
@@ -16,6 +16,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+from backend.policy.schemas import PolicyDecision
 
 __all__ = [
     "MAX_REPLY_MESSAGES",
@@ -96,27 +98,8 @@ class DialogueUserMemory(BaseModel):
     )
 
 
-class DialogueDecision(BaseModel):
-    """决策 Agent + 话题次数约束器输出的最终决策。
-
-    这是 Dialogue Agent 必须服从的输入：它只能按 actions/topic 生成话术，
-    不允许自己重新决定话题。
-    """
-
-    actions: List[str] = Field(
-        ...,
-        min_length=1,
-        description='要执行的动作列表，至少 1 项，例如 ["共情安慰", "当前话题从睡眠转到食欲"]',
-    )
-    topic: Optional[str] = Field(
-        default=None, description="决策确定的当前话题；None 表示不指定话题"
-    )
-    reason: Optional[str] = Field(
-        default=None, description="决策理由，例如“睡眠话题已达到次数限制”"
-    )
-    extra: Dict[str, Any] = Field(
-        default_factory=dict, description="扩展位：未来新增决策字段统一放这里"
-    )
+class DialogueDecision(PolicyDecision):
+    """对话智能体必须执行的 target_item 与 question_goal；结束时目标为空。"""
 
 
 class DialogueCurrentUserInput(BaseModel):
@@ -149,7 +132,7 @@ class DialogueAgentRequest(BaseModel):
 
     严格必填：conversation_history、decision、current_user_input。
     其中 conversation_history 即使首次对话也由调用方显式传 []；
-    decision 是“决策 Agent + 话题次数约束器”的最终决策，缺少则 Dialogue Agent
+    decision 是决策 Agent 的最终访谈目标，缺少则 Dialogue Agent
     不允许工作。唯一可缺省的是 user_memory（记忆模块尚未实现，允许不传或传 {}）。
     """
 
@@ -162,7 +145,7 @@ class DialogueAgentRequest(BaseModel):
     )
     decision: DialogueDecision = Field(
         ...,
-        description="决策 Agent + 话题次数约束器给出的最终决策，必填；Dialogue Agent 必须服从",
+        description="决策 Agent 给出的最终访谈目标，必填；Dialogue Agent 必须服从",
     )
     current_user_input: DialogueCurrentUserInput = Field(
         ..., description="用户当前最新的一句话"
@@ -279,8 +262,4 @@ class DialogueRouteRequest(BaseModel):
     )
     topic_limit: int = Field(..., description="单个话题的轮数上限")
     turn_count: int = Field(default=0, description="本次筛查已完成的用户轮数")
-    min_turns: int = Field(..., description="可以收尾的最少轮数")
     max_turns: int = Field(..., description="强制收尾的轮数上限")
-    coverage_reminder: Optional[str] = Field(
-        default=None, description="第 25 轮起的缺失话题补充要求"
-    )

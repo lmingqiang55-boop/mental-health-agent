@@ -8,7 +8,6 @@ from evaluation_agent.llm_client import EvaluationLLMClient, LLMConfig
 from evaluation_agent.service import EvaluationService, ScoredAssessment
 
 from backend.core.report_builder import build_report
-from backend.core.screening_flow import MAX_TURNS
 from backend.llm.config import DEFAULT_ENV_FILE
 from backend.models.enums import MessageRole, RiskLevel
 from backend.models.evaluation import EvaluationResult
@@ -24,9 +23,8 @@ from backend.safety.schemas import SafetyVerdict
 RISK_ORDER = {RiskLevel.LOW: 0, RiskLevel.MEDIUM: 1, RiskLevel.HIGH: 2}
 
 #: 直接提交转写文本时，最多补做多少次安全判定。
-#: 与会话总轮数上限共用配置，因此该上限
-#: 足以覆盖整段对话，不会出现遗漏的安全检测空窗。
-MAX_SAFETY_BACKFILL = MAX_TURNS
+#: 保留历史 35 轮会话的补判范围，不随普通聊天上限缩短。
+MAX_SAFETY_BACKFILL = 35
 
 
 class AssessmentService(Protocol):

@@ -4,6 +4,7 @@ import asyncio
 
 import httpx
 from fastapi.testclient import TestClient
+from conftest import create_consented_session
 
 from backend.api import tts as tts_api
 from backend.audio import tts as tts_module
@@ -55,7 +56,7 @@ def test_tts_route_reads_saved_assistant_turn(monkeypatch):
 
     fake = FakeTTS()
     monkeypatch.setattr(tts_api, "get_tts_service", lambda: fake)
-    session_id = client.post("/api/session").json()["session_id"]
+    session_id = create_consented_session(client)
     opening = client.post("/api/tts", json={"session_id": session_id, "turn_count": 0})
     assert opening.status_code == 200
     assert opening.content == b"ID3test"
