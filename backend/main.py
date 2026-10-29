@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# CORS_ORIGINS 在导入期即被读取，因此必须先把 backend/.env 载入进程环境，
+# CORS_ORIGINS 在导入期即被读取，因此必须先把项目根目录的 .env 载入进程环境，
 # 否则写在 .env 里的白名单不会生效（其它模块都是在函数内延迟 load_dotenv）。
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 

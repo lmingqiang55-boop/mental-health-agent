@@ -232,7 +232,7 @@
           type="info"
           :closable="false"
           show-icon
-          title="以上为演示配置，保存后仅作用于本地 mock；后端安全模块接口就绪后本页无需改动。"
+          title="以上为演示配置，保存后仅作用于本地 mock"
         />
       </template>
     </div>
@@ -398,7 +398,7 @@ function createUser() {
   })
   Object.assign(userForm, { name: '', account: '', roleKey: 'psych', scope: '', phone: '' })
   userDialog.value = false
-  ElMessage.success('已新增（本地演示，未写入后端）')
+  ElMessage.success('已新增（本地演示）')
 }
 
 async function saveRoles() {
@@ -429,7 +429,7 @@ function createDict() {
   dicts.value.push({ id: `local-${Date.now()}`, enabled: true, ...dictForm })
   Object.assign(dictForm, { code: '', label: '', value: '', sort: 1, remark: '' })
   dictDialog.value = false
-  ElMessage.success('已新增（本地演示，未写入后端）')
+  ElMessage.success('已新增（本地演示）')
 }
 
 async function loadSecurity() {

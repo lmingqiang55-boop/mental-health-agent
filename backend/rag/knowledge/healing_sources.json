@@ -521,7 +521,7 @@
       "license_url": "https://kidshealth.org/en/parents/permissions-guidelines.html"
     }
   ],
-  "rights_note": "按用户选择继续内部竞赛原型；范围选择不等于网站授权。公开可读不等于开放许可。原始网页不随代码分发，知识保留短依据和中文概述。UNICEF、Child Mind、Nemours 的公开再分发未获本项目许可，其余来源开放许可未确认。公开发布前取得许可或替换资料，逐项记录见 docs/healing_sources_and_licenses.md。",
+  "rights_note": "按用户选择继续内部竞赛原型；范围选择不等于网站授权。公开可读不等于开放许可。原始网页不随代码分发，知识保留短依据和中文概述。UNICEF、Child Mind、Nemours 的公开再分发未获本项目许可，其余来源开放许可未确认。公开发布前取得许可或替换资料。",
   "interaction_sources": [
     {
       "age_group": "6-10",

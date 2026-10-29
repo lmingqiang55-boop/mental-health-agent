@@ -90,8 +90,6 @@ const safetyHotlines = ref<string[]>([])
 const camFailed = ref(false)
 let captureGeneration = -1
 // 【演示用】手动输入文字直接送给后端决策模型（跳过语音转写）。
-// 竞赛演示的台词是预先设计好的，走这条通道可以避免 ASR 识别抖动；
-// 正式面向学生上线前需要重新评估是否保留。
 const manualText = ref('')
 // 超时可能发生在服务端已完成这一轮之后；重试须复用标识和冻结快照。
 let pendingManualRequest: ChatRequest | null = null

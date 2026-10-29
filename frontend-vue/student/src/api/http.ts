@@ -3,7 +3,7 @@ import { toastError } from '@/utils/toast'
 import type { ApiErrorShape } from './types'
 
 /**
- * 后端契约（见 docs/新前端接入说明.md）：
+ * 后端契约：
  * - 返回裸 JSON（不是 { code, data, message } 包裹）
  * - 错误统一为 { error: { code, message } }，校验失败 422 VALIDATION_ERROR
  * - 无鉴权：不带 Authorization 头（CORS 只允许 Content-Type）

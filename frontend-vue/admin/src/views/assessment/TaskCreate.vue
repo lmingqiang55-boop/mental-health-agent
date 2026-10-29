@@ -67,8 +67,7 @@
       :closable="false"
       show-icon
       style="margin-top: 16px"
-      title="演示数据说明"
-      description="当前任务实体由前端 mock 打底（后端尚无 assessment_task 表与任务 CRUD 接口）。接口就绪后本页无需改动，仅替换 src/api 的实现。"
+      title="演示数据说明：当前任务实体由前端 mock 打底"
     />
   </div>
 </template>
