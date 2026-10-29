@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Import the QQ-delivered model ZIP once, then start the local backend.
+"""Import the delivered model ZIP once, then start the local backend.
 
 First run: python scripts/start_dev.py --model-package path/to/model.zip
 Later runs: python scripts/start_dev.py
@@ -151,7 +151,7 @@ def shutdown(children: list) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="导入本机决策模型并启动后端")
     parser.add_argument("--model-package", type=Path, metavar="ZIP",
-                        help="首次运行时传入从 QQ 收到的队友部署 ZIP")
+                        help="首次运行时传入决策模型部署 ZIP 的路径")
     # Previous local-only instructions used this flag; keep it harmless.
     parser.add_argument("--policy-source", choices=["local"], help=argparse.SUPPRESS)
     parser.add_argument("--backend-port", type=int, default=BACKEND_PORT,

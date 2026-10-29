@@ -1,1 +1,1 @@
-"""Vision model placeholder."""
+"""Vision pipeline: YuNet face detection and the EmotiEffLib expression model."""

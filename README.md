@@ -56,8 +56,8 @@ DASHSCOPE_API_KEY=你的百炼密钥
 DASHSCOPE_WORKSPACE_ID=你的业务空间ID
 ```
 
-决策模型由每位队友的本机 Ollama 运行。先安装 [Ollama](https://ollama.com/download/windows)，
-把通过 QQ 收到的 `policy-qwen3-8b-local-deploy.zip` 放在本机任意目录，然后在项目根目录执行：
+决策模型由本机 Ollama 运行。先安装 [Ollama](https://ollama.com/download/windows)，
+把决策模型部署 ZIP 放在本机任意目录（评委完整交付包内已内置该 ZIP），然后在项目根目录执行：
 
 ```powershell
 conda activate mental-health-agent

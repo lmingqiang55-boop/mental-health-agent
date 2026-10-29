@@ -84,7 +84,7 @@ if (-not (Test-Path -LiteralPath .env)) {
 仅做接口测试时显式设置 `VISION_PROVIDER=mock`，此模式不触发表情描述。
 其余参数及含义见 `.env.example`，真实密钥只保存到本地 `.env`。
 
-每位队友从 QQ 接收训练模型 ZIP，首次执行
+从交付包（或团队共享位置）取得训练模型 ZIP 后，首次执行
 `python scripts/start_dev.py --model-package "ZIP路径" --skip-install`。
 脚本校验模型 SHA-256、导入本机 Ollama，启动后端时自动使用本机地址和模型名；
 后续只需运行 `python scripts/start_dev.py --skip-install`。

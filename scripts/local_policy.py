@@ -90,7 +90,7 @@ def extract_verified_model(
         with ZipFile(package) as archive:
             info = archive.getinfo(GGUF_NAME)
             if info.file_size != expected_size:
-                raise LocalPolicyError("模型文件大小不符，请重新接收队友部署 ZIP。")
+                raise LocalPolicyError("模型文件大小不符，请重新完整解压原始交付包。")
             with archive.open(info) as source, target.open("wb") as output:
                 while block := source.read(8 * 1024 * 1024):
                     total += len(block)
@@ -100,12 +100,12 @@ def extract_verified_model(
         raise LocalPolicyError("无法读取部署 ZIP 中的 GGUF 模型文件。") from exc
     if total != expected_size or digest.hexdigest() != expected_sha256:
         target.unlink(missing_ok=True)
-        raise LocalPolicyError("模型 SHA-256 不匹配，请重新接收队友部署 ZIP。")
+        raise LocalPolicyError("模型 SHA-256 不匹配，请重新完整解压原始交付包。")
     return target
 
 
 def import_model_package(package: Path) -> None:
-    """Verify the QQ-delivered ZIP and import it using the repository's template."""
+    """Verify the delivered model ZIP and import it using the repository's template."""
     package = package.expanduser().resolve()
     if not package.is_file():
         raise LocalPolicyError(f"找不到模型部署 ZIP：{package}")
@@ -163,5 +163,5 @@ def require_local_model() -> None:
         raise LocalPolicyError("本机 Ollama 不可用，请启动 Ollama 后重试。")
     if MODEL_ID not in models:
         raise LocalPolicyError(
-            f"本机没有 {MODEL_ID}。首次运行请加 --model-package <从 QQ 收到的 ZIP 路径>。"
+            f"本机没有 {MODEL_ID}。首次运行请加 --model-package <交付包 models 目录内的 ZIP 路径>。"
         )
