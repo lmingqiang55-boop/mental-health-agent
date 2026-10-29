@@ -100,7 +100,7 @@ export interface ChatMessage {
   /**
    * 该条助手消息的气泡（1~3 条）。
    * `content` 是它们的换行拼接；一轮用户输入只对应一条消息，气泡不额外占轮次。
-   * 本次改动之前的历史记录可能没有这个字段，此时按 `[content]` 处理。
+   * 旧记录可能没有这个字段，此时按 `[content]` 处理。
    */
   messages?: string[]
   created_at?: string

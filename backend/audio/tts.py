@@ -7,7 +7,7 @@ Two providers are available, selected by the ``TTS_PROVIDER`` env var:
 
 默认值从 ``edge`` 改成 ``cosyvoice``：cosyvoice 是团队已在用的中文音色；
 而 edge-tts 的 **7.2.8 及更早版本**合成握手会稳定返回 403（升级到 7.3.1 后
-本机实测恢复）。
+实测恢复）。
 
 ``edge`` 是"还能出声"的保底方案，不是等价替换：音色固定为通用朗读音色
 （默认 ``zh-CN-XiaoxiaoNeural``），只暴露 rate/volume/pitch，没有情感或风格

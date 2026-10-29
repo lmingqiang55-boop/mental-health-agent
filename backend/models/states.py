@@ -1,7 +1,4 @@
-"""多模态状态、风险结果、消息与会话状态。
-
-公共字段与接入方式见 docs/api_spec.md 和 docs/vision_alignment.md。
-"""
+"""多模态状态、风险结果、消息与会话状态。"""
 
 from datetime import datetime, timezone
 from typing import Literal

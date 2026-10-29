@@ -332,7 +332,7 @@ def build_dialogue_user_prompt(request: DialogueAgentRequest) -> str:
 
 
 # --------------------------------------------------------------------------
-# Dialogue 路由（Phase 2）：判断这一轮是否需要新的全局策略
+# Dialogue 路由：判断这一轮是否需要新的全局策略
 # --------------------------------------------------------------------------
 
 DIALOGUE_ROUTER_SYSTEM_PROMPT = """你是心理状态评估系统中 Dialogue Agent 的**路由模块**。

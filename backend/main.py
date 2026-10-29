@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
         get_transcription_service.cache_clear()
 
 
-app = FastAPI(title="多模态心理状态筛查 Demo", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="心晴智护", version="0.3.0", lifespan=lifespan)
 
 _default_origins = (
     "http://localhost:5173,http://127.0.0.1:5173,"

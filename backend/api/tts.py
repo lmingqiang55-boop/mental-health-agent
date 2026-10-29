@@ -157,7 +157,7 @@ def _turn_bubbles(session: SessionState, turn_count: int) -> list[str]:
     所以这里按"第几条 assistant 回复"定位，而不是按消息条数——气泡再多，
     也只算一条回复、一个轮次。
 
-    旧历史里 ``messages`` 为空（本次改动之前的记录）时退回 ``content``。
+    旧记录里 ``messages`` 为空时退回 ``content``。
     """
     bubbles: list[list[str]] = []
     user_turns = 0

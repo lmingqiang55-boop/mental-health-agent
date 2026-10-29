@@ -67,7 +67,7 @@ class DialogueTurnRunner:
     """一轮普通筛查的入口，按引擎分派。
 
     持有与 legacy 路径**同一个** ``DialogueManager`` 实例，因此图节点用的是
-    同一套决策/对话客户端，``tests/conftest.py`` 的注入点保持有效。
+    同一套决策/对话客户端，注入替换客户端时两条路径同时生效。
 
     Args:
         manager: 路由层创建并共享的 ``DialogueManager``。

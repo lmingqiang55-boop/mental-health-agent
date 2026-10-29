@@ -23,9 +23,9 @@ __all__ = ["GRAPH_RECURSION_LIMIT", "TurnState"]
 
 #: 图的硬性递归上限。
 #:
-#: Phase 1 的图没有回边，正常远达不到；这是给 Phase 2 的
-#: 「Dialogue → Decision → Dialogue」与「Visual Review 重写回边」预留的兜底，
-#: 触发时抛 ``GraphRecursionError``，由调用方转成明确错误，绝不挂死。
+#: 正常路径远达不到；这是给「Dialogue → Decision → Dialogue」与
+#: 「Visual Review 重写回边」预留的兜底，触发时抛 ``GraphRecursionError``，
+#: 由调用方转成明确错误，绝不挂死。
 GRAPH_RECURSION_LIMIT = 25
 
 

@@ -79,10 +79,10 @@ class DialogueHistoryMessage(BaseModel):
 
 
 class DialogueUserMemory(BaseModel):
-    """用户记忆接口（占位）。
+    """用户记忆接口（预留，当前版本不启用）。
 
-    用户记忆模块尚未开发，本类只定义接口，不实现任何提取/写入/检索逻辑。
-    所有字段都有默认值，因此 user_memory 可以直接传 {} 或整体省略。
+    本类只定义字段结构，不做提取/写入/检索；所有字段都有默认值，
+    因此 user_memory 可以直接传 {} 或整体省略。
     """
 
     facts: List[str] = Field(default_factory=list, description="用户客观事实类记忆")
@@ -133,7 +133,7 @@ class DialogueAgentRequest(BaseModel):
     严格必填：conversation_history、decision、current_user_input。
     其中 conversation_history 即使首次对话也由调用方显式传 []；
     decision 是决策 Agent 的最终访谈目标，缺少则 Dialogue Agent
-    不允许工作。唯一可缺省的是 user_memory（记忆模块尚未实现，允许不传或传 {}）。
+    不允许工作。唯一可缺省的是 user_memory（不传或传 {} 均可）。
     """
 
     conversation_history: List[DialogueHistoryMessage] = Field(
