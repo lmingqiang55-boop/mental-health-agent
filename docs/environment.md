@@ -73,10 +73,10 @@ if (-not (Test-Path -LiteralPath .env)) {
 | `VISION_PROVIDER=emotiefflib` | 启用真实表情分析 |
 | `VISION_YUNET_MODEL` | 人脸权重的路径覆盖项；留空即用 `backend/vision/weights/` 下的默认文件。权重不入库，先执行 `python -m backend.vision.face_weights`（约 227 KB，自动校验 SHA-256）；拿不到会自动退回 Haar 级联，只是暗光漏检更多 |
 | `VISION_FRAME_DUMP_DIR` | 留空即关闭；给一个目录则把冻结后的逐帧情绪/置信度/效价落成 JSONL，仅供阈值重校 |
-| `TTS_PROVIDER` | 语音 provider，默认 `cosyvoice`，备选 `edge`；配置的不可用时自动退到另一个 |
+| `TTS_PROVIDER` | 语音 provider，默认 `cosyvoice`，备选 `edge`；配置的不可用时自动退到另一个。`edge` 是保底方案：音色固定、无情感控制，听感不如 CosyVoice |
 | `DASHSCOPE_API_KEY` | 阿里云百炼语音合成密钥；只在后端使用 |
 | `DASHSCOPE_WORKSPACE_ID` | 华北2（北京）业务空间 ID，例如 `ws-...` |
-| `TTS_MODEL` / `TTS_VOICE` | 默认 `cosyvoice-v3-flash` / `longyingtao_v3`；备选 `edge` 需要 `edge-tts>=7.3.1`（更早版本合成稳定 403） |
+| `TTS_MODEL` / `TTS_VOICE` | 默认 `cosyvoice-v3-flash` / `longyingtao_v3`；备选 `edge` 需要 `edge-tts>=7.3.1`（更早版本合成稳定 403），音色由 `EDGE_TTS_VOICE` 决定（默认 `zh-CN-XiaoxiaoNeural`） |
 
 `.env.example` 保留 `ASR_PROVIDER=disabled`、`ASR_DEVICE=cpu` 和
 `VISION_PROVIDER=emotiefflib` 的默认值；真实视觉需要依赖和模型权重。

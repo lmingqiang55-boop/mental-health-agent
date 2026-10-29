@@ -9,6 +9,11 @@ Two providers are available, selected by the ``TTS_PROVIDER`` env var:
 而 edge-tts 的 **7.2.8 及更早版本**合成握手会稳定返回 403（升级到 7.3.1 后
 本机实测恢复）。
 
+``edge`` 是"还能出声"的保底方案，不是等价替换：音色固定为通用朗读音色
+（默认 ``zh-CN-XiaoxiaoNeural``），只暴露 rate/volume/pitch，没有情感或风格
+控制，与项目选定的 CosyVoice 音色不一致；它走的是微软的公开朗读端点，
+没有可用性承诺。
+
 ``ready`` 只表示"这个 provider 的配置/依赖齐了"，不代表上游此刻可达——
 真实可达性只有真合成一次才知道。因此 ``/api/tts/status`` 会带上最近一次
 合成的失败原因，``POST /api/tts/probe`` 可以按需真合成一小段做一次性探测：
